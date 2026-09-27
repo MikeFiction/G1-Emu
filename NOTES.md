@@ -59,6 +59,30 @@ boot the OS formats the patch area: it erases 10 sectors and writes 64 KB.
 every 244 µs; routine `$1008A4`). Gearmulator's SIM does not emulate it; it is done in `g1mc.cpp`.
 The CPU runs at 20.97 MHz after the OS programs SYNCR.
 
+**The master clock** (what MIDIGlobal's clock and sync outputs carry, and so every sequencer or
+arpeggio synced to the synth's tempo). Found 2026-09-27 with nmedit's `progger.pch`, which is
+loud on a real G1 and was silent here. It runs on the GPT's output compare 2, not the PIT:
+`$117d9a` starts it with `TOC2 = TCNT + period` (`$fff916`, the period at `$1a84a6`) and
+`bset #4, $fff920` (OC2I), or stops it; the interrupt (`$117e3c`) clears OC2F and adds the period.
+Two things kept it still:
+- **The synth setting.** The OS starts the internal clock only when the synth settings' MIDI clock
+  source bit is **1**; with 0 it waits for MIDI clock. A new flash comes up with 0. Animatek NME's
+  Synth Settings dialog shows 0 as "Internal", which is the other way round (to be confirmed on the
+  real G1's own display). `g1patchtest` sets it with `G1_CLOCKSRC=1` and sends MIDI clock with
+  `G1_MIDICLOCK=bpm`.
+- **An emulator fault, fixed in `g1mc.cpp`.** On the 68331 an output-compare interrupt is requested
+  while its flag and its enable are both set, so enabling OC2I with OC2F already up interrupts at
+  once. Gearmulator's GPT only interrupts on a new compare match, and not while the flag is up, and
+  OC2F is up from an earlier match when the OS starts the clock: the interrupt never came and the
+  clock never ticked, even with the setting at 1. `Microcontroller::gptMaskWritten` now injects the
+  interrupt when TMSK1 gains an OCxI bit whose flag is set.
+
+With both, `progger.pch` measures in the emulator what a real G1 gives (a real-vs-emulator
+comparison: the patch loaded in the real synth through NME, a note over MIDI, both outputs
+recorded, against `g1patchtest --wav`). Checked against the real G1 the same way and matching in
+level and shape: `ButohDrone`, `04-007-007` and `Clasico` from Javier's bank 9, and the test patch.
+Note that `g1patchtest`'s printed `output` peaks are before `g1run`'s +36 dB and its `--wav` after.
+
 ## The CPU and the hardware
 
 - **CPU: Motorola 68331.** The code writes to the SIM (`$FFFAxx`), the QSM (`$FFFCxx`) and above

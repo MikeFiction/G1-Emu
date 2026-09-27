@@ -317,7 +317,10 @@ namespace g1
 			if(addr == 0xfffc0e) ++m_sciDataWrites;
 			if(addr == 0xfffa22) m_picr = _val;
 			if(addr == 0xfffa24) m_pitr = _val;
+			const auto tmskBefore = gptMask();
 			Mc68k::write16(addr, _val);
+			if(addr == 0xfff920)
+				gptMaskWritten(tmskBefore);
 			return;
 		}
 		if(isHostPort(addr))
@@ -364,6 +367,31 @@ namespace g1
 		return gray[m_dialPhase];
 	}
 
+	uint16_t Microcontroller::gptMask()
+	{
+		return getGPT().read16(mc68k::PeriphAddress::Tmsk1);
+	}
+
+	// On the 68331 an output-compare interrupt is requested while its flag (TFLG1) and its
+	// enable (TMSK1) are both set, so enabling one whose flag is already up interrupts at once.
+	// Gearmulator's GPT only interrupts on a new compare match, and not while the flag is up.
+	// The OS starts its internal master clock exactly that way: TOC2 = TCNT + period, then
+	// `bset #4, $fff920`, with OC2F already set from an earlier match. The interrupt never came,
+	// nothing cleared the flag, and the clock never ticked, so MIDIGlobal's clock output, and
+	// every patch that follows it, stood still (found with nmedit's progger.pch, which sounds
+	// on a real G1 and was silent here).
+	void Microcontroller::gptMaskWritten(const uint16_t _before)
+	{
+		const auto tmsk = gptMask();
+		const auto tflg = getGPT().read16(mc68k::PeriphAddress::Tflg1);
+		for(uint32_t i = 0; i < 4; ++i)
+		{
+			const uint16_t bit = static_cast<uint16_t>(1u << (11 + i));	// OC1..OC4, in TMSK1 and TFLG1 alike
+			if((tmsk & bit) && !(_before & bit) && (tflg & bit))
+				getGPT().injectInterrupt(static_cast<uint8_t>(0b100 + i));	// the OCx vector, as the GPT injects it
+		}
+	}
+
 	void Microcontroller::write8(const uint32_t _addr, const uint8_t _val)
 	{
 		const auto addr = _addr & 0xffffff;
@@ -381,7 +409,10 @@ namespace g1
 		if(isInternalPeripheral(addr))
 		{
 			if(addr == 0xfffc0e || addr == 0xfffc0f) ++m_sciDataWrites;
+			const auto tmskBefore = gptMask();
 			Mc68k::write8(addr, _val);
+			if(addr == 0xfff920)
+				gptMaskWritten(tmskBefore);
 			return;
 		}
 		if(isHostPort(addr))

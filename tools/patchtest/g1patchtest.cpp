@@ -16,7 +16,10 @@
 #include "model/PchFileIO.h"
 #include "midi/UploadPacketizer.h"
 #include "protocol/KnobAssignmentMessage.h"
+#include "midi/NmMessages.h"
+#include "midi/SysExCodec.h"
 
+#include <map>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -198,6 +201,39 @@ int main(int argc, char** argv)
 		const auto reply = transact(mc, withChecksum(m), 200);
 		if(std::getenv("G1_VERBOSE"))
 			std::printf("  init %s -> %s\n", hex(withChecksum(m), 12).c_str(), hex(reply, 16).c_str());
+	}
+
+	// G1_CLOCKSRC=0|1: read the synth settings, set the MIDI clock source to that value and send
+	// them back, as NME's Synth Settings dialog does. 1 runs the internal master clock (what
+	// MIDIGlobal and every clocked patch follow); 0, the default of a new flash, waits for MIDI
+	// clock. See NOTES.md, "The master clock".
+	if(const char* cs = std::getenv("G1_CLOCKSRC"))
+	{
+		const auto reply = transact(mc, withChecksum({0xf0, 0x33, 0x5c, 0x06, 0x44, 0x02, 0x06, 0x08, 0x04}), 500);
+		SynthSettings st;
+		bool ok = false;
+		for(size_t k = 0; k + 4 < reply.size() && !ok; ++k)
+		{
+			if(reply[k] != 0xf0 || reply[k + 1] != 0x33) continue;
+			const int cc = reply[k + 2] >> 2;
+			if(cc < 0x1c) continue;
+			size_t e = k + 4;
+			while(e < reply.size() && reply[e] != 0xf7) ++e;
+			const auto pkt = PatchPacketMessage::decode(cc, reply.data() + k + 4, e - (k + 4));
+			ok = SynthSettingsMessage::decode(pkt.patchData, st);
+		}
+		std::printf("synth settings read: %s, clock source was %d, bpm %d\n", ok ? "yes" : "NO", st.midiClockSource, st.midiClockBpm);
+		if(ok)
+		{
+			st.midiClockSource = std::atoi(cs);
+			SynthSettingsMessage m;
+			m.settings = st;
+			mc.getPcPort().receive(SysEx::encode(0x1f, 0, m.encode(0), true));
+			run(mc, 1000 * g_ms);
+			std::vector<uint8_t> drop;
+			mc.getPcPort().takeTx(drop);
+			std::printf("clock source set to %d\n", st.midiClockSource);
+		}
 	}
 
 	// Upload, like NME: a packet, its reply, the next one.
@@ -417,7 +453,23 @@ int main(int argc, char** argv)
 		const auto on = withChecksum({0xf0, 0x33, 0x5c, 0x06, static_cast<uint8_t>(pid), 0x56, 0x00, static_cast<uint8_t>(note)});
 		mc.getPcPort().receive(on);
 	}
-	run(mc, static_cast<uint64_t>(seconds * 1000) * g_ms);
+	// G1_MIDICLOCK=bpm sends MIDI clock (a start, then $F8 at 24 per beat) into MIDI IN while it
+	// plays: with the synth's clock set to external, that is what moves MIDIGlobal and whatever
+	// follows it (sequencers, arpeggios).
+	if(const char* mcl = std::getenv("G1_MIDICLOCK"))
+	{
+		const double tickMs = 60000.0 / (std::atof(mcl) * 24.0);
+		mc.getSci().write({0xfa});
+		double t = 0;
+		while(t < seconds * 1000)
+		{
+			mc.getSci().write({0xf8});
+			run(mc, static_cast<uint64_t>(tickMs * static_cast<double>(g_ms)));
+			t += tickMs;
+		}
+	}
+	else
+		run(mc, static_cast<uint64_t>(seconds * 1000) * g_ms);
 	capture = false;
 	std::vector<uint8_t> rest;
 	mc.getPcPort().takeTx(rest);
@@ -435,6 +487,13 @@ int main(int argc, char** argv)
 			std::printf("DSP%u  ESSI0 SR=%06x CRB=%06x RX=%06x | ESSI1 SR=%06x CRB=%06x RX=%06x\n", d,
 				static_cast<uint32_t>(p.getEssi0().getSR()), static_cast<uint32_t>(p.getEssi0().getCRB()), 0u,
 				static_cast<uint32_t>(p.getEssi1().getSR()), static_cast<uint32_t>(p.getEssi1().getCRB()), 0u);
+			{
+				auto& dd = mc.getDsp(d);
+				std::printf("DSP%u  booted=%d boots=%u pc=$%04x irqd=%llu of %llu blocks, stalls=%llu, host commands=%llu, words to host=%llu\n", d,
+					static_cast<int>(dd.booted()), dd.bootCount(), static_cast<unsigned>(dd.dsp().getPC().toWord()),
+					static_cast<unsigned long long>(dd.irqdCount()), static_cast<unsigned long long>(dd.dsp().getCycles() / 864),
+					static_cast<unsigned long long>(dd.stalls()), static_cast<unsigned long long>(dd.hostCommands()), static_cast<unsigned long long>(dd.wordsToHost()));
+			}
 			std::printf("DSP%u  DOR0=%06x DOR1=%06x DCO1=%06x (as read by the program: X:$FFFFF3/F2/E9 = %06x %06x %06x)\n", d,
 				p.getDMA().getDOR(0), p.getDMA().getDOR(1), p.getDMA().getDCO(1),
 				p.read(0xfffff3, dsp56k::Instruction::Invalid), p.read(0xfffff2, dsp56k::Instruction::Invalid), p.read(0xffffe9, dsp56k::Instruction::Invalid));

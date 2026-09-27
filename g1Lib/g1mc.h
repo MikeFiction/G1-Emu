@@ -163,6 +163,8 @@ namespace g1
 		std::array<std::atomic<uint8_t>, 4> m_leds{};
 		std::array<std::atomic<uint8_t>, 3> m_buttons{};	// 1 = pressed
 		uint8_t buttonRow() const;
+		uint16_t gptMask();
+		void gptMaskWritten(uint16_t _before);	// see g1mc.cpp
 		// The dial: a quadrature encoder on bits 0 and 1, decoded by the OS at $104DC6 (four
 		// edges per detent). One edge every g_dialEdgeCycles, well apart from each other: the
 		// OS reads the panel some 3 000 times a second and ignores any step of two edges.

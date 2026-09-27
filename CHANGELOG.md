@@ -5,6 +5,25 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-09-27
+
+- **The internal master clock ticks: clocked patches are no longer silent (Claude, requested by
+  Javier).** nmedit's `progger.pch` (110 modules, a sequencer run by MIDIGlobal's clock) is loud
+  on a real G1 and was silent here, as were MIDIGlobal's clock and sync outputs in the module
+  battery. The OS runs the master clock on the GPT's output compare 2, and starts it by enabling
+  OC2I while OC2F is already set; the 68331 then interrupts at once, Gearmulator's GPT waits for a
+  new match that never comes. `g1Lib/g1mc.cpp` now injects the interrupt when TMSK1 gains an OCxI
+  bit whose flag is up. The clock also needs the synth settings' MIDI clock source at 1, which a
+  new flash does not have (it comes up at 0, waiting for MIDI clock); Animatek NME's dialog labels
+  the bit the other way round. `g1patchtest` gains `G1_CLOCKSRC` (rewrite the clock source through
+  NME's own settings encoder, now linked in), `G1_MIDICLOCK` (send MIDI clock) and, in verbose
+  mode, a status line per DSP. **Checked** on Linux by comparing with the real G1 (patch loaded
+  through NME, a note over MIDI, both outputs recorded): `progger.pch` with the clock at 1 gives
+  the real synth's level; without the fix it stays silent even with the clock at 1 (checked by
+  removing it); `ButohDrone`, `04-007-007` and `Clasico` from Javier's bank, and
+  `PolyGateTest`, match in level and shape; Javier played the three in the emulator's window and
+  they sound. `ctest` passes. In `NOTES.md`, "The master clock".
+
 ## 2026-09-26
 
 - **The editor keyboard's stuck notes are the G1's own, and a test patch that shows it (Claude,
