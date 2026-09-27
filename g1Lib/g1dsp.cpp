@@ -4,6 +4,10 @@
 #include "dsp56kEmu/jit.h"
 
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
+
+#include <algorithm>
 #include <cstdlib>
 #include <type_traits>
 #include <vector>
@@ -75,6 +79,17 @@ namespace g1
 		config.dynamicPeripheralAddressing = false;
 		config.dynamicFastInterrupts = true;
 		config.maxInstructionsPerBlock = 32;
+		// G1_JITBLOCK=n: at most n instructions per JIT block (diagnostics: 1 compiles each one alone).
+		if(const char* jb = std::getenv("G1_JITBLOCK"))
+			config.maxInstructionsPerBlock = static_cast<uint32_t>(std::max(1, std::atoi(jb)));
+		// No cache of single-instruction blocks. The JIT keeps a destroyed one-op block by its opcode
+		// and reuses it at that address, without looking at whether the address has become a loop
+		// end since. The OS moves the main loop's end (LA) with every patch, so a NOP compiled as
+		// plain code came back at the new end: DSP 0 ran out of the main loop into the sample
+		// routine, its register stack crept until an RTI looped for ever, and the OS stopped
+		// answering the editor (NOTES.md, "A cached block at the loop end"). Costs ~1-2 % of speed.
+		// G1_SINGLEOP_CACHE=1 turns it back on, only to compare.
+		config.cacheSingleOpBlocks = std::getenv("G1_SINGLEOP_CACHE") != nullptr;
 		config.maxDoIterations = 1;
 		m_dsp.getJit().setConfig(config);
 
@@ -163,6 +178,17 @@ namespace g1
 		// G1_INTERP=mask: those DSPs (bit n = DSP n) run on the core's interpreter instead of the
 		// JIT. Much slower; useful to tell whether a fault is the JIT's.
 		m_noLaFix = std::getenv("G1_NO_LA_FIX") != nullptr;	// only to compare against the bug
+		if(const char* tr = std::getenv("G1_DSPTRACE"))
+		{
+			unsigned d = 0, pc = 0, arg = 0;
+			if(std::sscanf(tr, "%u,%x,%x", &d, &pc, &arg) == 3 && d == _index)
+			{
+				m_traceOn = true;
+				m_tracePc = pc;
+				m_traceArg = arg;
+				m_trace.resize(1u << 18);
+			}
+		}
 		if(const char* in = std::getenv("G1_INTERP"))
 			m_interpreter = ((std::strtoul(in, nullptr, 0) >> _index) & 1) != 0;
 
@@ -217,6 +243,8 @@ namespace g1
 				armBoot();
 				return;
 			}
+			if(m_traceOn)
+				traceStep();
 			if(!m_pcWatch.empty())
 			{
 				auto it = m_pcWatch.find(m_dsp.getPC().toWord());
@@ -265,6 +293,39 @@ namespace g1
 			}
 			if((now & 0x3ff) < now - before)	// every ~1000 cycles (less than a frame)
 				drainAudio();
+		}
+	}
+
+	// G1_DSPTRACE: one entry per JIT block run by this DSP, and the whole ring printed once when the
+	// condition is met. How the loop-end bug above was found.
+	void Dsp::traceStep()
+	{
+		auto& r = m_dsp.regs();
+		const uint32_t pc = m_dsp.getPC().toWord();
+		const uint32_t r6 = static_cast<uint32_t>(r.r[6].var) & 0xffffff;
+		m_trace[m_tracePos++ % m_trace.size()] = {pc, r6, static_cast<uint32_t>(r.n[6].var) & 0xffffff,
+			static_cast<uint32_t>(r.sr.var) & 0xffffff, static_cast<uint32_t>(m_dsp.getProcessingMode()),
+			static_cast<uint32_t>(r.sp.var) & 0x3f, static_cast<uint32_t>(r.la.var) & 0xffffff};
+		if(m_tracePc == 0)
+		{
+			// pc 0: when one block at or above arg repeats 1000 times in a row (a DSP stuck on itself)
+			m_traceRepeat = (pc == m_traceLastPc && pc >= m_traceArg) ? m_traceRepeat + 1 : 0;
+			m_traceLastPc = pc;
+			if(m_traceRepeat < 1000)
+				return;
+		}
+		else if(pc != m_tracePc || r6 == m_traceArg || !irqdEnabled())
+			return;	// otherwise: at pc, with R6 other than arg, while IRQD is enabled
+		m_traceOn = false;
+		std::printf("TRACE DSP%u at $%04x after %zu blocks. LA=$%06x; JIT loops (begin -> end):", m_index, pc, m_tracePos, static_cast<unsigned>(r.la.var));
+		for(const auto& [b, e] : m_dsp.getJit().getLoops())
+			std::printf(" $%04x->$%04x", static_cast<unsigned>(b), static_cast<unsigned>(e));
+		std::printf("\nlast blocks (pc r6 n6 sr mode sp la):\n");
+		const size_t n = std::min(m_tracePos, m_trace.size());
+		for(size_t i = m_tracePos - n; i < m_tracePos; ++i)
+		{
+			const auto& t = m_trace[i % m_trace.size()];
+			std::printf("  %04x %06x %06x %06x m%u sp%02x la%04x\n", t.pc, t.r6, t.n6, t.sr, t.mode, t.sp, t.la);
 		}
 	}
 

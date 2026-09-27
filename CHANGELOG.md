@@ -7,6 +7,19 @@ Older entries cite their commit by hand.
 
 ## 2026-09-27
 
+- **The emulator no longer stops answering after a run of uploads (Claude, requested by Javier).**
+  Testing Animatek NME against it, 18 patches loaded one after another into slot A left it deaf:
+  upload timeouts, then no answer to anything. DSP 0 was running past the end of its main loop,
+  because the DSP JIT reused a cached one-instruction block compiled before the OS moved the loop
+  end there; its register stack crept on every pass until an `rti` looped for ever. The cache of
+  single-instruction blocks is now off (`g1Lib/g1dsp.cpp`; `G1_SINGLEOP_CACHE=1` turns it back
+  on). `g1patchtest` gains `G1_BEFORE` (a session of uploads), `G1_PCHIST` and, in the DSP,
+  `G1_DSPTRACE` and `G1_JITBLOCK` (NOTES.md, "A cached block at the loop end"). Verified: the
+  hanging sequence (9 factory patches, ENSODEF, Classic sawbass) and the 18-patch one load and
+  sound headless, and hang again with the cache back on; in `g1gui` with NME, 80 random patches
+  from the library uploaded and fetched back with no timeout (the only differences, two module
+  names longer than 16 characters, are NME's). The real G1 took both sequences without trouble.
+  Speed cost 1-2 %. `ctest` and `g1dspcheck` pass.
 - **`v0.1.0-alpha.7` is out (Claude, requested by Javier).** Prerelease on GitHub with the five
   packages: Linux x86_64 native and JUCE, Linux arm64, macOS universal and Windows. Checked the
   CI run (all six jobs green) and the release's asset list; no ROM in any of them.

@@ -237,6 +237,8 @@ int main(int argc, char** argv)
 	}
 
 	// Upload, like NME: a packet, its reply, the next one.
+	auto upload = [&](const std::vector<UploadPacketizer::Packet>& packets) -> int
+	{
 	int pid = -1;
 	// How long to wait for each packet's reply. The OS takes much longer at some points of a
 	// big patch (it is loading code into the DSPs), so G1_ACKMS raises it.
@@ -282,6 +284,65 @@ int main(int argc, char** argv)
 				pid = reply[k + 6];
 		if(!hasAck(reply))
 			std::printf("  packet %zu/%zu: NO REPLY\n", i + 1, packets.size());
+	}
+	return pid;
+	};
+
+	// G1_BEFORE="a.pch|b.pch": patches uploaded to the same slot first, one after the other with
+	// G1_BEFORE_MS of emulated time between them (default 500), as a session in NME does.
+	if(const char* before = std::getenv("G1_BEFORE"))
+	{
+		const auto gapMs = static_cast<uint64_t>(std::getenv("G1_BEFORE_MS") ? std::atoi(std::getenv("G1_BEFORE_MS")) : 500);
+		for(const auto& path : juce::StringArray::fromTokens(before, "|", ""))
+		{
+			auto p = io.readFile(juce::File(juce::File::getCurrentWorkingDirectory().getChildFile(path)));
+			if(!p) { std::fprintf(stderr, "cannot read the patch %s\n", path.toRawUTF8()); return 1; }
+			const auto pp = UploadPacketizer::cut(serializer.serializeForUpload(*p));
+			const int bp = upload(pp);
+			std::printf("before: \"%s\" in %zu packets; pid=%d\n", p->getName().toRawUTF8(), pp.size(), bp);
+			run(mc, gapMs * g_ms);
+			std::vector<uint8_t> drop;
+			mc.getPcPort().takeTx(drop);
+		}
+	}
+	const int pid = upload(packets);
+	// G1_PCHIST=ms: where the CPU spends the next ms of emulated time, most visited PCs first
+	// (to see which loop the OS sits in after an upload it did not answer).
+	if(const char* ph = std::getenv("G1_PCHIST"))
+	{
+		// ...and where each DSP's blocks start in the same time.
+		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+			for(uint32_t a = 0; a < 0x1000; ++a)
+				mc.getDsp(d).pcWatch()[a] = 0;
+		std::map<uint32_t, uint64_t> hits;
+		const auto end = mc.ucCycles() + static_cast<uint64_t>(std::atoi(ph)) * g_ms;
+		uint64_t total = 0;
+		while(mc.ucCycles() < end)
+		{
+			++hits[mc.getPC()];
+			++total;
+			mc.exec();
+		}
+		std::vector<std::pair<uint64_t, uint32_t>> top;
+		for(const auto& [pc, n] : hits)
+			top.push_back({n, pc});
+		std::sort(top.rbegin(), top.rend());
+		std::printf("PC histogram, %llu instructions:\n", static_cast<unsigned long long>(total));
+		for(size_t i = 0; i < top.size() && i < 16; ++i)
+			std::printf("  $%06x %5.1f%%\n", top[i].second, 100.0 * static_cast<double>(top[i].first) / static_cast<double>(total));
+		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		{
+			std::vector<std::pair<uint64_t, uint32_t>> dt;
+			uint64_t dn = 0;
+			for(const auto& [pc, n] : mc.getDsp(d).pcWatch())
+				if(n) { dt.push_back({n, pc}); dn += n; }
+			std::sort(dt.rbegin(), dt.rend());
+			std::printf("DSP%u block starts (%llu):", d, static_cast<unsigned long long>(dn));
+			for(size_t i = 0; i < dt.size() && i < 20; ++i)
+				std::printf(" $%03x:%llu", dt[i].second, static_cast<unsigned long long>(dt[i].first));
+			std::printf("\n");
+			mc.getDsp(d).pcWatch().clear();
+		}
 	}
 	std::printf("patch \"%s\" uploaded in %zu packets; pid=%d\n", patch->getName().toRawUTF8(), packets.size(), pid);
 	if(pid < 0)

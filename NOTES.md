@@ -261,6 +261,34 @@ first note-off. `g1patchtest` shows it with `G1_SEQ=+60,+64,-64,-60 G1_CHORD=1`.
   it moves the loop end in the JIT (`removeLoop`/`addLoop`) and discards the blocks compiled at the
   old and new ends. `G1_NO_LA_FIX=1` disables it (for comparisons).
 
+### A cached block at the loop end
+
+- **Symptom (fixed):** after a run of uploads (in one NME session, 18 patches loaded one after
+  another into slot A) the emulator stopped answering: `Upload timeout at packet 3`, then every
+  request timed out and NME still showed the synth as connected. Deterministic: the same patches in
+  the same order hang it at the same upload, in `g1run` and headless in `g1patchtest`
+  (`G1_BEFORE`). The real G1 takes the same sequences without trouble.
+- **What happened:** DSP 0 ran past the end of its main loop. The OS had moved LA to `$28F` (see
+  above) and the JIT knew it, but the one-instruction block at `$28F` (a `nop`) was not compiled
+  with the loop-end check: execution fell into the sample routine at `$290` without an interrupt.
+  That routine saves registers on a stack of its own in R6 and the modules borrow R6 in between, so
+  every pass through it off an interrupt shifted the stack; after enough of them an `rti` returned
+  to itself for ever. The OS, waiting for DSP 0 to answer a host command (`$10C354`), stopped
+  answering the editor.
+- **The bug, in Gearmulator:** with `cacheSingleOpBlocks` (on by default) a destroyed block of one
+  instruction is kept, keyed by its opcode, and reused at that address; the cache does not look at
+  whether the address has become a loop end since. With the G1 moving LA on every patch, a plain
+  `nop` compiled earlier came back at the new loop end.
+- **Fix** (`g1dsp.cpp`): the cache is off. Measured cost: 1-2 % (20 emulated seconds of
+  `ButohDrone`: 12.5 s with it, 12.7 s without). `G1_SINGLEOP_CACHE=1` turns it back on, and the
+  hang comes back.
+- **How it was found:** a PC histogram after the upload (`G1_PCHIST`: the CPU polling DSP 0, and
+  DSP 0 repeating one block 100 million times in 200 ms), then a ring of DSP 0's last blocks
+  (`G1_DSPTRACE`) back from the stuck `rti` to the first pass that left the loop. Two wrong turns,
+  for the record: the interpreter cannot be used to compare (see Tools), and IRQDs serviced while
+  the OS had disabled them in the IPRC do happen on DSP 0 during reloads but were not the cause
+  (dropping them changed nothing).
+
 ## DSP core fixes (`cmake/Dsp56300.cmake`)
 
 Applied to a build copy; the Gearmulator clone is never modified.
@@ -495,7 +523,12 @@ Both pass since the fix ([CI run 35570337853](https://github.com/animatek/G1-Emu
   `G1_PREPRESS=row.bit,...` (pressed before the note, to hear what they change),
   `G1_HOLD=row.bit` (held down meanwhile, for modifiers such as Shift), `G1_DIAL=detents`,
   `G1_MIDINOTE=channel` (the note through MIDI IN instead of the PC Port) and `G1_PEEK=addr,...`
-  (bytes of the CPU's memory, to read the OS's own variables). A step of `G1_PRESS` /
+  (bytes of the CPU's memory, to read the OS's own variables). `G1_BEFORE="a.pch|b.pch"` uploads
+  those patches to the same slot first, `G1_BEFORE_MS` apart (default 500), as a session in NME
+  does; `G1_PCHIST=ms` prints where the CPU and each DSP spend the next ms after the upload;
+  `G1_DSPTRACE=dsp,pc,arg` keeps a ring of that DSP's last JIT blocks (PC, R6, N6, SR, processing
+  mode, SP, LA) and prints it when it reaches pc with R6 other than arg, or, with pc 0, when one
+  block at or above arg repeats 1000 times; `G1_JITBLOCK=n` limits JIT blocks to n instructions. A step of `G1_PRESS` /
   `G1_PREPRESS` can be a knob (`k5=200`) or the dial (`d3`) instead of a button, so a whole panel
   gesture fits in one line (`1.2,1.6,k5=200,2.6`), and what the OS sends to the editor during it
   is printed. `G1_HOLD_END=1` keeps the held key down until every probe is over.

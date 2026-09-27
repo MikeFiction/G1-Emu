@@ -132,6 +132,13 @@ namespace g1
 		std::map<uint32_t, uint64_t> m_servicedVectors;
 		uint32_t m_lastVector = 0;
 		std::map<uint32_t, uint64_t> m_pcWatch;	// PCs to watch (diagnostics only)
+		// G1_DSPTRACE=dsp,pc,arg (diagnostics): a ring of the last JIT blocks of that DSP.
+		struct TraceStep { uint32_t pc, r6, n6, sr, mode, sp, la; };
+		std::vector<TraceStep> m_trace;
+		size_t m_tracePos = 0;
+		bool m_traceOn = false;
+		uint32_t m_tracePc = 0, m_traceArg = 0, m_traceLastPc = 0, m_traceRepeat = 0;
+		void traceStep();
 		Meter m_meter{};
 		AudioCallback m_audioCallback;
 		Dsp* m_next = nullptr;
