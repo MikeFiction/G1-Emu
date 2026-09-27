@@ -7,6 +7,9 @@ Older entries cite their commit by hand.
 
 ## 2026-09-27
 
+- **`v0.1.0-alpha.7` is out (Claude, requested by Javier).** Prerelease on GitHub with the five
+  packages: Linux x86_64 native and JUCE, Linux arm64, macOS universal and Windows. Checked the
+  CI run (all six jobs green) and the release's asset list; no ROM in any of them.
 - **Release notes for `v0.1.0-alpha.7` (Claude, requested by Javier).** `docs/release-notes.md`
   describes the master clock fix, the clock setting a new flash needs (and NME's inverted label for
   it), and lists alpha.5's and alpha.6's fixes as included. Documentation only.
