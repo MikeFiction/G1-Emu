@@ -7,6 +7,10 @@ Older entries cite their commit by hand.
 
 ## 2026-09-27
 
+- **`v0.1.0-alpha.8` is out (Claude, requested by Javier).** Prerelease on GitHub with the five
+  packages: Linux x86_64 native and JUCE, Linux arm64, macOS universal and Windows. Checked the CI run
+  (all six jobs green) and the packages' contents; no ROM in any of them. #4's reporter was asked to
+  try it; the issue stays open until they confirm.
 - **Release notes for `v0.1.0-alpha.8` (Claude, requested by Javier).** `docs/release-notes.md`
   describes the fix for heavy patches that came out as noise (#4), the upload hang fixed earlier today,
   the DSP 0 input interrupt still open as a known issue, and lists alpha.5 to alpha.7 as included.
