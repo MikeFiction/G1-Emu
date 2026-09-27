@@ -7,6 +7,10 @@ Older entries cite their commit by hand.
 
 ## 2026-09-27
 
+- **Release notes for `v0.1.0-alpha.8` (Claude, requested by Javier).** `docs/release-notes.md`
+  describes the fix for heavy patches that came out as noise (#4), the upload hang fixed earlier today,
+  the DSP 0 input interrupt still open as a known issue, and lists alpha.5 to alpha.7 as included.
+  Documentation only.
 - **Heavy patches ran out of emulated DSP time, not host CPU: short absolute moves now cost one
   cycle (Claude, requested by Javier).** #4's `WavetableSynth.pch` (11 voices) came out as white
   noise even headless and faster than real time. The OS fills each DSP to its own budget of 864

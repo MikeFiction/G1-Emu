@@ -1,31 +1,33 @@
-# G1-Emu v0.1.0-alpha.7
+# G1-Emu v0.1.0-alpha.8
 
-**This pre-release makes the synth's internal master clock run.** Patches driven by it (anything
-that takes MIDIGlobal's clock: sequencers, arpeggios, patches synced to the synth's tempo) were
-silent. It is built and DSP-tested in CI on Linux x86-64 (native and JUCE backends), Linux arm64,
-macOS universal and Windows x86-64. The fix was found by comparing recordings of a real Nord
-Modular with the emulator, and checked on Linux; it is in the emulation shared by every platform.
+**This pre-release fixes heavy patches that came out as noise.** It is built and DSP-tested in CI on
+Linux x86-64 (native and JUCE backends), Linux arm64, macOS universal and Windows x86-64. Both fixes
+are in the emulation shared by every platform, and were checked on Linux.
 
-## What alpha.7 fixes
+## What alpha.8 fixes
 
-- **The internal master clock.** The emulated G1 never started it, so MIDIGlobal's clock and sync
-  outputs stood still and every patch clocked by them stayed silent. A sequencer patch of 110
-  modules that is loud on a real G1 now sounds the same in the emulator.
+- **Heavy patches sounding like noise or distortion** (#4, `WavetableSynth.pch`). It was not the
+  computer being too slow: the emulated DSPs believed some instructions took twice as long as on
+  the real chip. The Nord Modular's OS packs each DSP with as many voices as fit in its time per
+  sample, so a full DSP ran over, lost samples and turned the sound into noise. Such patches now
+  keep their pitch and sound as they should.
+- **The emulator stopped answering after many uploads in a row** (upload timeouts, then silence
+  to everything). A stale piece of translated DSP code was reused after the OS had moved a loop.
 
-## One setting to check
+## Known issue
 
-The master clock also has to be set to **internal** in the synth settings, and a new G1-Emu flash
-comes up set to external (waiting for MIDI clock). If a clocked patch is still silent, set the
-clock to internal from your editor's synth settings, or send MIDI clock to the **MIDI** port.
-With Animatek NME up to now, the Synth Settings dialog shows this option the wrong way round:
-choose **External** there to get the internal clock, until NME is fixed.
+On the first DSP one input-related interrupt still runs more often than on the hardware, which can
+leave a little grit on the very heaviest patches. It is being worked on; reports with the patch
+attached help a lot.
 
-## Also in this build (from alpha.5 and alpha.6)
+## Also in this build (from alpha.5 to alpha.7)
 
+- The synth's internal master clock runs (sequencers and clocked patches). Set the clock to
+  **internal** in the synth settings; in Animatek NME's Synth Settings dialog that option is shown
+  the wrong way round for now: choose **External** there.
 - Upload timeouts fixed: a deadlock after a DSP had been idle, commands to a busy DSP thrown away
   or never taken.
 - The sawtooth of `OscA`, `OscB` and `OscSlvC` sounds on every platform.
-- With `G1_MIDI_LOG=1` the JUCE MIDI backend (macOS and Windows) reports a truncated SysEx.
 
 ## Windows quick start
 
