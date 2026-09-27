@@ -1,27 +1,31 @@
-# G1-Emu v0.1.0-alpha.6
+# G1-Emu v0.1.0-alpha.7
 
-**This pre-release fixes an upload timeout that alpha.5 still had with heavier patches.** It is
-built and DSP-tested in CI on Linux x86-64 (native and JUCE backends), Linux arm64, macOS universal
-and Windows x86-64. The fix was found and verified on Linux, with the patch attached to
-[issue #4](https://github.com/animatek/G1-Emu/issues/4); it is in the DSP emulation shared by every
-platform, but has not been tried on a real Mac or Windows machine yet. If uploads still time out
-for you, please say so on #4 or [issue #3](https://github.com/animatek/G1-Emu/issues/3) with the
-patch attached.
+**This pre-release makes the synth's internal master clock run.** Patches driven by it (anything
+that takes MIDIGlobal's clock: sequencers, arpeggios, patches synced to the synth's tempo) were
+silent. It is built and DSP-tested in CI on Linux x86-64 (native and JUCE backends), Linux arm64,
+macOS universal and Windows x86-64. The fix was found by comparing recordings of a real Nord
+Modular with the emulator, and checked on Linux; it is in the emulation shared by every platform.
 
-## What alpha.6 fixes
+## What alpha.7 fixes
 
-- **Uploads of patches that keep a DSP busy.** When a patch fills a DSP's time, the emulated DSP
-  never got round to the editor's commands, so the last packet of the upload was never
-  acknowledged and the editor reported `Upload timeout at packet N`. The patch from #4 now uploads
-  completely, like the 71 sample patches used for testing.
+- **The internal master clock.** The emulated G1 never started it, so MIDIGlobal's clock and sync
+  outputs stood still and every patch clocked by them stayed silent. A sequencer patch of 110
+  modules that is loud on a real G1 now sounds the same in the emulator.
 
-## Also in this build (from alpha.5)
+## One setting to check
 
-- Two other upload timeouts fixed: a deadlock after a DSP had been idle for a long time, and a
-  command to a busy DSP being thrown away.
-- The sawtooth of `OscA`, `OscB` and `OscSlvC` sounds again on every platform.
-- With `G1_MIDI_LOG=1` the JUCE MIDI backend (macOS and Windows) reports a SysEx that reached it
-  truncated.
+The master clock also has to be set to **internal** in the synth settings, and a new G1-Emu flash
+comes up set to external (waiting for MIDI clock). If a clocked patch is still silent, set the
+clock to internal from your editor's synth settings, or send MIDI clock to the **MIDI** port.
+With Animatek NME up to now, the Synth Settings dialog shows this option the wrong way round:
+choose **External** there to get the internal clock, until NME is fixed.
+
+## Also in this build (from alpha.5 and alpha.6)
+
+- Upload timeouts fixed: a deadlock after a DSP had been idle, commands to a busy DSP thrown away
+  or never taken.
+- The sawtooth of `OscA`, `OscB` and `OscSlvC` sounds on every platform.
+- With `G1_MIDI_LOG=1` the JUCE MIDI backend (macOS and Windows) reports a truncated SysEx.
 
 ## Windows quick start
 

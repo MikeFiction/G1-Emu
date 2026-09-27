@@ -7,6 +7,9 @@ Older entries cite their commit by hand.
 
 ## 2026-09-27
 
+- **Release notes for `v0.1.0-alpha.7` (Claude, requested by Javier).** `docs/release-notes.md`
+  describes the master clock fix, the clock setting a new flash needs (and NME's inverted label for
+  it), and lists alpha.5's and alpha.6's fixes as included. Documentation only.
 - **The internal master clock ticks: clocked patches are no longer silent (Claude, requested by
   Javier).** nmedit's `progger.pch` (110 modules, a sequencer run by MIDIGlobal's clock) is loud
   on a real G1 and was silent here, as were MIDIGlobal's clock and sync outputs in the module
