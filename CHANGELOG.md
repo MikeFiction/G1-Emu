@@ -7,6 +7,23 @@ Older entries cite their commit by hand.
 
 ## 2026-09-27
 
+- **Heavy patches ran out of emulated DSP time, not host CPU: short absolute moves now cost one
+  cycle (Claude, requested by Javier).** #4's `WavetableSynth.pch` (11 voices) came out as white
+  noise even headless and faster than real time. The OS fills each DSP to its own budget of 864
+  cycles per sample; the core's table charged 2 cycles for `move x:aa` / `y:aa`, which the G1's code
+  uses everywhere, so full DSPs went over, the next sample clock was dropped and the control-rate code
+  starved. `cmake/Dsp56300.cmake` sets them to 1 (not checked against the manual, which was not at
+  hand: the evidence is that the real G1 plays the patch with 11 voices). `g1patchtest` with
+  `G1_VERBOSE=1` now prints dropped sample clocks (`overruns=`), cycles per instruction and the
+  interrupt vectors each DSP serviced. Verified: WavetableSynth, DSPs 1 and 2 from ~6,200 overruns in
+  3 s to 0, output from flatness 0.71 (noise) to a pitched signal; `SimpleOSC.pch` unchanged (261.7 Hz,
+  −61.8 dBFS); `ctest` passes. **Not fixed yet:** DSP 0 still overruns on this patch and on
+  `WavetablePad.pch`, because its codec-input DMA interrupt runs ~6.6 times per sample; an
+  experiment clocking its receivers at 2 words per sample removed it, but it also touches its
+  transmitter and the audio inputs and was left out (`docs/performance-plan.md`). Also
+  `docs/performance-plan.md`: a work order for an agent, with this finding first, then a benchmark
+  and golden-WAV gate and phased host-side optimisations.
+
 - **The emulator no longer stops answering after a run of uploads (Claude, requested by Javier).**
   Testing Animatek NME against it, 18 patches loaded one after another into slot A left it deaf:
   upload timeouts, then no answer to anything. DSP 0 was running past the end of its main loop,

@@ -277,6 +277,8 @@ namespace g1
 						m_irqdPending = true;
 						++m_irqdCount;
 					}
+					else
+						++m_irqdOverruns;
 				}
 			}
 			if(m_interpreter)

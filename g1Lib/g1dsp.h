@@ -44,6 +44,7 @@ namespace g1
 		uint64_t audioFrames() const { return m_audioFrames; }
 		uint64_t hostWords() const { return m_hostWords; }
 		uint64_t irqdCount() const { return m_irqdCount; }
+		uint64_t irqdOverruns() const { return m_irqdOverruns; }	// sample clocks that found the last block still running
 		uint64_t laChanges() const { return m_laChanges; }	// times a loop end has been moved
 		const std::map<uint32_t, uint64_t>& servicedVectors() const { return m_servicedVectors; }
 		uint32_t lastVector() const { return m_lastVector; }
@@ -127,7 +128,7 @@ namespace g1
 		uint64_t m_stalls = 0;
 		uint64_t m_audioFrames = 0;
 		uint64_t m_hostWords = 0, m_hostCommands = 0, m_wordsToHost = 0;
-		uint64_t m_nextIrqd = 0, m_irqdCount = 0;
+		uint64_t m_nextIrqd = 0, m_irqdCount = 0, m_irqdOverruns = 0;
 		bool m_irqdPending = false;	// an IRQD injected and not serviced yet
 		std::map<uint32_t, uint64_t> m_servicedVectors;
 		uint32_t m_lastVector = 0;

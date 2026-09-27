@@ -550,11 +550,12 @@ int main(int argc, char** argv)
 				static_cast<uint32_t>(p.getEssi1().getSR()), static_cast<uint32_t>(p.getEssi1().getCRB()), 0u);
 			{
 				auto& dd = mc.getDsp(d);
-				std::printf("DSP%u  booted=%d boots=%u pc=$%04x irqd=%llu of %llu blocks, stalls=%llu, host commands=%llu, words to host=%llu\n", d,
-					static_cast<int>(dd.booted()), dd.bootCount(), static_cast<unsigned>(dd.dsp().getPC().toWord()),
-					static_cast<unsigned long long>(dd.irqdCount()), static_cast<unsigned long long>(dd.dsp().getCycles() / 864),
+				std::printf("DSP%u  booted=%d boots=%u pc=$%04x cyc/ins=%.3f irqd=%llu of %llu blocks, overruns=%llu, stalls=%llu, host commands=%llu, words to host=%llu\n", d,
+					static_cast<int>(dd.booted()), dd.bootCount(), static_cast<unsigned>(dd.dsp().getPC().toWord()), static_cast<double>(dd.dsp().getCycles()) / static_cast<double>(dd.dsp().getInstructionCounter()),
+					static_cast<unsigned long long>(dd.irqdCount()), static_cast<unsigned long long>(dd.dsp().getCycles() / 864), static_cast<unsigned long long>(dd.irqdOverruns()),
 					static_cast<unsigned long long>(dd.stalls()), static_cast<unsigned long long>(dd.hostCommands()), static_cast<unsigned long long>(dd.wordsToHost()));
 			}
+			{ std::printf("DSP%u  vectors:", d); for(auto& [v, n] : mc.getDsp(d).servicedVectors()) std::printf(" $%02x=%llu", v, static_cast<unsigned long long>(n)); std::printf("\n"); }
 			std::printf("DSP%u  DOR0=%06x DOR1=%06x DCO1=%06x (as read by the program: X:$FFFFF3/F2/E9 = %06x %06x %06x)\n", d,
 				p.getDMA().getDOR(0), p.getDMA().getDOR(1), p.getDMA().getDCO(1),
 				p.read(0xfffff3, dsp56k::Instruction::Invalid), p.read(0xfffff2, dsp56k::Instruction::Invalid), p.read(0xffffe9, dsp56k::Instruction::Invalid));

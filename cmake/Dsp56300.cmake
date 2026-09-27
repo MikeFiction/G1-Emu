@@ -202,6 +202,19 @@ g1_dsp_replace(esaiclock.cpp
 						e.fineLastClock = ic > g1MaxCatchUp ? ic - g1MaxCatchUp : 0;
 					while (static_cast<uint64_t>(ic - e.fineLastClock) >= e.finePeriod)]=])
 
+# A move to or from X:aa / Y:aa (short absolute address) takes one cycle, like any other X or Y move
+# without a long absolute or pre-update address; the core's table charged two. The G1's sample and
+# control code is full of them (its variables live at X:$0-$3F), so with the extra cycle a patch the
+# OS had filled to its budget went past 864 cycles per sample: the next sample clock found the last
+# one still pending and was lost, and the output turned into noise (#4, WavetableSynth.pch, 11 voices:
+# ~6,000 lost sample clocks per DSP in 3 s, none with this fix on DSPs 1 and 2).
+g1_dsp_replace(opcodecycles.h
+	"OpcodeCycles{Movex_aa,			2, 0, 0, 0},"
+	"OpcodeCycles{Movex_aa,			1, 0, 0, 0},")
+g1_dsp_replace(opcodecycles.h
+	"OpcodeCycles{Movey_aa,			2, 0, 0, 0},"
+	"OpcodeCycles{Movey_aa,			1, 0, 0, 0},")
+
 foreach(source IN LISTS g1_dsp_files)
 	get_filename_component(name "${source}" NAME)
 	configure_file("${g1_dsp_prepare}/${name}" "${g1_dsp_overlay}/${name}" COPYONLY)
