@@ -1,6 +1,6 @@
 // g1patchtest: test bench for the emulated G1, with no window and no editor.
 //
-//   g1patchtest ROM patch.pch [--note 60] [--seconds 2] [--wav output.wav] [--dump-packets dir]
+//   g1patchtest ROM patch.pch [--note 60] [--seconds 2] [--wav output.wav] [--dump-packets dir] [--bench]
 //   (G1_CHORD / G1_SEQ: press and release notes through the editor's port, then measure)
 //
 // Boots the OS, greets like NME (IAm), uploads the patch with the same code NME uses
@@ -21,6 +21,7 @@
 
 #include <map>
 #include <cmath>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -106,7 +107,7 @@ int main(int argc, char** argv)
 {
 	if(argc < 3)
 	{
-		std::fprintf(stderr, "usage: g1patchtest ROM patch.pch [--note N] [--seconds S] [--wav file.wav] [--input-sine Hz] [--dump-packets dir]\n");
+		std::fprintf(stderr, "usage: g1patchtest ROM patch.pch [--note N] [--seconds S] [--wav file.wav] [--input-sine Hz] [--dump-packets dir] [--bench]\n");
 		return 2;
 	}
 	int note = 60;
@@ -114,13 +115,17 @@ int main(int argc, char** argv)
 	std::string wavPath;
 	double inputHz = 0;
 	std::string dumpDir;
-	for(int i = 3; i + 1 < argc; i += 2)
+	bool bench = std::getenv("G1_BENCH") != nullptr;
+	for(int i = 3; i < argc; )
 	{
+		if(!std::strcmp(argv[i], "--bench")) { bench = true; ++i; continue; }
+		if(i + 1 >= argc) break;
 		if(!std::strcmp(argv[i], "--note")) note = std::atoi(argv[i + 1]);
 		else if(!std::strcmp(argv[i], "--seconds")) seconds = std::atof(argv[i + 1]);
 		else if(!std::strcmp(argv[i], "--wav")) wavPath = argv[i + 1];
 		else if(!std::strcmp(argv[i], "--input-sine")) inputHz = std::atof(argv[i + 1]);
 		else if(!std::strcmp(argv[i], "--dump-packets")) dumpDir = argv[i + 1];
+		i += 2;
 	}
 
 	// The patch, with NME's module descriptions.
@@ -148,6 +153,7 @@ int main(int argc, char** argv)
 		return 1;
 	}
 	g1::Microcontroller mc(rom);
+	mc.setBenchEnabled(bench);
 	mc.installRomOsInFlash();
 
 	// Output: one sample per DSP 3 block (4 channels).
@@ -517,6 +523,9 @@ int main(int argc, char** argv)
 	// G1_MIDICLOCK=bpm sends MIDI clock (a start, then $F8 at 24 per beat) into MIDI IN while it
 	// plays: with the synth's clock set to external, that is what moves MIDIGlobal and whatever
 	// follows it (sequencers, arpeggios).
+	if(bench)
+		mc.resetBenchStats();
+	const auto benchStart = std::chrono::steady_clock::now();
 	if(const char* mcl = std::getenv("G1_MIDICLOCK"))
 	{
 		const double tickMs = 60000.0 / (std::atof(mcl) * 24.0);
@@ -532,6 +541,22 @@ int main(int argc, char** argv)
 	else
 		run(mc, static_cast<uint64_t>(seconds * 1000) * g_ms);
 	capture = false;
+	if(bench)
+	{
+		const double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - benchStart).count();
+		const auto s = mc.benchStats();
+		const double scale = wall > 0 ? 1.0 / wall : 0.0;
+		std::printf("BENCH emulated_s=%.3f wall_s=%.6f realtime=%.3f periodic_barriers_s=%.1f host_port_barriers_s=%.1f\n",
+			seconds, wall, wall > 0 ? seconds / wall : 0.0, s.periodicBarriers * scale, s.hostPortBarriers * scale);
+		std::printf("BENCH thread=cpu busy_s=%.6f waiting_s=%.6f\n", s.cpuBusyNs / 1e9, s.cpuWaitingNs / 1e9);
+		if(!std::getenv("G1_THREADS") || std::atoi(std::getenv("G1_THREADS")) != 0)
+			std::printf("BENCH thread=cpu-dsp0 busy_s=%.6f waiting_s=0\n", s.threadBusyNs[0] / 1e9);	// DSP 0 runs on the CPU thread
+		for(uint32_t d = 1; d < g1::g_dspCount; ++d)
+			std::printf("BENCH thread=dsp%u busy_s=%.6f waiting_s=%.6f\n", d, s.threadBusyNs[d] / 1e9, s.threadWaitingNs[d] / 1e9);
+		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+			std::printf("BENCH dsp=%u blocks_s=%.1f overruns=%llu\n", d, s.blocks[d] * scale,
+				static_cast<unsigned long long>(mc.getDsp(d).irqdOverruns()));
+	}
 	std::vector<uint8_t> rest;
 	mc.getPcPort().takeTx(rest);
 	// $7F is the plain ACK the OS sends for each packet (NME treats it as one), so it is not

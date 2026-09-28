@@ -53,6 +53,7 @@ namespace g1
 
 		if(const char* t = std::getenv("G1_THREADS"))
 			m_threaded = std::atoi(t) != 0;
+		m_benchEnabled = std::getenv("G1_BENCH") != nullptr;
 		if(m_threaded)
 			for(uint32_t i = 1; i < g_dspCount; ++i)
 				m_workers.emplace_back([this, i] { workerLoop(i); });
@@ -74,6 +75,9 @@ namespace g1
 		uint64_t seen = 0;
 		while(true)
 		{
+			std::chrono::steady_clock::time_point waitStart;
+			if(m_benchEnabled)
+				waitStart = std::chrono::steady_clock::now();
 			// Syncs are very frequent (~20,000 per second): the threads spin while waiting and only
 			// sleep if the CPU takes long (for instance when the emulator has time to spare).
 			uint32_t spins = 0;
@@ -89,10 +93,17 @@ namespace g1
 				m_wake.wait(lock, [&] { return m_generation.load() != seen || m_quitWorkers; });
 				--m_sleepers;
 			}
+			if(m_benchEnabled)
+				m_threadWaitingNs[_dsp].fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - waitStart).count()), std::memory_order_relaxed);
 			if(m_quitWorkers)
 				return;
 			seen = m_generation.load();
+			std::chrono::steady_clock::time_point busyStart;
+			if(m_benchEnabled)
+				busyStart = std::chrono::steady_clock::now();
 			m_dsps[_dsp]->catchUp(m_dspTarget);
+			if(m_benchEnabled)
+				m_threadBusyNs[_dsp].fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - busyStart).count()), std::memory_order_relaxed);
 			m_pending.fetch_sub(1);
 		}
 	}
@@ -126,7 +137,7 @@ namespace g1
 			m_pcTrailPos.store((pos + 1) % g_pcTrail, std::memory_order_relaxed);
 		}
 		if((m_ucCycles & 0x3ff) < cycles)
-			catchUpDsps();
+			catchUpDsps(false);
 		execPcPort();
 		execPit(cycles);
 		while(m_ucCycles >= m_nextSciSample)	// the UART advances at its clock rate
@@ -197,13 +208,21 @@ namespace g1
 		return m68k_get_reg(const_cast<Microcontroller*>(this)->getCpuState(), M68K_REG_SR);
 	}
 
-	void Microcontroller::catchUpDsps()
+	void Microcontroller::catchUpDsps(const bool _hostPort)
 	{
+		(_hostPort ? m_hostPortBarriers : m_periodicBarriers).fetch_add(1, std::memory_order_relaxed);
 		const auto target = m_ucCycles * g_dspCyclesPerUcNum / g_dspCyclesPerUcDen;
 		if(!m_threaded)
 		{
-			for(auto& dsp : m_dsps)
-				dsp->catchUp(target);
+			for(uint32_t i = 0; i < g_dspCount; ++i)
+			{
+				std::chrono::steady_clock::time_point busyStart;
+				if(m_benchEnabled)
+					busyStart = std::chrono::steady_clock::now();
+				m_dsps[i]->catchUp(target);
+				if(m_benchEnabled)
+					m_threadBusyNs[i].fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - busyStart).count()), std::memory_order_relaxed);
+			}
 		}
 		else
 		{
@@ -215,15 +234,64 @@ namespace g1
 				std::lock_guard lock(m_wakeMutex);
 				m_wake.notify_all();
 			}
+			std::chrono::steady_clock::time_point dsp0Start;
+			if(m_benchEnabled)
+				dsp0Start = std::chrono::steady_clock::now();
 			m_dsps[0]->catchUp(target);
+			if(m_benchEnabled)
+				m_threadBusyNs[0].fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - dsp0Start).count()), std::memory_order_relaxed);
+			std::chrono::steady_clock::time_point waitStart;
+			if(m_benchEnabled)
+				waitStart = std::chrono::steady_clock::now();
 			while(m_pending.load() != 0)
 			{
 				cpuPause();
 			}
+			if(m_benchEnabled)
+				m_cpuWaitingNs.fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - waitStart).count()), std::memory_order_relaxed);
 		}
 		// With all DSPs stopped, the audio goes from each one to the next.
 		for(auto& dsp : m_dsps)
 			dsp->flushAudio();
+	}
+
+	Microcontroller::BenchStats Microcontroller::benchStats() const
+	{
+		BenchStats out;
+		// The CPU thread is not timed per instruction (two clock reads per 68k instruction cost
+		// more than the emulation itself): its busy time is what is left of the wall time once
+		// the DSPs it ran itself and its waits at the barrier are taken out.
+		const auto elapsed = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - m_benchStart).count());
+		out.cpuWaitingNs = m_cpuWaitingNs.load(std::memory_order_relaxed);
+		uint64_t onCpuThread = out.cpuWaitingNs;
+		for(uint32_t i = 0; i < g_dspCount; ++i)
+			if(!m_threaded || i == 0)
+				onCpuThread += m_threadBusyNs[i].load(std::memory_order_relaxed);
+		out.cpuBusyNs = elapsed > onCpuThread ? elapsed - onCpuThread : 0;
+		for(uint32_t i = 0; i < g_dspCount; ++i)
+		{
+			out.threadBusyNs[i] = m_threadBusyNs[i].load(std::memory_order_relaxed);
+			out.threadWaitingNs[i] = m_threadWaitingNs[i].load(std::memory_order_relaxed);
+			const auto blocks = m_dsps[i]->execBlocks();
+			out.blocks[i] = blocks >= m_benchBlockBase[i] ? blocks - m_benchBlockBase[i] : 0;
+		}
+		out.periodicBarriers = m_periodicBarriers.load(std::memory_order_relaxed);
+		out.hostPortBarriers = m_hostPortBarriers.load(std::memory_order_relaxed);
+		return out;
+	}
+
+	void Microcontroller::resetBenchStats()
+	{
+		m_benchStart = std::chrono::steady_clock::now();
+		m_cpuWaitingNs.store(0, std::memory_order_relaxed);
+		m_periodicBarriers.store(0, std::memory_order_relaxed);
+		m_hostPortBarriers.store(0, std::memory_order_relaxed);
+		for(uint32_t i = 0; i < g_dspCount; ++i)
+		{
+			m_threadBusyNs[i].store(0, std::memory_order_relaxed);
+			m_threadWaitingNs[i].store(0, std::memory_order_relaxed);
+			m_benchBlockBase[i] = m_dsps[i]->execBlocks();
+		}
 	}
 
 	void Microcontroller::traceHost(const uint32_t _addr, const bool _write, const uint32_t _value)
@@ -254,7 +322,7 @@ namespace g1
 		if(isHostPort(addr))
 		{
 			traceHost(addr, false, 0);
-			catchUpDsps();
+			catchUpDsps(true);
 			return hostPort(addr).read16(hostReg(addr));
 		}
 		if(addr >= g_flashAddress && addr < g_flashAddress + g_flashSize - 1)
@@ -278,7 +346,7 @@ namespace g1
 		if(isHostPort(addr))
 		{
 			traceHost(addr, false, 0);
-			catchUpDsps();
+			catchUpDsps(true);
 			return hostPort(addr).read8(hostReg(addr));
 		}
 		if(addr >= g_flashAddress && addr < g_flashAddress + g_flashSize)
@@ -326,7 +394,7 @@ namespace g1
 		if(isHostPort(addr))
 		{
 			traceHost(addr, true, _val);
-			catchUpDsps();
+			catchUpDsps(true);
 			hostPort(addr).write16(hostReg(addr), _val);
 			return;
 		}
@@ -418,7 +486,7 @@ namespace g1
 		if(isHostPort(addr))
 		{
 			traceHost(addr, true, _val);
-			catchUpDsps();
+			catchUpDsps(true);
 			hostPort(addr).write8(hostReg(addr), _val);
 			return;
 		}

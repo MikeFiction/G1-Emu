@@ -51,6 +51,7 @@ namespace g1
 		std::map<uint32_t, uint64_t>& pcWatch() { return m_pcWatch; }
 		uint64_t hostCommands() const { return m_hostCommands; }
 		uint64_t wordsToHost() const { return m_wordsToHost; }
+		uint64_t execBlocks() const { return m_execBlocks; }
 
 		// Meter: peak (absolute value, signed 24-bit) per ESSI, slot and TX line since the
 		// last reset. Useful to find out where the audio comes out.
@@ -128,6 +129,7 @@ namespace g1
 		uint64_t m_stalls = 0;
 		uint64_t m_audioFrames = 0;
 		uint64_t m_hostWords = 0, m_hostCommands = 0, m_wordsToHost = 0;
+		uint64_t m_execBlocks = 0;
 		uint64_t m_nextIrqd = 0, m_irqdCount = 0, m_irqdOverruns = 0;
 		bool m_irqdPending = false;	// an IRQD injected and not serviced yet
 		std::map<uint32_t, uint64_t> m_servicedVectors;

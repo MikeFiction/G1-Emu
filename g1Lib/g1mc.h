@@ -20,6 +20,7 @@
 #include <memory>
 #include <mutex>
 #include <thread>
+#include <chrono>
 
 #include <array>
 #include <cstdint>
@@ -112,6 +113,15 @@ namespace g1
 		uint32_t pcPortIrqs() const { return m_pcPortIrqs; }
 		uint32_t sciDataWrites() const { return m_sciDataWrites; }
 		uint64_t ucCycles() const { return m_ucCycles; }
+		struct BenchStats
+		{
+			uint64_t cpuBusyNs = 0, cpuWaitingNs = 0;
+			std::array<uint64_t, g_dspCount> threadBusyNs{}, threadWaitingNs{}, blocks{};
+			uint64_t periodicBarriers = 0, hostPortBarriers = 0;
+		};
+		void setBenchEnabled(bool _enabled) { m_benchEnabled = _enabled; }
+		void resetBenchStats();
+		BenchStats benchStats() const;
 
 		// The panel: display, 32 LEDs (4 rows of 8), 18 buttons (3 rows of bits 2-7), the dial
 		// (bits 0 and 1 of the same input) and the knobs, which are ADC channels (setAdc).
@@ -135,7 +145,7 @@ namespace g1
 		mc68k::Hdi08& hostPort(uint32_t _addr) { return m_hostPorts[(_addr - g_dspAddress) >> 3]; }
 		static mc68k::PeriphAddress hostReg(uint32_t _addr) { return static_cast<mc68k::PeriphAddress>(_addr & 7); }
 		void traceHost(uint32_t _addr, bool _write, uint32_t _value);
-		void catchUpDsps();
+		void catchUpDsps(bool _hostPort = false);
 		void onPortE(uint8_t _value);
 		void execPcPort();
 		void execPit(uint32_t _cycles);
@@ -185,6 +195,13 @@ namespace g1
 		std::atomic<uint32_t> m_pending{0};
 		std::atomic<uint32_t> m_sleepers{0};
 		std::atomic<bool> m_quitWorkers{false};
+		std::atomic<bool> m_benchEnabled{false};
+		std::chrono::steady_clock::time_point m_benchStart = std::chrono::steady_clock::now();
+		std::atomic<uint64_t> m_cpuWaitingNs{0};
+		std::array<std::atomic<uint64_t>, g_dspCount> m_threadBusyNs{};
+		std::array<std::atomic<uint64_t>, g_dspCount> m_threadWaitingNs{};
+		std::array<uint64_t, g_dspCount> m_benchBlockBase{};
+		std::atomic<uint64_t> m_periodicBarriers{0}, m_hostPortBarriers{0};
 		uint64_t m_dspTarget = 0;
 		std::mutex m_wakeMutex;
 		std::condition_variable m_wake;

@@ -281,6 +281,7 @@ namespace g1
 						++m_irqdOverruns;
 				}
 			}
+			++m_execBlocks;
 			if(m_interpreter)
 				m_dsp.execInterpreter();
 			else

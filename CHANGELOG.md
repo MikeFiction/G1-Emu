@@ -7,6 +7,15 @@ Older entries cite their commit by hand.
 
 ## 2026-09-28
 
+- **A benchmark and a golden-WAV gate for performance work (Codex and Claude, requested by Javier).**
+  `g1patchtest --bench` prints the realtime factor, each thread's busy and waiting time, barriers per
+  second (periodic and host-port) and overruns; `tools/bench/bench.sh` runs nine patches
+  (`tools/bench/patches.txt`) and fails on any overrun; `tools/bench/golden.sh record|check` compares
+  WAVs byte for byte against references kept outside the repo. Written by Codex; Claude removed its
+  per-instruction timing of the CPU thread (it made `--bench` runs 65 % slower and understated the
+  speed as 1.25–1.44×) and fixed the table's thread column, which showed the idlest thread instead of
+  the busiest. Verified: 1.74–2.15× real time, the CPU thread (68k + DSP 0) is the busiest on all nine,
+  0 overruns, nine WAVs byte-identical threaded, serial and against the references; `ctest` passes.
 - **`v0.1.0-alpha.9` is out (Claude, requested by Javier).** Prerelease on GitHub with the five
   packages: Linux x86_64 native and JUCE, Linux arm64, macOS universal and Windows. Checked the CI run
   (all six jobs green) and the packages' contents; no ROM in any of them. #4's reporter was asked to

@@ -1,0 +1,10 @@
+# name|patch path|MIDI note|extra environment
+WavetableSynth|/mnt/ARCHIVOS/Librerias/NordModular/011_patches/Hordijk_Rob/WavetableSynth.pch|60|
+WavetablePad|/mnt/ARCHIVOS/Librerias/NordModular/011_patches/Purbrick_Jim/WavetablePad.pch|60|
+SimpleOSC|SimpleOSC.pch|60|
+Grainalizzer|/mnt/ARCHIVOS/Librerias/NordModular/011_patches/3Phase/Grainalizzer02-4.pch|60|
+DungeonDub|/mnt/ARCHIVOS/Librerias/NordModular/011_patches/7uke/DungeonDub.pch|60|
+WindowLicker|/mnt/ARCHIVOS/Librerias/NordModular/011_patches/Adonyl/WindowLicker03.pch|60|
+FM303|/mnt/ARCHIVOS/Librerias/NordModular/011_patches/Adonyl/FM303.pch|60|
+4VoiceChoir|/mnt/ARCHIVOS/Librerias/NordModular/011_patches/Allder_Andy/4VoiceChoir.pch|60|
+progger|/mnt/SPEED/CODE/Nomad2026/nmedit/jMod/src/patches/progger.pch|60|G1_CLOCKSRC=1

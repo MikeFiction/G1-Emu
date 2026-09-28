@@ -74,8 +74,62 @@ standalone and `G1_BEFORE` runs of WavetableSynth and WavetablePad report `overr
 four DSPs; WavetableSynth measures about 261.5–262.3 Hz and spectral flatness 0.012. SimpleOSC
 remains at 261.7 Hz and −61.8 dBFS. The AudioIn battery entry remains 440 Hz at −61.8 dBFS with
 `--input-sine 440`, and the full battery remains 62 sounds / 19 moves / 11 fixed / 17 silent.
-`g1dspcheck` and `ctest --test-dir build` pass. Host benchmark mode, golden WAVs, cycle profiling,
-and Phase 1 measurements are still pending.
+`g1dspcheck` and `ctest --test-dir build` pass. Host benchmark mode and golden WAVs are recorded
+below; cycle profiling and Phase 1 measurements are still pending.
+
+## Phase 0 benchmark baseline — 2026-09-28
+
+The new `g1patchtest --bench` mode measures the fast, unslept emulation run after the note. It
+reports the emulated and wall seconds, realtime factor, CPU and worker-thread busy/waiting time,
+periodic and host-port barriers per second, JIT blocks per DSP per second, and dropped sample clocks.
+`tools/bench/bench.sh` runs the nine entries in `tools/bench/patches.txt` and exits non-zero if any
+DSP reports an overrun. `BUSIEST_THREAD` is the thread that waits least at the barrier, the one that
+limits the speed; DSP 0 runs on the CPU thread and is counted with it. The CPU thread is not timed
+per instruction: a first version did, and the two clock reads per 68k instruction made the run 65 %
+slower (10.0 s instead of 6.0 s for the same WavetableSynth run), so its busy time is the wall time
+minus the DSP work and the waits measured on that thread. Three-second Release baseline (Ryzen 7
+5700X; the realtime factor varies ±10 % between runs with the machine's load):
+
+| Patch | Realtime | Busiest thread | Its waiting | DSP overruns |
+| --- | ---: | --- | ---: | ---: |
+| WavetableSynth | 1.89× | CPU (68k + DSP 0) | 17.5 % | 0 |
+| WavetablePad | 2.15× | CPU | 18.3 % | 0 |
+| SimpleOSC | 1.88× | CPU | 12.7 % | 0 |
+| Grainalizzer | 1.90× | CPU | 26.1 % | 0 |
+| DungeonDub | 1.74× | CPU | 30.7 % | 0 |
+| WindowLicker | 1.85× | CPU | 13.9 % | 0 |
+| FM303 | 1.84× | CPU | 19.3 % | 0 |
+| 4VoiceChoir | 1.91× | CPU | 26.6 % | 0 |
+| progger (G1_CLOCKSRC=1) | 1.89× | CPU | 14.7 % | 0 |
+
+**What it says:** the CPU thread, which runs the 68k and DSP 0 one after the other, limits every
+patch; the worker threads (DSPs 1–3) wait ~45 % of the time. Phase 1 step 1 (DSP 0 on its own
+worker) is therefore first. Barriers: on WavetableSynth, per emulated second, ~20,500 periodic and
+**~40,000 triggered by host-port accesses** — twice as many, which makes Phase 1 step 4 (catch up
+only the DSP whose port is accessed) the next candidate.
+
+Golden WAVs for the nine entries: `tools/bench/golden.sh record` / `check`, three emulated seconds,
+references outside the repository (they depend on the ROM) in
+`~/.local/share/Animatek/G1-Emu/bench-golden` (`G1_BENCH_GOLDEN` overrides it). Threaded,
+`G1_THREADS=0` and reference are byte-identical for all nine.
+
+--- | ---: | --- | ---: | ---: |
+| WavetableSynth | 1.439× | DSP3 | 67.8% | 0 |
+| WavetablePad | 1.406× | DSP3 | 66.6% | 0 |
+| SimpleOSC | 1.367× | DSP3 | 57.9% | 0 |
+| Grainalizzer | 1.316× | DSP1 | 67.1% | 0 |
+| DungeonDub | 1.248× | DSP3 | 59.2% | 0 |
+| WindowLicker | 1.408× | DSP3 | 64.0% | 0 |
+| FM303 | 1.293× | DSP3 | 58.6% | 0 |
+| 4VoiceChoir | 1.309× | DSP1 | 65.1% | 0 |
+| progger (G1_CLOCKSRC=1) | 1.345× | DSP3 | 56.6% | 0 |
+
+All 36 DSP checks in the table reported zero overruns. The benchmark also reported about 26–30k
+periodic barriers/s and 0–58k host-port barriers/s, depending on patch. Golden WAVs for all nine
+entries were recorded for three emulated seconds outside the repository; threaded and
+`G1_THREADS=0` output, and both output forms against the references, were byte-identical. The
+default reference directory is `~/.local/share/Animatek/G1-Emu/bench-golden`; the sandbox
+verification used an equivalent external `/tmp` directory because its home directory is read-only.
 
 ---
 
