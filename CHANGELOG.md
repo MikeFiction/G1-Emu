@@ -5,6 +5,12 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-09-28
+
+- **Release notes for `v0.1.0-alpha.9` (Claude, requested by Javier).** `docs/release-notes.md`
+  describes the fix for DSP 0's codec input (the first-load grit of #4) and lists alpha.5 to alpha.8 as
+  included. Documentation only.
+
 ## 2026-09-27
 
 - **DSP 0 codec RX uses its own frame clock (Codex, requested by Javier).** The ESSI receivers on

@@ -1,27 +1,23 @@
-# G1-Emu v0.1.0-alpha.8
+# G1-Emu v0.1.0-alpha.9
 
-**This pre-release fixes heavy patches that came out as noise.** It is built and DSP-tested in CI on
-Linux x86-64 (native and JUCE backends), Linux arm64, macOS universal and Windows x86-64. Both fixes
-are in the emulation shared by every platform, and were checked on Linux.
+**This pre-release removes the grit that heavy patches still had on first load.** It is built and
+DSP-tested in CI on Linux x86-64 (native and JUCE backends), Linux arm64, macOS universal and
+Windows x86-64. The fix is in the emulation shared by every platform, and was checked on Linux.
 
-## What alpha.8 fixes
+## What alpha.9 fixes
 
-- **Heavy patches sounding like noise or distortion** (#4, `WavetableSynth.pch`). It was not the
-  computer being too slow: the emulated DSPs believed some instructions took twice as long as on
-  the real chip. The Nord Modular's OS packs each DSP with as many voices as fit in its time per
-  sample, so a full DSP ran over, lost samples and turned the sound into noise. Such patches now
-  keep their pitch and sound as they should.
-- **The emulator stopped answering after many uploads in a row** (upload timeouts, then silence
-  to everything). A stale piece of translated DSP code was reused after the OS had moved a loop.
+- **Grit or noise on the first load of a heavy patch** (#4, `WavetableSynth.pch`), which went away
+  when the same patch was loaded a second time. The first DSP, the one that takes the audio
+  inputs, received its input words far more often than the real codec sends them, and the extra
+  work made it run out of time on patches that fill it. It now gets them at the codec's rate, and
+  the heavy patches tested (WavetableSynth, WavetablePad) lose no samples on any DSP, on the first
+  load or after others. The audio inputs work as before.
 
-## Known issue
+## Also in this build (from alpha.5 to alpha.8)
 
-On the first DSP one input-related interrupt still runs more often than on the hardware, which can
-leave a little grit on the very heaviest patches. It is being worked on; reports with the patch
-attached help a lot.
-
-## Also in this build (from alpha.5 to alpha.7)
-
+- Heavy patches no longer turn into noise: the emulated DSPs charged two cycles for an instruction
+  the real chip does in one (alpha.8).
+- The emulator no longer stops answering after many uploads in a row (alpha.8).
 - The synth's internal master clock runs (sequencers and clocked patches). Set the clock to
   **internal** in the synth settings; in Animatek NME's Synth Settings dialog that option is shown
   the wrong way round for now: choose **External** there.
