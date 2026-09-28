@@ -7,6 +7,10 @@ Older entries cite their commit by hand.
 
 ## 2026-09-28
 
+- **`v0.1.0-alpha.9` is out (Claude, requested by Javier).** Prerelease on GitHub with the five
+  packages: Linux x86_64 native and JUCE, Linux arm64, macOS universal and Windows. Checked the CI run
+  (all six jobs green) and the packages' contents; no ROM in any of them. #4's reporter was asked to
+  try it, first load included; the issue stays open until they confirm.
 - **Release notes for `v0.1.0-alpha.9` (Claude, requested by Javier).** `docs/release-notes.md`
   describes the fix for DSP 0's codec input (the first-load grit of #4) and lists alpha.5 to alpha.8 as
   included. Documentation only.
