@@ -15,6 +15,7 @@
 #include "dsp56kEmu/dspBootCode.h"
 #include "dsp56kEmu/memory.h"
 #include "dsp56kEmu/peripherals.h"
+#include "g1cycleprofile.h"
 
 #include <cstdint>
 #include <array>
@@ -52,6 +53,8 @@ namespace g1
 		uint64_t hostCommands() const { return m_hostCommands; }
 		uint64_t wordsToHost() const { return m_wordsToHost; }
 		uint64_t execBlocks() const { return m_execBlocks; }
+		void startCycleProfile(); // stopped DSP, after the note; G1_JITBLOCK=1 only
+		bool printCycleProfile(FILE* _out) const { return m_cycleProfile->print(_out, m_index); }
 
 		// Meter: peak (absolute value, signed 24-bit) per ESSI, slot and TX line since the
 		// last reset. Useful to find out where the audio comes out.
@@ -103,6 +106,7 @@ namespace g1
 		uint8_t readIsr(uint8_t _isr);
 		bool transferToHost();
 		void runUntil(uint64_t _cycles);
+		template<bool Profile> void runUntilImpl(uint64_t _cycles);
 		void drainAudio();
 		bool irqdEnabled();
 		void tapBlock();
@@ -130,6 +134,7 @@ namespace g1
 		uint64_t m_audioFrames = 0;
 		uint64_t m_hostWords = 0, m_hostCommands = 0, m_wordsToHost = 0;
 		uint64_t m_execBlocks = 0;
+		std::unique_ptr<CycleProfile> m_cycleProfile;
 		uint64_t m_nextIrqd = 0, m_irqdCount = 0, m_irqdOverruns = 0;
 		bool m_irqdPending = false;	// an IRQD injected and not serviced yet
 		std::map<uint32_t, uint64_t> m_servicedVectors;

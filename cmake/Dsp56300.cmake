@@ -354,6 +354,26 @@ g1_dsp_replace(esaiclock.cpp
 
 	bool EsxiClock::shiftEsaiFineAnchor(const Esxi* _esai, const int64_t _cycles)]=])
 
+# Cycle profiling dispatches separately, after the peripheral/interrupt checkpoint. The
+# ordinary exec path has no profiling hook or test. Interrupt vectors are observed through
+# the existing serviced callback, so their cycles are not charged to the interrupted PC.
+g1_dsp_replace(dsp.h
+	[=[		ASMJIT_FORCE_INLINE void execInterpreter() noexcept]=]
+	[=[		template<typename Before, typename After>
+		void execJitProfiled(Before&& _before, After&& _after)
+		{
+			m_interruptFunc(this);
+			const auto pc = getPC().toWord();
+			_before(pc);
+			if(g_jitPcGuard && pc >= m_jitEntriesSize)
+				onInvalidPC(pc);
+			else
+				m_jit.getTrampoline().execOne(&reg, pc, m_jitEntries[pc]);
+			_after();
+		}
+
+		ASMJIT_FORCE_INLINE void execInterpreter() noexcept]=])
+
 foreach(source IN LISTS g1_dsp_files)
 	get_filename_component(name "${source}" NAME)
 	configure_file("${g1_dsp_prepare}/${name}" "${g1_dsp_overlay}/${name}" COPYONLY)

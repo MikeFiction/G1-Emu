@@ -75,7 +75,7 @@ four DSPs; WavetableSynth measures about 261.5–262.3 Hz and spectral flatness 
 remains at 261.7 Hz and −61.8 dBFS. The AudioIn battery entry remains 440 Hz at −61.8 dBFS with
 `--input-sine 440`, and the full battery remains 62 sounds / 19 moves / 11 fixed / 17 silent.
 `g1dspcheck` and `ctest --test-dir build` pass. Host benchmark mode and golden WAVs are recorded
-below; cycle profiling and Phase 1 measurements are still pending.
+below; the cycle-table audit follows it. Phase 1 measurements are still pending.
 
 ## Phase 0 benchmark baseline — 2026-09-28
 
@@ -113,23 +113,44 @@ references outside the repository (they depend on the ROM) in
 `~/.local/share/Animatek/G1-Emu/bench-golden` (`G1_BENCH_GOLDEN` overrides it). Threaded,
 `G1_THREADS=0` and reference are byte-identical for all nine.
 
---- | ---: | --- | ---: | ---: |
-| WavetableSynth | 1.439× | DSP3 | 67.8% | 0 |
-| WavetablePad | 1.406× | DSP3 | 66.6% | 0 |
-| SimpleOSC | 1.367× | DSP3 | 57.9% | 0 |
-| Grainalizzer | 1.316× | DSP1 | 67.1% | 0 |
-| DungeonDub | 1.248× | DSP3 | 59.2% | 0 |
-| WindowLicker | 1.408× | DSP3 | 64.0% | 0 |
-| FM303 | 1.293× | DSP3 | 58.6% | 0 |
-| 4VoiceChoir | 1.309× | DSP1 | 65.1% | 0 |
-| progger (G1_CLOCKSRC=1) | 1.345× | DSP3 | 56.6% | 0 |
+The obsolete 1.25–1.44× table from the per-instruction host-clock version has been removed;
+it was not a valid speed baseline.
 
-All 36 DSP checks in the table reported zero overruns. The benchmark also reported about 26–30k
-periodic barriers/s and 0–58k host-port barriers/s, depending on patch. Golden WAVs for all nine
-entries were recorded for three emulated seconds outside the repository; threaded and
-`G1_THREADS=0` output, and both output forms against the references, were byte-identical. The
-default reference directory is `~/.local/share/Animatek/G1-Emu/bench-golden`; the sandbox
-verification used an equivalent external `/tmp` directory because its home directory is read-only.
+## Cycle-profile diagnostic and timing audit — 2026-09-28 (item 2)
+
+```sh
+G1_JITBLOCK=1 G1_CYCPROF=0 build/tools/patchtest/g1patchtest_artefacts/Release/g1patchtest \
+  Roms/NORD-MODULAR-RACK-VER-3.03.BIN SimpleOSC.pch --note 60 --seconds 3
+python3 tools/cycprof.py --output-dir /tmp/g1-cycle-audit
+python3 tools/cycprof.py --output-dir /tmp/g1-cycle-audit --summary-only
+```
+
+`G1_CYCPROF` accepts exactly one DSP index, 0–3, and requires `G1_JITBLOCK=1` and JIT on
+that DSP. It starts after the note is queued, at the benchmark boundary. `CYCPROF_PC` rows
+are sorted by total emulated cycles and include execution counts, opcode snapshots and
+disassembly from the same disassembler used by `dspdis`; rewritten PCs retain distinct
+versions. `CYCPROF_MNEMONIC` totals are also cycle-sorted. `CYCPROF_FORM` identifies both
+halves of parallel instructions and the core table tuple; these form totals are inclusive,
+so must not be summed. `tools/cycprof.py` resolves their numeric IDs to core enum names.
+
+Vectors are observed separately from the instruction following the peripheral checkpoint.
+REP bodies are expanded from their measured emulated cycle delta and body cost, not the
+core instruction counter (which currently overcounts by one per REP). The summary reports
+both counts, reconciliation errors and unaccounted cycles; failed reconciliation is a
+non-zero exit. Synthetic `g1dspcheck` cases cover REP, fast/long vectors, RTI and rewritten
+P memory. This is an **emulator timing diagnostic**, not a hardware cycle measurement.
+
+When unset, the regular execution loop has no profiling calls, counter updates or host
+clock reads. Selection happens once per `runUntil`, outside the loop. Benchmark cycle/CPI
+totals use only boundary snapshots. `tools/cycprof.py` runs WavetableSynth, WavetablePad,
+DungeonDub and SimpleOSC on all four DSPs and checks each WAV against an unprofiled
+`G1_JITBLOCK=1` render. Logs and WAVs contain ROM-derived material and must stay outside
+the repository. Never use diagnostic one-instruction blocks for host-speed comparisons.
+
+### Results
+
+The audit itself was not finished (Codex's quota ran out). Committed so far: the diagnostic above.
+Pending: the table of every executed instruction form against DSP56300FM Appendix A.
 
 ---
 

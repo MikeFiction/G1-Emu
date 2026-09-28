@@ -7,6 +7,16 @@ Older entries cite their commit by hand.
 
 ## 2026-09-28
 
+- **A per-PC cycle profile of the emulated DSPs (Codex and Claude, requested by Javier).**
+  `G1_JITBLOCK=1 G1_CYCPROF=<dsp> g1patchtest ...` prints, after the note, every executed PC with its
+  count, emulated cycles and disassembly, plus totals per mnemonic and per instruction form, with REP
+  bodies and interrupt vectors attributed separately; `tools/cycprof.py` runs it over four patches and
+  four DSPs. Unset, the execution loop is unchanged (one dispatch per catch-up). `g1dspcheck` gains
+  synthetic cases for it and records that the core runs one whole JIT block after each RTI before the
+  next pending interrupt (up to 32 instructions; the chip takes a few cycles). Written by Codex, whose
+  quota ran out before the audit was finished; reviewed, split and committed by Claude. Verified: the
+  nine bench WAVs byte-identical, bench speed unchanged, `ctest` passes, WavetableSynth's DSP 1 profiles
+  at 1.058 cycles per instruction with no unaccounted cycles.
 - **A benchmark and a golden-WAV gate for performance work (Codex and Claude, requested by Javier).**
   `g1patchtest --bench` prints the realtime factor, each thread's busy and waiting time, barriers per
   second (periodic and host-port) and overruns; `tools/bench/bench.sh` runs nine patches

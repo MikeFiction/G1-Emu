@@ -108,6 +108,7 @@ int main(int argc, char** argv)
 	if(argc < 3)
 	{
 		std::fprintf(stderr, "usage: g1patchtest ROM patch.pch [--note N] [--seconds S] [--wav file.wav] [--input-sine Hz] [--dump-packets dir] [--bench]\n");
+		std::fprintf(stderr, "cycle diagnostic: G1_JITBLOCK=1 G1_CYCPROF=0..3 (after the note, with disassembly)\n");
 		return 2;
 	}
 	int note = 60;
@@ -116,6 +117,19 @@ int main(int argc, char** argv)
 	double inputHz = 0;
 	std::string dumpDir;
 	bool bench = std::getenv("G1_BENCH") != nullptr;
+	int cycleProfile = -1;
+	if(const char* cp = std::getenv("G1_CYCPROF"))
+	{
+		const char* jb = std::getenv("G1_JITBLOCK");
+		const char* interp = std::getenv("G1_INTERP");
+		if(cp[0] < '0' || cp[0] > '3' || cp[1] || !jb || std::strcmp(jb, "1")
+			|| (interp && (std::atoi(interp) & (1 << (cp[0] - '0')))))
+		{
+			std::fprintf(stderr, "G1_CYCPROF requires a DSP index 0..3, G1_JITBLOCK=1 and JIT on that DSP\n");
+			return 2;
+		}
+		cycleProfile = cp[0] - '0';
+	}
 	for(int i = 3; i < argc; )
 	{
 		if(!std::strcmp(argv[i], "--bench")) { bench = true; ++i; continue; }
@@ -525,6 +539,15 @@ int main(int argc, char** argv)
 	// follows it (sequencers, arpeggios).
 	if(bench)
 		mc.resetBenchStats();
+	std::array<uint64_t, g1::g_dspCount> benchCycles{}, benchInstructions{};
+	if(bench)
+		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		{
+			benchCycles[d] = mc.getDsp(d).dsp().getCycles();
+			benchInstructions[d] = mc.getDsp(d).dsp().getInstructionCounter();
+		}
+	if(cycleProfile >= 0)
+		mc.getDsp(cycleProfile).startCycleProfile();
 	const auto benchStart = std::chrono::steady_clock::now();
 	if(const char* mcl = std::getenv("G1_MIDICLOCK"))
 	{
@@ -554,8 +577,20 @@ int main(int argc, char** argv)
 		for(uint32_t d = 1; d < g1::g_dspCount; ++d)
 			std::printf("BENCH thread=dsp%u busy_s=%.6f waiting_s=%.6f\n", d, s.threadBusyNs[d] / 1e9, s.threadWaitingNs[d] / 1e9);
 		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		{
 			std::printf("BENCH dsp=%u blocks_s=%.1f overruns=%llu\n", d, s.blocks[d] * scale,
 				static_cast<unsigned long long>(mc.getDsp(d).irqdOverruns()));
+			const auto cycles = mc.getDsp(d).dsp().getCycles() - benchCycles[d];
+			const auto instructions = mc.getDsp(d).dsp().getInstructionCounter() - benchInstructions[d];
+			std::printf("BENCH_CYCLES dsp=%u cycles=%llu core_instructions=%llu cycles_per_instruction=%.6f\n", d,
+				static_cast<unsigned long long>(cycles), static_cast<unsigned long long>(instructions),
+				instructions ? double(cycles) / instructions : 0.0);
+		}
+	}
+	if(cycleProfile >= 0 && !mc.getDsp(cycleProfile).printCycleProfile(stdout))
+	{
+		std::fprintf(stderr, "cycle profile failed to account for every emulated cycle\n");
+		return 1;
 	}
 	std::vector<uint8_t> rest;
 	mc.getPcPort().takeTx(rest);

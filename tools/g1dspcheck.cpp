@@ -5,6 +5,7 @@
 #include "dsp56kEmu/esaiclock.h"
 #include "dsp56kEmu/peripherals.h"
 #include "dsp56kBase/logging.h"
+#include "../g1Lib/g1cycleprofile.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -254,6 +255,73 @@ namespace
 		require(frames >= 48 && frames <= 52, "the port did not go back to its normal rate");
 	}
 
+void cycleProfile()
+{
+	// REP is one JIT block even with a one-instruction limit. Count its body
+	// separately, and check against known execution, not the JIT instruction counter.
+	Machine rep(1);
+	rep.program(0x100, {0x0603a0, 0, 0x0c0102}); // rep #3; nop; jmp $102
+	rep.dsp.setPC(0x100);
+	g1::CycleProfile p(rep.dsp);
+	p.exec();
+	require(p.instructions() == 4 && p.cycles() == 8 && !p.errors(), "REP profile attribution");
+
+	Machine fast(1);
+	fast.program(0x16, {0, 0});
+	fast.program(0x100, {0x0c0100});
+	fast.dsp.setPC(0x100);
+	g1::CycleProfile f(fast.dsp);
+	fast.dsp.setInterruptServicedCallback([&](uint32_t v) { f.beginVector(v); });
+	fast.dsp.injectInterrupt(0x16);
+	f.exec();
+	require(f.instructions() == 3 && f.cycles() == 5 && !f.errors(), "fast-vector profile attribution");
+
+	Machine irq(1);
+	irq.program(0x16, {0x0d0200, 0}); // short jsr $200; second vector word must NOT execute
+	irq.program(0x200, {0x000004}); // rti
+	irq.program(0x100, {0x0c0100});
+	irq.dsp.setPC(0x100);
+	g1::CycleProfile i(irq.dsp);
+	irq.dsp.setInterruptServicedCallback([&](uint32_t v) { i.beginVector(v); });
+	irq.dsp.injectInterrupt(0x16);
+	i.exec();
+	require(i.instructions() == 2 && i.cycles() == 6 && !i.errors(), "long-vector profile attribution");
+	i.exec();
+	require(i.instructions() == 3 && i.cycles() == 9 && !i.errors(), "RTI return profile attribution");
+
+	// The same PC may acquire different instructions; retain both opcode snapshots.
+	rep.dsp.memWriteP(0x102, 0);
+	p.exec();
+	rep.dsp.memWriteP(0x102, 0x0c0102);
+	rep.dsp.setPC(0x102);
+	p.exec();
+	require(p.instructions() == 6 && p.cycles() == 12 && !p.errors(), "rewritten-PC profile attribution");
+	std::puts("OK: cycle profile REP=4 instructions/8 cycles, fast vector=3/5, long vector+return=3/9, rewritten PC=6/12");
+}
+
+void postRtiCheckpoint(uint32_t blockSize)
+{
+	Machine m(blockSize);
+	m.program(0x16, {0x0d0200, 0}); // short jsr $200
+	m.program(0x200, {0x000004}); // rti
+	for(uint32_t pc = 0x100; pc < 0x140; ++pc) m.dsp.memWriteP(pc, 0);
+	m.dsp.setPC(0x100);
+	unsigned vectors = 0;
+	m.dsp.setInterruptServicedCallback([&](uint32_t) { ++vectors; });
+	m.dsp.injectInterrupt(0x16);
+	m.dsp.injectInterrupt(0x16);
+	m.dsp.exec(); // vector JSR, then ISR RTI
+	require(vectors == 1 && m.dsp.getPC().toWord() == 0x100, "RTI checkpoint setup");
+	const auto before = m.dsp.getCycles();
+	m.dsp.exec();
+	// Records an emulator policy, NOT a hardware guarantee. The timing audit leaves
+	// changing interrupt/pipeline scheduling to a separate maintainer decision.
+	require(vectors == 1 && m.dsp.getCycles() - before == blockSize, "post-RTI checkpoint changed: revisit timing audit");
+	m.dsp.exec();
+	require(vectors == 2, "second interrupt not serviced after the prevented block");
+	std::printf("OBSERVED: RTI postpones the pending interrupt by %u NOP cycles (block size %u)\n", blockSize, blockSize);
+}
+
 int main()
 {
 	// The core reports JIT errors (bad encodings, blocks it could not emit) through its log, which
@@ -267,8 +335,10 @@ int main()
 
 	try
 	{
+		cycleProfile();
 		for(const auto blockSize : {1u, 32u})
 		{
+			postRtiCheckpoint(blockSize);
 			auto run = [blockSize](const char* name, const auto& test)
 			{
 				std::fprintf(stderr, "RUN: %s (block size %u)\n", name, blockSize);

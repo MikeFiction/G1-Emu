@@ -235,6 +235,26 @@ namespace g1
 
 	void Dsp::runUntil(const uint64_t _cycles)
 	{
+		// Dispatch once per catch-up, not per instruction. The normal loop has no
+		// profiling code; only the selected DSP uses the diagnostic specialization.
+		if(m_cycleProfile) runUntilImpl<true>(_cycles);
+		else runUntilImpl<false>(_cycles);
+	}
+
+	void Dsp::startCycleProfile()
+	{
+		m_cycleProfile = std::make_unique<CycleProfile>(m_dsp);
+		m_dsp.setInterruptServicedCallback([this](const dsp56k::TWord vba)
+		{
+			++m_servicedVectors[vba];
+			m_lastVector = vba;
+			if(vba == g_irqdVector) m_irqdPending = false;
+			m_cycleProfile->beginVector(vba);
+		});
+	}
+
+	template<bool Profile> void Dsp::runUntilImpl(const uint64_t _cycles)
+	{
 		while(m_booted && m_dsp.getCycles() < _cycles)
 		{
 			// `jmp $FF0000`: the program returns to the boot ROM.
@@ -282,7 +302,9 @@ namespace g1
 				}
 			}
 			++m_execBlocks;
-			if(m_interpreter)
+			if constexpr(Profile)
+				m_cycleProfile->exec();
+			else if(m_interpreter)
 				m_dsp.execInterpreter();
 			else
 				m_dsp.exec();
