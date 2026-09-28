@@ -7,6 +7,18 @@ Older entries cite their commit by hand.
 
 ## 2026-09-27
 
+- **DSP 0 codec RX uses its own frame clock (Codex, requested by Javier).** The ESSI receivers on
+  DSP 0 now run at 432 DSP cycles per word (two words per 96 kHz sample), independently of the
+  96-cycle DSP-link transmitters. The explicit RX period survives repeated CRA writes and keeps
+  the TX/RX phases independently anchored. This removes the codec-input interrupt overload:
+  WavetableSynth and WavetablePad both report `overruns=0` on all four DSPs, including after the
+  `G1_BEFORE` upload sequence; WavetableSynth is ~261.5–262.3 Hz with spectral flatness 0.012,
+  SimpleOSC is 261.7 Hz at −61.8 dBFS, AudioIn is 440 Hz at −61.8 dBFS, and the full battery is
+  62 sounds / 19 moves / 11 fixed / 17 silent. Verified with `g1dspcheck`, `ctest --test-dir
+  build`, and `cmake --build build -j16`; no ROMs or third-party files changed. Reviewed and
+  committed by Claude (Codex's sandbox cannot write `.git`), who moved an orphaned overlay comment
+  and re-checked WavetableSynth, WavetablePad and SimpleOSC with the same results.
+
 - **`v0.1.0-alpha.8` is out (Claude, requested by Javier).** Prerelease on GitHub with the five
   packages: Linux x86_64 native and JUCE, Linux arm64, macOS universal and Windows. Checked the CI run
   (all six jobs green) and the packages' contents; no ROM in any of them. #4's reporter was asked to

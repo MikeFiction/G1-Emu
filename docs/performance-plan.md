@@ -58,6 +58,25 @@ emulator runs this patch faster than real time and still outputs white noise (sp
 
 Only after this does host-side optimisation (below) matter for these patches.
 
+## Baseline and results — 2026-09-27
+
+The pre-fix Release build reproduced the DSP 0 timing fault in three-second runs:
+
+| Patch | DSP 0 overruns | DSP 1–3 overruns | Result |
+| --- | ---: | ---: | --- |
+| `WavetableSynth.pch` | 28,738 | 0 | incorrect output, ~275–279 Hz |
+| `WavetablePad.pch` | 30,249 | 0 | incorrect output |
+| `SimpleOSC.pch` | 0 | 0 | 261.7 Hz, −61.8 dBFS |
+
+The accepted fix gives DSP 0's codec receivers their own 432-cycle word clock (two words per
+864-cycle sample), while DSP 0 transmitters remain at 96 cycles per word. After the fix,
+standalone and `G1_BEFORE` runs of WavetableSynth and WavetablePad report `overruns=0` on all
+four DSPs; WavetableSynth measures about 261.5–262.3 Hz and spectral flatness 0.012. SimpleOSC
+remains at 261.7 Hz and −61.8 dBFS. The AudioIn battery entry remains 440 Hz at −61.8 dBFS with
+`--input-sine 440`, and the full battery remains 62 sounds / 19 moves / 11 fixed / 17 silent.
+`g1dspcheck` and `ctest --test-dir build` pass. Host benchmark mode, golden WAVs, cycle profiling,
+and Phase 1 measurements are still pending.
+
 ---
 
 ## How it runs today (what the plan is built on)

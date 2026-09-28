@@ -447,15 +447,21 @@ namespace g1
 		uint32_t e = 0;
 		for(auto* essi : {&m_periph.getEssi0(), &m_periph.getEssi1()})
 		{
-			// The receiver of a DSP with another one upstream runs at its transmitter's rate.
-			if(m_hasUpstream)
+			const dsp56k::TWord cra = essi->getCRA();
+			if(cra != m_craSeen[e])
 			{
-				const dsp56k::TWord cra = essi->getCRA();
-				if(cra != m_craSeen[e])
+				m_craSeen[e] = cra;
+				if(m_hasUpstream)
 				{
-					m_craSeen[e] = cra;
 					if(essiWordCycles(cra) != g_linkCyclesPerWord && essiWordCycles(cra) < g_essiBaseCyclesPerWord)
 						m_periph.getEssiClock().setEsaiFinePeriod(essi, g_linkCyclesPerWord);
+				}
+				else
+				{
+					// DSP 0's codec receiver supplies two words per 96 kHz sample: its real
+					// frame is 432 DSP cycles per word. This is RX-only; the same ESSI still
+					// transmits the 96-cycle DSP link to DSP 1.
+					m_periph.getEssiClock().setEsaiFineRxPeriod(essi, g_essiBaseCyclesPerWord);
 				}
 			}
 			auto& out = essi->getAudioOutputs();

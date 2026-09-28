@@ -234,7 +234,9 @@ first note-off. `g1patchtest` shows it with `G1_SEQ=+60,+64,-64,-60 G1_CHORD=1`.
 - **Inputs:** they reach DSP 0 through the codec (it is the only DSP with nothing upstream): **R**
   on ESSI0 (DMA2 → `X:$6C4`) and **L** on ESSI1 (DMA3 → `X:$6C5`, whose interrupt, vector `$1E`,
   copies the other channel). From there they travel down the links in channels 4 and 5, where the
-  AudioIn module reads them.
+  AudioIn module reads them. In the emulator, DSP 0's codec receivers are clocked at **432 DSP
+  cycles per word** (two words per 864-cycle, 96 kHz sample), independently of its 96-cycle-per-word
+  transmitters to DSP 1. The RX period is explicit and survives repeated CRA writes.
 - **Master volume:** the CPU writes DSP 3's `Y:$5F` with a generic helper (`$10C268`), ramping the
   sent value (`$162CE2`) towards the target (`$162CDE`) by 1/32 of the difference each time. The
   target comes from `$11030C`: a 128-entry table at `$153CAC`, from −113 dB to **−36.1 dB** at index

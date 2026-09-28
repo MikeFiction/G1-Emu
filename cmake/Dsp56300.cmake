@@ -188,20 +188,6 @@ g1_dsp_replace(jitops_decode_aarch64.cpp
 	[=[				m_asm.adds(dst, dst, r.get());	// (N ^ V) + Z is 0, 1 or 2: LE is "not 0"
 				return asmjit::arm::CondCode::kNotZero;]=])
 
-# An ESSI on the fine schedule (the links between DSPs) that sat idle owed the core every frame of
-# that time. The catch-up loop counts from fineLastClock, which only moves when the port is served or
-# its CRA is rewritten, so when a DSP with nothing to do (TX and RX off for seconds) woke up, it emitted
-# them all at once: millions of frames, in one call, into a ring of 32768. The ring filled, the write
-# callback waits for room, and the only thread that can make room is the one waiting: a deadlock, seen
-# uploading nmedit's korg.pch (a 434-million-cycle gap on DSP 0). A real port does not queue the frames
-# of the time it was off, so an anchor more than 64 periods behind is put back at 64.
-g1_dsp_replace(esaiclock.cpp
-	[=[while (static_cast<uint64_t>(ic - e.fineLastClock) >= e.finePeriod)]=]
-	[=[const uint64_t g1MaxCatchUp = static_cast<uint64_t>(e.finePeriod) * 64u;
-					if (static_cast<uint64_t>(ic - e.fineLastClock) > g1MaxCatchUp)
-						e.fineLastClock = ic > g1MaxCatchUp ? ic - g1MaxCatchUp : 0;
-					while (static_cast<uint64_t>(ic - e.fineLastClock) >= e.finePeriod)]=])
-
 # A move to or from X:aa / Y:aa (short absolute address) takes one cycle, like any other X or Y move
 # without a long absolute or pre-update address; the core's table charged two. The G1's sample and
 # control code is full of them (its variables live at X:$0-$3F), so with the extra cycle a patch the
@@ -214,6 +200,159 @@ g1_dsp_replace(opcodecycles.h
 g1_dsp_replace(opcodecycles.h
 	"OpcodeCycles{Movey_aa,			2, 0, 0, 0},"
 	"OpcodeCycles{Movey_aa,			1, 0, 0, 0},")
+
+# The first G1 DSP receives the codec input on ESSI0/1, but transmits the two DSP-link streams
+# at the normal 96-cycle word period. The core's fine schedule originally had one period for both
+# directions, so slowing the input receivers also slowed those transmitters. Keep the core's
+# default period for TX and add a separate RX period used by the G1 integration below.
+g1_dsp_replace(esaiclock.h
+	"void setEsaiFinePeriod(Esxi* _esai, uint32_t _finePeriod);"
+	"void setEsaiFinePeriod(Esxi* _esai, uint32_t _finePeriod);\n\t\tvoid setEsaiFineRxPeriod(Esxi* _esai, uint32_t _finePeriod);")
+g1_dsp_replace(esaiclock.h
+	"\t\t\tuint32_t finePeriod = 0;\n\t\t\tuint64_t fineLastClock = 0;"
+	"\t\t\tuint32_t finePeriod = 0;\n\t\t\tuint32_t fineRxPeriod = 0;\n\t\t\tuint64_t fineLastClock = 0;\n\t\t\tuint64_t fineRxLastClock = 0;\n\t\t\tbool fineRxExplicit = false;")
+
+# An ESSI on the fine schedule (the links between DSPs) that sat idle owed the core every frame of
+# that time. The catch-up loop counts from fineLastClock, which only moves when the port is served or
+# its CRA is rewritten, so when a DSP with nothing to do (TX and RX off for seconds) woke up, it emitted
+# them all at once: millions of frames, in one call, into a ring of 32768. The ring filled, the write
+# callback waits for room, and the only thread that can make room is the one waiting: a deadlock, seen
+# uploading nmedit's korg.pch (a 434-million-cycle gap on DSP 0). A real port does not queue the frames
+# of the time it was off, so an anchor more than 64 periods behind is put back at 64.
+#
+# Fine-clock the two ESSI directions independently. DSP 0's codec receiver is a 432-cycle
+# word clock (two words per 864-cycle 96 kHz sample), while its transmitter still sends the
+# DSP-to-DSP link at 96 cycles per word. Keep both anchors: CRA writes must preserve the
+# explicit codec RX period and re-anchor the TX phase to avoid an initial catch-up burst.
+g1_dsp_replace(esaiclock.cpp
+	[=[		if(m_hasFineEsais)
+		{
+			for (auto& e : m_esais)
+			{
+				if (!e.finePeriod)
+					continue;
+				while (static_cast<uint64_t>(ic - e.fineLastClock) >= e.finePeriod)
+				{
+					e.fineLastClock += e.finePeriod;
+					if(e.esai->hasEnabledTransmitters())
+					{
+						e.esai->execTX();
+					}
+					if(e.esai->hasEnabledReceivers())
+					{
+						e.esai->execRX();
+					}
+				}
+				const auto rem = static_cast<uint32_t>(e.finePeriod - (ic - e.fineLastClock));
+				if (rem < fineDelay)
+					fineDelay = rem;
+			}
+		}]=]
+	[=[		if(m_hasFineEsais)
+		{
+			for (auto& e : m_esais)
+			{
+				if (!e.finePeriod && !e.fineRxPeriod)
+					continue;
+				if(e.finePeriod)
+				{
+					const uint64_t maxCatchUp = static_cast<uint64_t>(e.finePeriod) * 64u;
+					if (static_cast<uint64_t>(ic - e.fineLastClock) > maxCatchUp)
+						e.fineLastClock = ic > maxCatchUp ? ic - maxCatchUp : 0;
+					while (static_cast<uint64_t>(ic - e.fineLastClock) >= e.finePeriod)
+					{
+						e.fineLastClock += e.finePeriod;
+						if(e.esai->hasEnabledTransmitters())
+							e.esai->execTX();
+					}
+				}
+				if(e.fineRxPeriod)
+				{
+					const uint64_t maxCatchUp = static_cast<uint64_t>(e.fineRxPeriod) * 64u;
+					if (static_cast<uint64_t>(ic - e.fineRxLastClock) > maxCatchUp)
+						e.fineRxLastClock = ic > maxCatchUp ? ic - maxCatchUp : 0;
+					while (static_cast<uint64_t>(ic - e.fineRxLastClock) >= e.fineRxPeriod)
+					{
+						e.fineRxLastClock += e.fineRxPeriod;
+						if(e.esai->hasEnabledReceivers())
+							e.esai->execRX();
+					}
+				}
+				const auto txRem = e.finePeriod ? static_cast<uint32_t>(e.finePeriod - (ic - e.fineLastClock)) : UINT32_MAX;
+				const auto rxRem = e.fineRxPeriod ? static_cast<uint32_t>(e.fineRxPeriod - (ic - e.fineRxLastClock)) : UINT32_MAX;
+				const auto rem = txRem < rxRem ? txRem : rxRem;
+				if (rem < fineDelay)
+					fineDelay = rem;
+			}
+		}]=])
+
+g1_dsp_replace(esaiclock.cpp
+	[=[		for (auto& e : m_esais)
+		{
+			if(e.finePeriod)		// serviced on the fine schedule above; not on the base tick
+				continue;
+
+			if(e.esai->hasEnabledTransmitters() && advanceClock(e.tx))
+				processTx[txCount++] = e.esai;
+
+			if (e.esai->hasEnabledReceivers() && advanceClock(e.rx))
+				processRx[rxCount++] = e.esai;
+		}]=]
+	[=[		for (auto& e : m_esais)
+		{
+			if(!e.finePeriod && e.esai->hasEnabledTransmitters() && advanceClock(e.tx))
+				processTx[txCount++] = e.esai;
+
+			if(!e.fineRxPeriod && e.esai->hasEnabledReceivers() && advanceClock(e.rx))
+				processRx[rxCount++] = e.esai;
+		}]=])
+
+g1_dsp_replace(esaiclock.cpp
+	[=[				entry.finePeriod = _finePeriod;
+				entry.fineLastClock = now;]=]
+	[=[				entry.finePeriod = _finePeriod;
+				entry.fineLastClock = now;
+				if(!entry.fineRxExplicit)
+				{
+					entry.fineRxPeriod = _finePeriod;
+					entry.fineRxLastClock = now;
+				}]=])
+g1_dsp_replace(esaiclock.cpp
+	[=[			m_esais.back().finePeriod = _finePeriod;
+			m_esais.back().fineLastClock = now;]=]
+	[=[			m_esais.back().finePeriod = _finePeriod;
+			m_esais.back().fineRxPeriod = _finePeriod;
+			m_esais.back().fineLastClock = now;
+			m_esais.back().fineRxLastClock = now;]=])
+g1_dsp_replace(esaiclock.cpp
+	[=[			if(entry.finePeriod)
+			{
+				m_hasFineEsais = true;]=]
+	[=[			if(entry.finePeriod || entry.fineRxPeriod)
+			{
+				m_hasFineEsais = true;]=])
+g1_dsp_replace(esaiclock.cpp
+	[=[	bool EsxiClock::shiftEsaiFineAnchor(const Esxi* _esai, const int64_t _cycles)]=]
+	[=[	void EsxiClock::setEsaiFineRxPeriod(Esxi* _esai, const uint32_t _finePeriod)
+	{
+		uint64_t now = m_dspInstructionCounter ? *m_dspInstructionCounter : 0;
+		for(auto& entry : m_esais)
+		{
+			if(entry.esai == _esai)
+			{
+				entry.fineRxPeriod = _finePeriod;
+				entry.fineRxLastClock = now;
+				entry.fineRxExplicit = true;
+				break;
+			}
+		}
+		m_hasFineEsais = false;
+		for(const auto& entry : m_esais)
+			if(entry.finePeriod || entry.fineRxPeriod)
+			{ m_hasFineEsais = true; break; }
+	}
+
+	bool EsxiClock::shiftEsaiFineAnchor(const Esxi* _esai, const int64_t _cycles)]=])
 
 foreach(source IN LISTS g1_dsp_files)
 	get_filename_component(name "${source}" NAME)
