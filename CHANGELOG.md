@@ -7,6 +7,23 @@ Older entries cite their commit by hand.
 
 ## 2026-09-28
 
+- **The DSP threads sleep while the real-time loop does (Claude, requested by Javier).** Ahead of
+  the clock, `EmuHost` sleeps 500 µs; the DSP threads kept spinning through it (20,000 pauses before
+  sleeping, and a new job every ~49 µs), so the emulator used ~3.2 cores whatever the patch.
+  `Microcontroller::setIdle` now tells them the front end is sleeping, and they sleep straight away;
+  during a burst of emulation they still spin. Verified with `g1run` in real time: 3.2 → 1.7 cores,
+  speed 100 %, emulation thread 43 % → 34 % busy; the bench, which never idles, is unchanged.
+- **The DSPs skip whole iterations of the OS's idle loop (Claude, requested by Javier).** With a
+  light patch a DSP spends ~90 % of its instructions polling in `$16C`–`$172`, one JIT dispatch per
+  short block. Once two iterations leave every register as it was and cost the same, `skipIdle`
+  moves the DSP on by as many whole iterations as fit before the next point where anything could
+  differ (the target, the next sample clock, the next peripheral deadline, and the next multiple of
+  1024 cycles, where `drainAudio` anchors a new CRA; crossing that one was what first made three
+  golden WAVs differ). A temporary checker ran the loop instead of skipping and compared: every one
+  of hundreds of thousands of predictions per DSP landed on the exact registers, instructions and
+  cycles. `G1_NO_IDLE_SKIP` turns it off. Verified: bench mean 2.71× → 2.95–3.12× (SimpleOSC
+  2.66× → 3.2×), 0 overruns; the nine golden WAVs byte-identical; battery unchanged for all 109
+  modules; `ctest` passes.
 - **Link-time optimization in Release builds (Claude, requested by Javier).** `G1_LTO` (on by
   default, only where the compiler supports it; `-DG1_LTO=OFF` for quicker links while developing).
   Measured with `tools/bench/bench.sh`, two interleaved runs of each build on the same machine:

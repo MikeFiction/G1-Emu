@@ -354,6 +354,15 @@ g1_dsp_replace(esaiclock.cpp
 
 	bool EsxiClock::shiftEsaiFineAnchor(const Esxi* _esai, const int64_t _cycles)]=])
 
+# G1-Emu skips whole iterations of the OS's idle loop (g1dsp.cpp, skipIdle) and must stop before
+# the next point where a peripheral is due, which can be a cycle deadline as well as an instruction one.
+g1_dsp_replace(peripherals.h
+	[=[		const uint64_t* getTargetClockPtr() const]=]
+	[=[		bool hasCycleDeadline() const { return m_hasCycleDeadline; }
+		uint64_t getTargetCycle() const { return m_targetCycle; }
+
+		const uint64_t* getTargetClockPtr() const]=])
+
 # Cycle profiling dispatches separately, after the peripheral/interrupt checkpoint. The
 # ordinary exec path has no profiling hook or test. Interrupt vectors are observed through
 # the existing serviced callback, so their cycles are not charged to the interrupted PC.

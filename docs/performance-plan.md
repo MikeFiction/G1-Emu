@@ -255,6 +255,13 @@ Each is independent; measure each one alone.
    FM303 2.59×, 4VoiceChoir 2.61×, progger 2.54×; golden WAVs byte-identical. `g1run` in real time:
    emulation thread 43 % busy (it was ~55 %). The busiest thread is now always a DSP (9–24 %
    waiting): what is left is making each DSP cheaper (idle-loop skip, `execUntilCycles`, compiler).
+
+   **Then, the same day:** LTO (+3–5 %, `G1_LTO`); the core's inline peripheral check (+1–2 %,
+   within noise); JIT blocks of 64 or 128 instructions (no gain: branches end the blocks first,
+   rejected); the idle-loop skip (Phase 2.1; mean +9–14 %, light patches +22 %, byte-identical); and
+   the DSP threads sleeping while the real-time loop sleeps (`g1run` 3.2 → 1.7 cores). Spinning was
+   the real cost in real time: with 2,000 pauses instead of 20,000 `g1run` dropped to 1.9 cores but
+   the bench lost 8 %, which telling the threads when the front end sleeps avoids.
 2. **Pin and name threads** (optional affinity, `G1_AFFINITY=1`): workers on distinct physical
    cores, avoiding SMT siblings. Measure; do not enable by default without numbers.
 3. **Barrier cost.** Measure how much wall time is spent in the barrier itself. Options, in order

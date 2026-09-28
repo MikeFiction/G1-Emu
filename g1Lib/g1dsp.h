@@ -53,6 +53,7 @@ namespace g1
 		uint64_t hostCommands() const { return m_hostCommands; }
 		uint64_t wordsToHost() const { return m_wordsToHost; }
 		uint64_t execBlocks() const { return m_execBlocks; }
+		uint64_t idleSkips() const { return m_idleSkips; }	// times whole idle-loop iterations were skipped
 		void startCycleProfile(); // stopped DSP, after the note; G1_JITBLOCK=1 only
 		bool printCycleProfile(FILE* _out) const { return m_cycleProfile->print(_out, m_index); }
 
@@ -112,6 +113,8 @@ namespace g1
 		bool transferToHost();
 		void runUntil(uint64_t _cycles);
 		template<bool Profile> void runUntilImpl(uint64_t _cycles);
+		bool skipIdle(uint64_t _target);
+		bool idleLoopInPlace() const;
 		void drainAudio();
 		bool irqdEnabled();
 		void tapBlock();
@@ -139,6 +142,16 @@ namespace g1
 		uint64_t m_audioFrames = 0;
 		uint64_t m_hostWords = 0, m_hostCommands = 0, m_wordsToHost = 0;
 		uint64_t m_execBlocks = 0;
+		// The OS's idle loop (skipIdle): the state at its first instruction, the last time round.
+		struct IdleState
+		{
+			bool valid = false, stable = false;
+			uint64_t instructions = 0, cycles = 0, dInstructions = 0, dCycles = 0;
+			dsp56k::DspRegs regs{};
+		};
+		IdleState m_idle;
+		bool m_idleSkip = true;	// G1_NO_IDLE_SKIP turns it off
+		uint64_t m_idleSkips = 0;
 		std::unique_ptr<CycleProfile> m_cycleProfile;
 		uint64_t m_nextIrqd = 0, m_irqdCount = 0, m_irqdOverruns = 0;
 		bool m_irqdPending = false;	// an IRQD injected and not serviced yet

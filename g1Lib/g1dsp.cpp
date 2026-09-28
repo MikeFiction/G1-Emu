@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #include <algorithm>
 #include <cstdlib>
@@ -44,6 +45,8 @@ namespace g1
 		// blocks): the receiver takes the block from g_linkLatency blocks ago, which has surely
 		// arrived. On the hardware it is less than a block; here it is ~83 us per DSP.
 		constexpr uint64_t g_linkLatency = 8;
+		// First instruction of the OS's idle loop (skipIdle).
+		constexpr dsp56k::TWord g_idlePc = 0x16c;
 		// Each ESSI's receive DMA writes into a 9-word ring: X:$6C0 (ESSI0) and X:$6C9 (ESSI1).
 		// Word i of the block always goes to base+i.
 		constexpr dsp56k::TWord g_linkBase[2] = {0x6c0, 0x6c9};
@@ -177,7 +180,8 @@ namespace g1
 
 		// G1_INTERP=mask: those DSPs (bit n = DSP n) run on the core's interpreter instead of the
 		// JIT. Much slower; useful to tell whether a fault is the JIT's.
-		m_noLaFix = std::getenv("G1_NO_LA_FIX") != nullptr;	// only to compare against the bug
+		m_noLaFix = std::getenv("G1_NO_LA_FIX") != nullptr;
+		m_idleSkip = std::getenv("G1_NO_IDLE_SKIP") == nullptr;	// only to compare against the bug
 		if(const char* tr = std::getenv("G1_DSPTRACE"))
 		{
 			unsigned d = 0, pc = 0, arg = 0;
@@ -255,6 +259,9 @@ namespace g1
 
 	template<bool Profile> void Dsp::runUntilImpl(const uint64_t _cycles)
 	{
+		// Between two catch-ups the CPU may have written the host port (HF0, which the idle loop
+		// tests, changes no DSP register): what skipIdle learned is only valid within one.
+		m_idle.valid = false;
 		while(m_booted && m_dsp.getCycles() < _cycles)
 		{
 			// `jmp $FF0000`: the program returns to the boot ROM.
@@ -301,13 +308,18 @@ namespace g1
 						++m_irqdOverruns;
 				}
 			}
+			if constexpr(!Profile)
+			{
+				if(m_dsp.getPC().toWord() == g_idlePc && m_idleSkip && skipIdle(_cycles))
+					continue;	// the checks above, again, at the new point
+			}
 			++m_execBlocks;
 			if constexpr(Profile)
 				m_cycleProfile->exec();
 			else if(m_interpreter)
 				m_dsp.execInterpreter();
 			else
-				m_dsp.exec();
+				m_dsp.execInlinePeripheralCheck();	// the core's exec(), with the no-op checkpoint tested inline
 			if(static_cast<dsp56k::TWord>(m_dsp.regs().la.var) != m_lastLa && !m_noLaFix)
 				onLaChanged();
 			const auto now = m_dsp.getCycles();
@@ -319,6 +331,80 @@ namespace g1
 			if((now & 0x3ff) < now - before)	// every ~1000 cycles (less than a frame)
 				drainAudio();
 		}
+	}
+
+	// The OS's idle loop, $16C-$172: while X:$1 (blocks since the last control-rate pass) is 3 or less
+	// it tests HF0, reads DOR1 and DCO1 into r3 and r4 and X:$1 into a, and goes round again. It
+	// writes nothing, and nothing it reads changes until an interrupt (the sample clock, a peripheral)
+	// or the CPU (only between catch-ups, never inside one: runUntil forgets what was learned). With a light patch a DSP spends
+	// ~90 % of its instructions here, one JIT dispatch per short block. So once two whole iterations
+	// have left every register as it was and cost the same, the DSP is moved on by as many whole
+	// iterations as fit before the next point where anything could differ: the target, the next sample
+	// clock, the next point where a peripheral is due (by instructions or by cycles), and the next
+	// multiple of 1024 cycles, after which runUntil calls drainAudio (where a new CRA anchors an ESSI's
+	// clock). It lands at the start of an iteration, with the registers, the instruction count and the
+	// cycle count it would have had, and runs on from there: the output is byte-identical
+	// (tools/bench/golden.sh). G1_NO_IDLE_SKIP turns it off.
+	bool Dsp::skipIdle(const uint64_t _target)
+	{
+		if(m_interpreter || m_traceOn || !m_pcWatch.empty()
+			|| m_dsp.getProcessingMode() != dsp56k::DSP::Default
+			|| m_dsp.hasPendingInterrupts() || m_dsp.hasPendingExternalInterrupts())
+		{
+			m_idle.valid = false;
+			return false;
+		}
+		const uint64_t ins = m_dsp.getInstructionCounter();
+		const uint64_t cyc = m_dsp.getCycles();
+		const auto& regs = m_dsp.regs();
+		const bool same = m_idle.valid && std::memcmp(&m_idle.regs, &regs, sizeof(regs)) == 0;
+		if(!same)
+			m_idle.stable = false;
+		else
+		{
+			const uint64_t dIns = ins - m_idle.instructions, dCyc = cyc - m_idle.cycles;
+			if(m_idle.stable && dIns == m_idle.dInstructions && dCyc == m_idle.dCycles && dIns && dCyc && idleLoopInPlace())
+			{
+				uint64_t k = (_target - cyc) / dCyc;
+				k = std::min(k, m_nextIrqd > cyc ? (m_nextIrqd - cyc) / dCyc : 0);
+				const uint64_t due = m_periph.getTargetClock();
+				k = std::min(k, due > ins ? (due - ins) / dIns : 0);
+				if(m_periph.hasCycleDeadline())
+				{
+					const uint64_t dueCycle = m_periph.getTargetCycle();
+					k = std::min(k, dueCycle > cyc ? (dueCycle - cyc) / dCyc : 0);
+				}
+				// runUntil calls drainAudio after the block that crosses a multiple of 1024 cycles, and
+				// drainAudio is where a new CRA anchors an ESSI's fine clock: a skip must not cross one.
+				k = std::min(k, ((cyc | 0x3ff) - cyc) / dCyc);
+				if(k)
+				{
+					m_dsp.fastForward(static_cast<dsp56k::TWord>(k * dIns), static_cast<dsp56k::TWord>(k * dCyc));
+					m_idle.instructions = ins + k * dIns;
+					m_idle.cycles = cyc + k * dCyc;
+					++m_idleSkips;
+					return true;
+				}
+			}
+			m_idle.dInstructions = dIns;
+			m_idle.dCycles = dCyc;
+			m_idle.stable = true;
+		}
+		std::memcpy(&m_idle.regs, &regs, sizeof(regs));
+		m_idle.instructions = ins;
+		m_idle.cycles = cyc;
+		m_idle.valid = true;
+		return false;
+	}
+
+	// The loop is the OS's: the same words on the four DSPs with OS 3.03. Anything else is not skipped.
+	bool Dsp::idleLoopInPlace() const
+	{
+		static constexpr std::array<dsp56k::TWord, 7> loop = {0x0dc323, 0xffff32, 0x085332, 0x085429, 0x56811b, 0x014385, 0x05f7da};
+		for(size_t i = 0; i < loop.size(); ++i)
+			if(m_memory.get(dsp56k::MemArea_P, g_idlePc + static_cast<dsp56k::TWord>(i)) != loop[i])
+				return false;
+		return true;
 	}
 
 	// G1_DSPTRACE: one entry per JIT block run by this DSP, and the whole ring printed once when the
