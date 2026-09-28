@@ -7,6 +7,10 @@ Older entries cite their commit by hand.
 
 ## 2026-09-28
 
+- **A cycle-table correction tried and rejected (Claude, requested by Javier).** Charging the long
+  absolute (`lab`) or the long immediate (`lim`) penalty, not both, as Codex read the DSP56300 manual,
+  keeps 0 overruns but makes `WavetablePad.pch` clearly noisier (spectral flatness ~0.03 → ~0.3). Not
+  applied; the measurements and what to check next are in `docs/performance-plan.md`.
 - **A per-PC cycle profile of the emulated DSPs (Codex and Claude, requested by Javier).**
   `G1_JITBLOCK=1 G1_CYCPROF=<dsp> g1patchtest ...` prints, after the note, every executed PC with its
   count, emulated cycles and disassembly, plus totals per mnemonic and per instruction form, with REP

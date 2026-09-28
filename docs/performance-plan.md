@@ -152,6 +152,19 @@ the repository. Never use diagnostic one-instruction blocks for host-speed compa
 The audit itself was not finished (Codex's quota ran out). Committed so far: the diagnostic above.
 Pending: the table of every executed instruction form against DSP56300FM Appendix A.
 
+**Tried and rejected (2026-09-28): charging `lab` or `lim`, not both.** Codex read DSP56300FM Rev. 3
+Appendix A.1 (pp. A-1/A-2) as making them alternatives (MMMRRR 110000 absolute pays lab, 110100
+immediate pays lim) and wrote the overlay
+`c += getFieldValue(_inst, Field_RRR, _op) == 4 ? cycles.lim : cycles.lab;` in `calcCycles`, with a
+`g1dspcheck` case of 72 addressing combinations. Bench: 0 overruns, same speed. But the outputs
+changed, and **WavetablePad got clearly worse**: spectral flatness 0.02–0.07 → 0.25–0.44 in every
+quarter second, sample-to-sample jumps ×12, same pitch and level. WavetableSynth got cleaner
+(0.01–0.11 → 0.01–0.02); the other six changed only slightly. With no overruns, a timing change
+that makes a patch noisy means something else is wrong: either the RRR test misclassifies some form
+(check which instruction forms change cost with `G1_CYCPROF` on WavetablePad, all four DSPs), or
+another timing error (the post-RTI block, DMA/ESSI timing) was being compensated by the old
+overcount. Not applied until that is understood.
+
 ---
 
 ## How it runs today (what the plan is built on)
