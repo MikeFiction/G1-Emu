@@ -457,11 +457,12 @@ namespace g1
 		++m_laChanges;
 	}
 
-	void Dsp::catchUp(const uint64_t _cycles)
+	void Dsp::catchUp(const uint64_t _cycles, const bool _toHost)
 	{
 		runUntil(_cycles);
 		drainAudio();
-		transferToHost();
+		if(_toHost)
+			transferToHost();
 	}
 
 	// Collects what left the ESSIs (for flushAudio) and measures the peaks.

@@ -55,12 +55,13 @@ namespace g1
 			m_threaded = std::atoi(t) != 0;
 		m_benchEnabled = std::getenv("G1_BENCH") != nullptr;
 		if(m_threaded)
-			for(uint32_t i = 1; i < g_dspCount; ++i)
+			for(uint32_t i = 0; i < g_dspCount; ++i)
 				m_workers.emplace_back([this, i] { workerLoop(i); });
 	}
 
 	Microcontroller::~Microcontroller()
 	{
+		joinDsps();
 		m_quitWorkers = true;
 		{
 			std::lock_guard lock(m_wakeMutex);
@@ -101,7 +102,7 @@ namespace g1
 			std::chrono::steady_clock::time_point busyStart;
 			if(m_benchEnabled)
 				busyStart = std::chrono::steady_clock::now();
-			m_dsps[_dsp]->catchUp(m_dspTarget);
+			m_dsps[_dsp]->catchUp(m_dspTarget, false);
 			if(m_benchEnabled)
 				m_threadBusyNs[_dsp].fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - busyStart).count()), std::memory_order_relaxed);
 			m_pending.fetch_sub(1);
@@ -226,30 +227,50 @@ namespace g1
 		}
 		else
 		{
-			m_dspTarget = target;
-			m_pending.store(static_cast<uint32_t>(m_workers.size()));
-			m_generation.fetch_add(1);
-			if(m_sleepers.load() > 0)
-			{
-				std::lock_guard lock(m_wakeMutex);
-				m_wake.notify_all();
-			}
-			std::chrono::steady_clock::time_point dsp0Start;
-			if(m_benchEnabled)
-				dsp0Start = std::chrono::steady_clock::now();
-			m_dsps[0]->catchUp(target);
-			if(m_benchEnabled)
-				m_threadBusyNs[0].fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - dsp0Start).count()), std::memory_order_relaxed);
-			std::chrono::steady_clock::time_point waitStart;
-			if(m_benchEnabled)
-				waitStart = std::chrono::steady_clock::now();
-			while(m_pending.load() != 0)
-			{
-				cpuPause();
-			}
-			if(m_benchEnabled)
-				m_cpuWaitingNs.fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - waitStart).count()), std::memory_order_relaxed);
+			// Pipelined: the DSPs catch up to this point on their threads while the CPU runs on
+			// towards the next one, and the next catch-up first waits for this one. The CPU only
+			// sees the DSPs through their host ports, and an access to a port joins and brings all
+			// four up to that exact instant first, so what it reads is the same as if it had
+			// waited here; what the DSPs hand over (audio, words for the CPU) is handed over on
+			// this thread, at the join.
+			joinDsps();
+			launchDsps(target);
+			if(_hostPort)
+				joinDsps();
+			return;
 		}
+		// With all DSPs stopped, the audio goes from each one to the next.
+		for(auto& dsp : m_dsps)
+			dsp->flushAudio();
+	}
+
+	void Microcontroller::launchDsps(const uint64_t _target)
+	{
+		m_dspTarget = _target;
+		m_pending.store(static_cast<uint32_t>(m_workers.size()));
+		m_generation.fetch_add(1);
+		if(m_sleepers.load() > 0)
+		{
+			std::lock_guard lock(m_wakeMutex);
+			m_wake.notify_all();
+		}
+		m_dspsInFlight = true;
+	}
+
+	void Microcontroller::joinDsps()
+	{
+		if(!m_dspsInFlight)
+			return;
+		std::chrono::steady_clock::time_point waitStart;
+		if(m_benchEnabled)
+			waitStart = std::chrono::steady_clock::now();
+		while(m_pending.load() != 0)
+			cpuPause();
+		if(m_benchEnabled)
+			m_cpuWaitingNs.fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - waitStart).count()), std::memory_order_relaxed);
+		m_dspsInFlight = false;
+		for(auto& dsp : m_dsps)
+			dsp->deliverToHost();
 		// With all DSPs stopped, the audio goes from each one to the next.
 		for(auto& dsp : m_dsps)
 			dsp->flushAudio();
@@ -264,8 +285,8 @@ namespace g1
 		const auto elapsed = static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - m_benchStart).count());
 		out.cpuWaitingNs = m_cpuWaitingNs.load(std::memory_order_relaxed);
 		uint64_t onCpuThread = out.cpuWaitingNs;
-		for(uint32_t i = 0; i < g_dspCount; ++i)
-			if(!m_threaded || i == 0)
+		if(!m_threaded)
+			for(uint32_t i = 0; i < g_dspCount; ++i)
 				onCpuThread += m_threadBusyNs[i].load(std::memory_order_relaxed);
 		out.cpuBusyNs = elapsed > onCpuThread ? elapsed - onCpuThread : 0;
 		for(uint32_t i = 0; i < g_dspCount; ++i)

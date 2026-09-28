@@ -226,10 +226,28 @@ Write the numbers into this file (a "Baseline" section) before phase 1.
 
 Each is independent; measure each one alone.
 
-1. **DSP 0 on its own worker.** The emulator thread only runs the 68k and then waits; DSP 0 gets a
-   worker like the others. Expected: the critical path becomes `max(68k, DSP0..3)` instead of
-   `68k + DSP0`. Probably the biggest single win whenever the patch's voices land on DSP 0. Keep
-   `G1_THREADS=0` working (serial).
+1. **Done 2026-09-28: pipelined catch-up, DSP 0 on its own worker.** As written ("DSP 0 on its own
+   worker") it would have gained nothing: the CPU waited at every barrier, so the critical path was
+   `68k slice + slowest DSP` either way. What pays is overlap: a periodic barrier launches the four
+   DSPs and the CPU runs its next slice meanwhile; the next barrier, or a host-port access, joins
+   first. Words for the CPU's HI08 are handed over at the join on the CPU thread (the CPU's side of the
+   port is read at every 68k instruction, so a worker must not write it). Results, 3 s bench:
+
+   | Patch | Before | After |
+   | --- | ---: | ---: |
+   | WavetableSynth | 1.89× | 2.97× |
+   | WavetablePad | 2.15× | 2.92× |
+   | SimpleOSC | 1.88× | 2.61× |
+   | Grainalizzer | 1.90× | 2.28× |
+   | DungeonDub | 1.74× | 2.31× |
+   | WindowLicker | 1.85× | 2.73× |
+   | FM303 | 1.84× | 2.36× |
+   | 4VoiceChoir | 1.91× | 2.44× |
+   | progger | 1.89× | 2.61× |
+
+   Nine golden WAVs byte-identical (threaded, serial, reference); 0 overruns; a five-upload session
+   (`G1_BEFORE`) loads and plays. The busiest thread is now a DSP (10–26 % waiting), and host-port
+   accesses still force a full join ~40,000 times per emulated second: step 4 is next.
 2. **Pin and name threads** (optional affinity, `G1_AFFINITY=1`): workers on distinct physical
    cores, avoiding SMT siblings. Measure; do not enable by default without numbers.
 3. **Barrier cost.** Measure how much wall time is spent in the barrier itself. Options, in order

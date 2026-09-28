@@ -113,6 +113,9 @@ namespace g1
 		uint32_t pcPortIrqs() const { return m_pcPortIrqs; }
 		uint32_t sciDataWrites() const { return m_sciDataWrites; }
 		uint64_t ucCycles() const { return m_ucCycles; }
+		// Waits for the DSPs' catch-up in flight, if any, and hands on what they produced. Needed
+		// before reading a DSP's state from outside (memory, registers); counters are safe anyway.
+		void syncDsps() { joinDsps(); }
 		struct BenchStats
 		{
 			uint64_t cpuBusyNs = 0, cpuWaitingNs = 0;
@@ -146,6 +149,8 @@ namespace g1
 		static mc68k::PeriphAddress hostReg(uint32_t _addr) { return static_cast<mc68k::PeriphAddress>(_addr & 7); }
 		void traceHost(uint32_t _addr, bool _write, uint32_t _value);
 		void catchUpDsps(bool _hostPort = false);
+		void launchDsps(uint64_t _target);
+		void joinDsps();
 		void onPortE(uint8_t _value);
 		void execPcPort();
 		void execPit(uint32_t _cycles);
@@ -186,8 +191,9 @@ namespace g1
 		Lcd m_lcd;
 		uint64_t m_pitAccum = 0;
 
-		// One thread per DSP (DSP 0 runs on the CPU thread). At each sync the CPU publishes the
-		// target cycle and the DSPs run in parallel up to it; G1_THREADS=0 runs everything serially.
+		// One thread per DSP. At each sync the CPU publishes the target cycle and runs on while the
+		// DSPs catch up to it in parallel; the next sync, or any access to a host port, first waits
+		// for them (joinDsps). G1_THREADS=0 runs everything serially.
 		void workerLoop(uint32_t _dsp);
 		bool m_threaded = true;
 		std::vector<std::thread> m_workers;
@@ -203,6 +209,7 @@ namespace g1
 		std::array<uint64_t, g_dspCount> m_benchBlockBase{};
 		std::atomic<uint64_t> m_periodicBarriers{0}, m_hostPortBarriers{0};
 		uint64_t m_dspTarget = 0;
+		bool m_dspsInFlight = false;	// a catch-up launched and not joined yet (threaded only)
 		std::mutex m_wakeMutex;
 		std::condition_variable m_wake;
 		uint64_t m_pitIrqs = 0;

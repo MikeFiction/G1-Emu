@@ -91,8 +91,13 @@ namespace g1
 		void setInputProvider(InputProvider _p) { m_inputProvider = std::move(_p); }
 
 		// Runs the DSP up to _cycles cycles (or up to a limit if it is waiting).
-		// It can run on its own thread: what leaves the ESSIs stays in its own queue.
-		void catchUp(uint64_t _cycles);
+		// It can run on its own thread: what leaves the ESSIs stays in its own queue. With
+		// _toHost false, the word for the CPU is left in the DSP's port: a worker thread must not
+		// touch the CPU's side of the HI08, which the CPU thread reads at every instruction.
+		void catchUp(uint64_t _cycles, bool _toHost = true);
+
+		// Hands one waiting word to the CPU's side of the HI08, as catchUp does. CPU thread only.
+		void deliverToHost() { transferToHost(); }
 
 		// Hands on what left the ESSIs since the last time: to the next DSP's input and to the
 		// audio callback. Only from the CPU thread, with the DSPs stopped.

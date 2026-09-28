@@ -280,6 +280,7 @@ int main(int argc, char** argv)
 		if(report != lastReport)
 		{
 			lastReport = report;
+			mc.syncDsps();
 			std::printf("  %3u%%  PC=$%06x  cycles=%llu  DSP:", report * 10, mc.getPC(), static_cast<unsigned long long>(cycles));
 			for(uint32_t d = 0; d < g1::g_dspCount; ++d)
 				std::printf(" %u:%s/%06x", d, mc.getDsp(d).booted() ? "on" : "boot", mc.getDsp(d).dsp().getPC().toWord());
@@ -288,6 +289,7 @@ int main(int argc, char** argv)
 		}
 	}
 
+	mc.syncDsps();	// the DSPs' memory and registers are read from here on
 	mc.getSci().read(sciOut);
 	// G1_TRACE=N: DSP 0 block by block (N blocks of 864 cycles): IRQD, output buffers, DMA4 and what leaves on TX0.
 	if(const char* tr = std::getenv("G1_TRACE"))
@@ -324,6 +326,7 @@ int main(int argc, char** argv)
 				before[d].push_back(mc.getDsp(d).dsp().memory().get(dsp56k::MemArea_Y, a));
 			}
 		for(int k = 0; k < 200000; ++k) mc.exec();
+		mc.syncDsps();
 		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
 		{
 			std::printf("DSP%u changes in internal X/Y:", d);

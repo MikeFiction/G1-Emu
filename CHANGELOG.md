@@ -7,6 +7,15 @@ Older entries cite their commit by hand.
 
 ## 2026-09-28
 
+- **The CPU no longer waits for the DSPs at every sync: 20–57 % faster (Claude, requested by
+  Javier).** A periodic sync now launches the four DSPs towards that instant, each on its own thread
+  (DSP 0 used to run on the CPU thread), and the CPU runs its next slice meanwhile; the next sync, or
+  any CPU access to a host port, waits for them first, so the CPU never sees a DSP ahead or behind.
+  Words for the CPU's side of the HI08 and the audio are handed over at that join on the CPU thread.
+  `syncDsps()` is there for tools that read DSP memory (`g1boot`, `g1patchtest`). Verified:
+  `tools/bench/bench.sh` 1.74–2.15× → 2.28–2.97× real time with 0 overruns; the nine golden WAVs
+  byte-identical threaded, serial and against the references; a five-upload session plays; the full
+  battery gives the same verdict for all 109 modules; `ctest` passes.
 - **A cycle-table correction tried and rejected (Claude, requested by Javier).** Charging the long
   absolute (`lab`) or the long immediate (`lim`) penalty, not both, as Codex read the DSP56300 manual,
   keeps 0 overruns but makes `WavetablePad.pch` clearly noisier (spectral flatness ~0.03 → ~0.3). Not

@@ -40,6 +40,7 @@ namespace
 		const auto end = _mc.ucCycles() + _ucCycles;
 		while(_mc.ucCycles() < end)
 			_mc.exec();
+		_mc.syncDsps();	// what the DSPs produced up to here is delivered before it is measured
 	}
 
 	std::string hex(const std::vector<uint8_t>& _b, const size_t _max = 24)
@@ -572,9 +573,7 @@ int main(int argc, char** argv)
 		std::printf("BENCH emulated_s=%.3f wall_s=%.6f realtime=%.3f periodic_barriers_s=%.1f host_port_barriers_s=%.1f\n",
 			seconds, wall, wall > 0 ? seconds / wall : 0.0, s.periodicBarriers * scale, s.hostPortBarriers * scale);
 		std::printf("BENCH thread=cpu busy_s=%.6f waiting_s=%.6f\n", s.cpuBusyNs / 1e9, s.cpuWaitingNs / 1e9);
-		if(!std::getenv("G1_THREADS") || std::atoi(std::getenv("G1_THREADS")) != 0)
-			std::printf("BENCH thread=cpu-dsp0 busy_s=%.6f waiting_s=0\n", s.threadBusyNs[0] / 1e9);	// DSP 0 runs on the CPU thread
-		for(uint32_t d = 1; d < g1::g_dspCount; ++d)
+		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
 			std::printf("BENCH thread=dsp%u busy_s=%.6f waiting_s=%.6f\n", d, s.threadBusyNs[d] / 1e9, s.threadWaitingNs[d] / 1e9);
 		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
 		{

@@ -500,10 +500,14 @@ Both pass since the fix ([CI run 35570337853](https://github.com/animatek/G1-Emu
 
 ## Real time and cost
 
-- Where the time goes: the DSPs, in equal parts. One thread per DSP (`g1mc.cpp`): DSP 0 runs on
-  the CPU thread and DSPs 1–3 on three spinning threads that synchronise every ~1 000 CPU cycles
-  (about 20 000 times per second, too often to sleep). What leaves each DSP is queued and handed on
-  by the CPU thread when all have stopped. `G1_THREADS=0` runs everything serially.
+- Where the time goes: the DSPs, in equal parts. One spinning thread per DSP (`g1mc.cpp`), synced
+  every ~1 000 CPU cycles (about 20 000 times per second, too often to sleep) and at every CPU access
+  to a host port. **Pipelined** (2026-09-28): a periodic sync launches the four DSPs towards that
+  instant and the CPU runs on; the next sync waits for them first. A host-port access waits and brings
+  all four up to that exact instant, so the CPU never sees a DSP that is ahead or behind. What leaves
+  each DSP (audio, the word for the CPU's side of the HI08, which the CPU reads at every instruction)
+  is handed on by the CPU thread at the join. Output is byte-identical to the serial run
+  (`G1_THREADS=0`); `tools/bench/` measures it.
 - Real time with ~45% headroom on a Ryzen 7 5700X (the emulation thread is busy ~55% of the time;
   the process uses ~2.9 cores because the DSP threads spin while they wait).
 
