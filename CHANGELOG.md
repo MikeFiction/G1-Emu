@@ -7,6 +7,9 @@ Older entries cite their commit by hand.
 
 ## 2026-09-28
 
+- **Release notes for `v0.1.0-alpha.10` (Claude, requested by Javier).** `docs/release-notes.md`
+  describes today's speed and CPU work in plain terms and lists alpha.5 to alpha.9 as included.
+  Documentation only.
 - **The DSP threads sleep while the real-time loop does (Claude, requested by Javier).** Ahead of
   the clock, `EmuHost` sleeps 500 µs; the DSP threads kept spinning through it (20,000 pauses before
   sleeping, and a new job every ~49 µs), so the emulator used ~3.2 cores whatever the patch.

@@ -1,29 +1,34 @@
-# G1-Emu v0.1.0-alpha.9
+# G1-Emu v0.1.0-alpha.10
 
-**This pre-release removes the grit that heavy patches still had on first load.** It is built and
-DSP-tested in CI on Linux x86-64 (native and JUCE backends), Linux arm64, macOS universal and
-Windows x86-64. The fix is in the emulation shared by every platform, and was checked on Linux.
+**This pre-release makes the emulator 50–70 % faster and halves its CPU use in real time**, with
+exactly the same sound. It is built and DSP-tested in CI on Linux x86-64 (native and JUCE backends),
+Linux arm64, macOS universal and Windows x86-64. The changes are in the emulation shared by every
+platform; they were measured on Linux.
 
-## What alpha.9 fixes
+## What alpha.10 changes
 
-- **Grit or noise on the first load of a heavy patch** (#4, `WavetableSynth.pch`), which went away
-  when the same patch was loaded a second time. The first DSP, the one that takes the audio
-  inputs, received its input words far more often than the real codec sends them, and the extra
-  work made it run out of time on patches that fill it. It now gets them at the codec's rate, and
-  the heavy patches tested (WavetableSynth, WavetablePad) lose no samples on any DSP, on the first
-  load or after others. The audio inputs work as before.
+- **Faster.** Measured over nine patches, from light to very heavy, the emulator now runs 2.5–3.3
+  times faster than real time where it ran 1.7–2.2 times: more headroom before a heavy patch
+  stutters, and room for slower computers. How:
+  - the emulated CPU runs on while the four DSPs catch up, instead of waiting for them;
+  - when the CPU talks to one DSP, only that DSP has to be brought up to date, not all four;
+  - a DSP with little to do no longer emulates its idle waiting instruction by instruction;
+  - builds use link-time optimization.
+- **Lighter.** In real time the emulator used over three CPU cores whatever the patch, because its
+  DSP threads kept spinning while waiting. They now sleep when there is nothing to do: about 1.7
+  cores on the same machine.
+- **Same sound.** Every change was checked against recordings of nine patches, which come out
+  byte-for-byte identical, and against a battery of all 109 module types.
 
-## Also in this build (from alpha.5 to alpha.8)
+## Also in this build (from alpha.5 to alpha.9)
 
-- Heavy patches no longer turn into noise: the emulated DSPs charged two cycles for an instruction
-  the real chip does in one (alpha.8).
+- Heavy patches no longer turn into noise or grit, on the first load or after others (alpha.8,
+  alpha.9).
 - The emulator no longer stops answering after many uploads in a row (alpha.8).
 - The synth's internal master clock runs (sequencers and clocked patches). Set the clock to
   **internal** in the synth settings; in Animatek NME's Synth Settings dialog that option is shown
   the wrong way round for now: choose **External** there.
-- Upload timeouts fixed: a deadlock after a DSP had been idle, commands to a busy DSP thrown away
-  or never taken.
-- The sawtooth of `OscA`, `OscB` and `OscSlvC` sounds on every platform.
+- Upload timeouts fixed; the sawtooth of `OscA`, `OscB` and `OscSlvC` sounds on every platform.
 
 ## Windows quick start
 
