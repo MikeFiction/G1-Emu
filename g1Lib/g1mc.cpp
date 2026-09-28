@@ -85,7 +85,9 @@ namespace g1
 			uint32_t spins = 0;
 			while(job.generation.load(std::memory_order_acquire) == seen && !m_quitWorkers)
 			{
-				if(++spins < 20000)
+				// Spinning pays while the CPU is producing work; when the front end has said it is going
+				// to sleep (setIdle), the next job is far away and the thread sleeps straight away.
+				if(++spins < 20000 && !m_idle.load(std::memory_order_relaxed))
 				{
 					cpuPause();
 					continue;

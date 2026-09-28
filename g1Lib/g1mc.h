@@ -116,6 +116,9 @@ namespace g1
 		// Waits for the DSPs' catch-up in flight, if any, and hands on what they produced. Needed
 		// before reading a DSP's state from outside (memory, registers); counters are safe anyway.
 		void syncDsps() { joinDsps(); }
+		// A real-time front end calls setIdle(true) before it sleeps (it is ahead of the clock) and
+		// setIdle(false) when it resumes: meanwhile the DSP threads sleep instead of spinning.
+		void setIdle(bool _idle) { m_idle.store(_idle, std::memory_order_relaxed); }
 		struct BenchStats
 		{
 			uint64_t cpuBusyNs = 0, cpuWaitingNs = 0;
@@ -211,6 +214,7 @@ namespace g1
 		};
 		std::array<DspJob, g_dspCount> m_jobs;
 		std::atomic<uint32_t> m_sleepers{0};
+		std::atomic<bool> m_idle{false};
 		std::atomic<bool> m_quitWorkers{false};
 		std::atomic<bool> m_benchEnabled{false};
 		std::chrono::steady_clock::time_point m_benchStart = std::chrono::steady_clock::now();

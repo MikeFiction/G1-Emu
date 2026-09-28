@@ -505,7 +505,11 @@ namespace g1app
 			const auto t1 = clock::now();
 			busy += std::chrono::duration<double>(t1 - t0).count();
 			if(mc.ucCycles() >= target)
+			{
+				mc.setIdle(true);	// the DSP threads sleep too instead of spinning through it
 				std::this_thread::sleep_for(std::chrono::microseconds(500));
+				mc.setIdle(false);
+			}
 
 			// The snd-virmidi card may be loaded after the emulator: keep trying to take it over.
 			if(!m_rawMidiBound && t1 - lastRawMidi >= std::chrono::seconds(2))
