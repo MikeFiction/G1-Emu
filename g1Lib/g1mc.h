@@ -148,8 +148,10 @@ namespace g1
 		mc68k::Hdi08& hostPort(uint32_t _addr) { return m_hostPorts[(_addr - g_dspAddress) >> 3]; }
 		static mc68k::PeriphAddress hostReg(uint32_t _addr) { return static_cast<mc68k::PeriphAddress>(_addr & 7); }
 		void traceHost(uint32_t _addr, bool _write, uint32_t _value);
-		void catchUpDsps(bool _hostPort = false);
-		void launchDsps(uint64_t _target);
+		void catchUpDsps();
+		void catchUpDsp(uint32_t _dsp);	// before the CPU touches that DSP's host port
+		void launchDsp(uint32_t _dsp, uint64_t _target);
+		void waitDsp(uint32_t _dsp);
 		void joinDsps();
 		void onPortE(uint8_t _value);
 		void execPcPort();
@@ -191,14 +193,23 @@ namespace g1
 		Lcd m_lcd;
 		uint64_t m_pitAccum = 0;
 
-		// One thread per DSP. At each sync the CPU publishes the target cycle and runs on while the
-		// DSPs catch up to it in parallel; the next sync, or any access to a host port, first waits
-		// for them (joinDsps). G1_THREADS=0 runs everything serially.
+		// One thread per DSP. At each periodic sync the CPU publishes the target cycle and runs on
+		// while the DSPs catch up to it in parallel; the next sync first waits for them (joinDsps).
+		// An access to a host port waits only for that DSP and brings it to the exact instant on the
+		// CPU thread; the other three keep running. G1_THREADS=0 runs everything serially, with the
+		// same catch-up points, so its output is the reference.
 		void workerLoop(uint32_t _dsp);
 		bool m_threaded = true;
 		std::vector<std::thread> m_workers;
-		std::atomic<uint64_t> m_generation{0};
-		std::atomic<uint32_t> m_pending{0};
+		// One job per DSP, on its own cache line: the CPU sets the target and bumps the generation,
+		// the worker runs up to it and clears busy.
+		struct alignas(64) DspJob
+		{
+			std::atomic<uint64_t> generation{0};
+			std::atomic<bool> busy{false};
+			uint64_t target = 0;
+		};
+		std::array<DspJob, g_dspCount> m_jobs;
 		std::atomic<uint32_t> m_sleepers{0};
 		std::atomic<bool> m_quitWorkers{false};
 		std::atomic<bool> m_benchEnabled{false};
@@ -208,8 +219,6 @@ namespace g1
 		std::array<std::atomic<uint64_t>, g_dspCount> m_threadWaitingNs{};
 		std::array<uint64_t, g_dspCount> m_benchBlockBase{};
 		std::atomic<uint64_t> m_periodicBarriers{0}, m_hostPortBarriers{0};
-		uint64_t m_dspTarget = 0;
-		bool m_dspsInFlight = false;	// a catch-up launched and not joined yet (threaded only)
 		std::mutex m_wakeMutex;
 		std::condition_variable m_wake;
 		uint64_t m_pitIrqs = 0;

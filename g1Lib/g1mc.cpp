@@ -73,6 +73,7 @@ namespace g1
 
 	void Microcontroller::workerLoop(const uint32_t _dsp)
 	{
+		auto& job = m_jobs[_dsp];
 		uint64_t seen = 0;
 		while(true)
 		{
@@ -82,7 +83,7 @@ namespace g1
 			// Syncs are very frequent (~20,000 per second): the threads spin while waiting and only
 			// sleep if the CPU takes long (for instance when the emulator has time to spare).
 			uint32_t spins = 0;
-			while(m_generation.load() == seen && !m_quitWorkers)
+			while(job.generation.load(std::memory_order_acquire) == seen && !m_quitWorkers)
 			{
 				if(++spins < 20000)
 				{
@@ -91,21 +92,21 @@ namespace g1
 				}
 				std::unique_lock lock(m_wakeMutex);
 				++m_sleepers;
-				m_wake.wait(lock, [&] { return m_generation.load() != seen || m_quitWorkers; });
+				m_wake.wait(lock, [&] { return job.generation.load() != seen || m_quitWorkers; });
 				--m_sleepers;
 			}
 			if(m_benchEnabled)
 				m_threadWaitingNs[_dsp].fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - waitStart).count()), std::memory_order_relaxed);
 			if(m_quitWorkers)
 				return;
-			seen = m_generation.load();
+			seen = job.generation.load(std::memory_order_acquire);
 			std::chrono::steady_clock::time_point busyStart;
 			if(m_benchEnabled)
 				busyStart = std::chrono::steady_clock::now();
-			m_dsps[_dsp]->catchUp(m_dspTarget, false);
+			m_dsps[_dsp]->catchUp(job.target, false);
 			if(m_benchEnabled)
 				m_threadBusyNs[_dsp].fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - busyStart).count()), std::memory_order_relaxed);
-			m_pending.fetch_sub(1);
+			job.busy.store(false, std::memory_order_release);
 		}
 	}
 
@@ -138,7 +139,7 @@ namespace g1
 			m_pcTrailPos.store((pos + 1) % g_pcTrail, std::memory_order_relaxed);
 		}
 		if((m_ucCycles & 0x3ff) < cycles)
-			catchUpDsps(false);
+			catchUpDsps();
 		execPcPort();
 		execPit(cycles);
 		while(m_ucCycles >= m_nextSciSample)	// the UART advances at its clock rate
@@ -209,9 +210,9 @@ namespace g1
 		return m68k_get_reg(const_cast<Microcontroller*>(this)->getCpuState(), M68K_REG_SR);
 	}
 
-	void Microcontroller::catchUpDsps(const bool _hostPort)
+	void Microcontroller::catchUpDsps()
 	{
-		(_hostPort ? m_hostPortBarriers : m_periodicBarriers).fetch_add(1, std::memory_order_relaxed);
+		m_periodicBarriers.fetch_add(1, std::memory_order_relaxed);
 		const auto target = m_ucCycles * g_dspCyclesPerUcNum / g_dspCyclesPerUcDen;
 		if(!m_threaded)
 		{
@@ -224,51 +225,80 @@ namespace g1
 				if(m_benchEnabled)
 					m_threadBusyNs[i].fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - busyStart).count()), std::memory_order_relaxed);
 			}
-		}
-		else
-		{
-			// Pipelined: the DSPs catch up to this point on their threads while the CPU runs on
-			// towards the next one, and the next catch-up first waits for this one. The CPU only
-			// sees the DSPs through their host ports, and an access to a port joins and brings all
-			// four up to that exact instant first, so what it reads is the same as if it had
-			// waited here; what the DSPs hand over (audio, words for the CPU) is handed over on
-			// this thread, at the join.
-			joinDsps();
-			launchDsps(target);
-			if(_hostPort)
-				joinDsps();
+			// With all DSPs stopped, the audio goes from each one to the next.
+			for(auto& dsp : m_dsps)
+				dsp->flushAudio();
 			return;
 		}
-		// With all DSPs stopped, the audio goes from each one to the next.
-		for(auto& dsp : m_dsps)
-			dsp->flushAudio();
+		// Pipelined: the DSPs catch up to this point on their threads while the CPU runs on towards
+		// the next one, and the next sync first waits for this one. What the DSPs hand over (audio,
+		// words for the CPU) is handed over on this thread, at the join.
+		joinDsps();
+		for(uint32_t i = 0; i < g_dspCount; ++i)
+			launchDsp(i, target);
 	}
 
-	void Microcontroller::launchDsps(const uint64_t _target)
+	void Microcontroller::catchUpDsp(const uint32_t _dsp)
 	{
-		m_dspTarget = _target;
-		m_pending.store(static_cast<uint32_t>(m_workers.size()));
-		m_generation.fetch_add(1);
+		// The CPU is about to touch this DSP's host port: that DSP, and only that one, must be at
+		// this exact instant. The others keep running; their audio is handed on at the next sync.
+		if(_dsp >= g_dspCount)
+			return;	// a port of the expansion board, which the OS probes: no DSP behind it
+		m_hostPortBarriers.fetch_add(1, std::memory_order_relaxed);
+		const auto target = m_ucCycles * g_dspCyclesPerUcNum / g_dspCyclesPerUcDen;
+		if(m_threaded)
+		{
+			// Each DSP reads the link from the one before it 8 blocks late (g1dsp.cpp), and those
+			// blocks arrive when the previous DSP's audio is handed on. Here that only happened at the
+			// last sync, whose DSPs stopped one sync earlier: running this DSP up to now could reach
+			// blocks not handed on yet, which it would take as silence. So the previous DSP is waited
+			// for and its audio handed on first, as the serial run has it at this point.
+			if(_dsp > 0)
+			{
+				waitDsp(_dsp - 1);
+				waitDsp(_dsp);
+				m_dsps[_dsp - 1]->flushAudio();
+			}
+			else
+				waitDsp(_dsp);
+			m_dsps[_dsp]->deliverToHost();
+		}
+		m_dsps[_dsp]->catchUp(target);
+	}
+
+	void Microcontroller::launchDsp(const uint32_t _dsp, const uint64_t _target)
+	{
+		auto& job = m_jobs[_dsp];
+		job.target = _target;
+		job.busy.store(true, std::memory_order_relaxed);
+		job.generation.fetch_add(1, std::memory_order_release);
 		if(m_sleepers.load() > 0)
 		{
 			std::lock_guard lock(m_wakeMutex);
 			m_wake.notify_all();
 		}
-		m_dspsInFlight = true;
 	}
 
-	void Microcontroller::joinDsps()
+	void Microcontroller::waitDsp(const uint32_t _dsp)
 	{
-		if(!m_dspsInFlight)
+		auto& job = m_jobs[_dsp];
+		if(!job.busy.load(std::memory_order_acquire))
 			return;
 		std::chrono::steady_clock::time_point waitStart;
 		if(m_benchEnabled)
 			waitStart = std::chrono::steady_clock::now();
-		while(m_pending.load() != 0)
+		while(job.busy.load(std::memory_order_acquire))
 			cpuPause();
 		if(m_benchEnabled)
 			m_cpuWaitingNs.fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - waitStart).count()), std::memory_order_relaxed);
-		m_dspsInFlight = false;
+	}
+
+	void Microcontroller::joinDsps()
+	{
+		if(!m_threaded)
+			return;
+		for(uint32_t i = 0; i < g_dspCount; ++i)
+			waitDsp(i);
 		for(auto& dsp : m_dsps)
 			dsp->deliverToHost();
 		// With all DSPs stopped, the audio goes from each one to the next.
@@ -343,7 +373,7 @@ namespace g1
 		if(isHostPort(addr))
 		{
 			traceHost(addr, false, 0);
-			catchUpDsps(true);
+			catchUpDsp((addr - g_dspAddress) >> 3);
 			return hostPort(addr).read16(hostReg(addr));
 		}
 		if(addr >= g_flashAddress && addr < g_flashAddress + g_flashSize - 1)
@@ -367,7 +397,7 @@ namespace g1
 		if(isHostPort(addr))
 		{
 			traceHost(addr, false, 0);
-			catchUpDsps(true);
+			catchUpDsp((addr - g_dspAddress) >> 3);
 			return hostPort(addr).read8(hostReg(addr));
 		}
 		if(addr >= g_flashAddress && addr < g_flashAddress + g_flashSize)
@@ -415,7 +445,7 @@ namespace g1
 		if(isHostPort(addr))
 		{
 			traceHost(addr, true, _val);
-			catchUpDsps(true);
+			catchUpDsp((addr - g_dspAddress) >> 3);
 			hostPort(addr).write16(hostReg(addr), _val);
 			return;
 		}
@@ -507,7 +537,7 @@ namespace g1
 		if(isHostPort(addr))
 		{
 			traceHost(addr, true, _val);
-			catchUpDsps(true);
+			catchUpDsp((addr - g_dspAddress) >> 3);
 			hostPort(addr).write8(hostReg(addr), _val);
 			return;
 		}

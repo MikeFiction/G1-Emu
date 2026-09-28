@@ -7,6 +7,18 @@ Older entries cite their commit by hand.
 
 ## 2026-09-28
 
+- **A host-port access waits only for the DSP it touches (Claude, requested by Javier).** The OS
+  touches the DSPs' host ports ~39,000 times per emulated second (mostly a helper at `$10C346` that
+  streams parameters to DSP 0 and polls its status), and every access used to stop all four DSPs.
+  Now it waits for that DSP and the one before it, hands on the latter's audio (each DSP reads its
+  upstream link 8 blocks late, and without that it could run into blocks not handed on yet and take
+  them as silence, which the first attempt did), and brings that DSP to the instant on the CPU thread;
+  the others keep running. The serial run (`G1_THREADS=0`) has the same catch-up points, so it stays
+  the reference. Ports 4–7 (the expansion board, which the OS probes) have no DSP and no longer sync
+  anything. Verified: bench 2.28–2.97× → 2.54–3.32× real time, 0 overruns; the nine golden WAVs
+  byte-identical threaded, serial and against the references; a five-upload session plays; battery
+  unchanged for all 109 modules; `g1run` in real time at 100 % speed with the emulation thread 43 %
+  busy.
 - **The CPU no longer waits for the DSPs at every sync: 20–57 % faster (Claude, requested by
   Javier).** A periodic sync now launches the four DSPs towards that instant, each on its own thread
   (DSP 0 used to run on the CPU thread), and the CPU runs its next slice meanwhile; the next sync, or

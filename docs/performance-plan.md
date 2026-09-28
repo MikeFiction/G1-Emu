@@ -248,6 +248,13 @@ Each is independent; measure each one alone.
    Nine golden WAVs byte-identical (threaded, serial, reference); 0 overruns; a five-upload session
    (`G1_BEFORE`) loads and plays. The busiest thread is now a DSP (10–26 % waiting), and host-port
    accesses still force a full join ~40,000 times per emulated second: step 4 is next.
+
+   **Step 4 done the same day:** a host-port access waits for that DSP and the one upstream of it
+   (whose audio it needs, 8 blocks late), not for all four. Bench after it: WavetableSynth 3.32×,
+   WavetablePad 3.12×, SimpleOSC 2.71×, Grainalizzer 2.72×, DungeonDub 2.54×, WindowLicker 2.90×,
+   FM303 2.59×, 4VoiceChoir 2.61×, progger 2.54×; golden WAVs byte-identical. `g1run` in real time:
+   emulation thread 43 % busy (it was ~55 %). The busiest thread is now always a DSP (9–24 %
+   waiting): what is left is making each DSP cheaper (idle-loop skip, `execUntilCycles`, compiler).
 2. **Pin and name threads** (optional affinity, `G1_AFFINITY=1`): workers on distinct physical
    cores, avoiding SMT siblings. Measure; do not enable by default without numbers.
 3. **Barrier cost.** Measure how much wall time is spent in the barrier itself. Options, in order
