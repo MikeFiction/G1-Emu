@@ -7,6 +7,10 @@ Older entries cite their commit by hand.
 
 ## 2026-09-28
 
+- **Link-time optimization in Release builds (Claude, requested by Javier).** `G1_LTO` (on by
+  default, only where the compiler supports it; `-DG1_LTO=OFF` for quicker links while developing).
+  Measured with `tools/bench/bench.sh`, two interleaved runs of each build on the same machine:
+  +3–5 % on all nine patches; output byte-identical to the references; `ctest` passes.
 - **A host-port access waits only for the DSP it touches (Claude, requested by Javier).** The OS
   touches the DSPs' host ports ~39,000 times per emulated second (mostly a helper at `$10C346` that
   streams parameters to DSP 0 and polls its status), and every access used to stop all four DSPs.
