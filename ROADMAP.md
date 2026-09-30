@@ -19,6 +19,13 @@ far is in `NOTES.md`.
 
 **The short list, in order, with the detail of each: [`docs/next-steps.md`](docs/next-steps.md).**
 
+**From 2026-09-30 the open work is tracked as GitHub issues**, so nothing lives only in
+someone's memory. Most urgent: **#6**, fast audio-rate modulation that crackles and does not
+recover until a restart. Then the plugin and the first public beta (#7), the direct link with NME
+(#8, with Animatek-NME#83), several instances and the original editor with four synths (#9,
+Animatek-NME#84), and the window: a report button (#10), no Oct Shift (#11), an extras drawer with
+Random (#12), parameter names above the knobs (#13) and mappable knobs (#14).
+
 ## Next
 
 **Product direction: standalone and VST3 share one engine.** Javier asked for one

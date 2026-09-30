@@ -5,6 +5,16 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-09-30
+
+- **Issues instead of memory (Claude, requested by Javier).** #4 closed: its reporter confirmed that
+  heavy patches load clean, and `WavetableSynth.pch` is down to faint clicks. New issues: #6 (fast
+  audio-rate modulation crackles and stays broken until a restart, the priority), #7 (VST3 and first
+  beta), #8 (direct link with NME), #9 (several instances, original editor with four synths),
+  #10–#14 (report button, remove Oct Shift, extras drawer with Random, parameter displays, mappable
+  knobs), plus Animatek-NME#83 and #84 for the editor side. `ROADMAP.md` points at them.
+  Documentation only.
+
 ## 2026-09-28
 
 - **`v0.1.0-alpha.10` is out (Claude, requested by Javier).** Prerelease on GitHub with the five
