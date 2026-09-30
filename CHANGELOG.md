@@ -7,6 +7,12 @@ Older entries cite their commit by hand.
 
 ## 2026-09-30
 
+- **Extras drawer with Random (Claude, requested by Javier; #12).** A chevron next to the icon
+  buttons opens a drawer below the panel (the window grows 60 px; `extrasOpen` in `settings.conf`
+  remembers it). Its first control, **Random**, turns the 18 knobs to random positions, as if by
+  hand. Verified: builds; Javier checked the drawer on screen and that Random changes the sound.
+  Next in the drawer: parameter displays (#13), and double-click on Random to go back to the
+  patch's own values, which needs the same reading of the OS's knob assignments.
 - **The window loses Oct Shift and gains Patreon, Report issue and Settings as icons (Claude,
   requested by Javier; #10, #11).** The Oct Shift buttons, their five LEDs and the label are gone:
   they belong to the keyboard model and the rack's OS does nothing with them. At the right of the

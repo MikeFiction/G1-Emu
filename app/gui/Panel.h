@@ -70,8 +70,9 @@ namespace g1gui
 	class IconButton : public juce::Button
 	{
 	public:
-		enum class Icon { Settings, Report, Patreon };
+		enum class Icon { Settings, Report, Patreon, ExtrasOpen, ExtrasClose };
 		IconButton(const juce::String& _name, Icon _icon) : juce::Button(_name), m_icon(_icon) {}
+		void setIcon(Icon _icon) { m_icon = _icon; repaint(); }
 		void paintButton(juce::Graphics& _g, bool _over, bool _down) override;
 	private:
 		Icon m_icon;
@@ -96,6 +97,8 @@ namespace g1gui
 		PanelButton& addButton(const juce::String& _name, MatrixBit _bit);
 		LedView& addLed(MatrixBit _bit);
 		void reportIssue();
+		void setExtrasOpen(bool _open);
+		void randomizeKnobs();
 
 		g1app::EmuHost& m_host;
 		g1::Microcontroller& m_mc;
@@ -126,6 +129,13 @@ namespace g1gui
 		IconButton m_settings{"Settings", IconButton::Icon::Settings};
 		IconButton m_report{"Report issue", IconButton::Icon::Report};
 		IconButton m_patreon{"Patreon", IconButton::Icon::Patreon};
+		IconButton m_extras{"Extras", IconButton::Icon::ExtrasOpen};
+
+		// The extras drawer below the panel: what the hardware never had. Closed, the window is
+		// the panel alone.
+		bool m_extrasOpen = false;
+		juce::TextButton m_random{"Random"};
+		juce::Random m_rng;
 		juce::TooltipWindow m_tooltips{this, 500};
 		double m_peakHold = 0;
 		uint64_t m_lastMidiIn = 0;

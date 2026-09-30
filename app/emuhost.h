@@ -45,6 +45,7 @@ namespace g1app
 			std::string rawMidiCard = "G1";		// the raw MIDI card to take over (empty: none)
 			std::string rom;					// the ROM to use; empty: look for one (romfinder.h)
 			bool showDisclaimer = false;		// the notice at startup; the window can turn it back on
+			bool extrasOpen = false;			// the window's extras drawer (Random...) was left open
 
 			// Manual MIDI device pairing (JUCE backend only): the name of an existing system MIDI
 			// device to open instead of creating an owned port, one per direction. Empty means try

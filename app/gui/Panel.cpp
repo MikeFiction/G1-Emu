@@ -30,6 +30,7 @@ namespace g1gui
 
 		const juce::Colour g_chassis(0xffb21f2d), g_face(0xff2b2346), g_panel(0xffc9c9c6), g_groupLine(0xffe0a040);
 		const juce::Colour g_textDark(0xff2b2346), g_textLight(0xffe8e8f0);
+		constexpr int g_extrasHeight = 60;	// what the extras drawer adds below the panel
 	}
 
 	// ________________________________________________________________________
@@ -164,6 +165,20 @@ namespace g1gui
 			p.addEllipse(8.0f, 2.0f, 14.0f, 14.0f);
 			p.addRectangle(2.0f, 2.0f, 4.0f, 20.0f);
 			break;
+		case Icon::ExtrasOpen:
+		case Icon::ExtrasClose:
+		{
+			// A chevron: down opens the drawer, up closes it.
+			const bool down = m_icon == Icon::ExtrasOpen;
+			juce::Path line;
+			line.startNewSubPath(3.0f, down ? 8.0f : 16.0f);
+			line.lineTo(12.0f, down ? 17.0f : 7.0f);
+			line.lineTo(21.0f, down ? 8.0f : 16.0f);
+			juce::PathStrokeType(3.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded).createStrokedPath(p, line);
+			p.addRectangle(0.0f, 0.0f, 0.01f, 24.0f);	// keeps the 24 x 24 frame, so it scales like the others
+			p.addRectangle(23.99f, 0.0f, 0.01f, 24.0f);
+			break;
+		}
 		}
 		const auto icon = r.reduced(5.0f);
 		_g.setColour(juce::Colour(0xffe8e8f0).withAlpha(isEnabled() ? 1.0f : 0.4f));
@@ -312,7 +327,21 @@ namespace g1gui
 		m_patreon.onClick = [] { juce::URL("https://www.patreon.com/c/animatek").launchInDefaultBrowser(); };
 		addAndMakeVisible(m_patreon);
 
-		setSize(1200, 440);
+		m_extras.onClick = [this]
+		{
+			setExtrasOpen(!m_extrasOpen);
+			m_host.options().extrasOpen = m_extrasOpen;
+			m_host.options().save(g1app::EmuHost::defaultSettingsPath());
+		};
+		addAndMakeVisible(m_extras);
+
+		// Random: each of the 18 knobs to a value of its own, as if turned by hand. What it
+		// changes is whatever the patch has assigned to them; knobs with nothing assigned do nothing.
+		m_random.setTooltip("Turn the 18 knobs to random positions");
+		m_random.onClick = [this] { randomizeKnobs(); };
+		addChildComponent(m_random);
+
+		setExtrasOpen(m_host.options().extrasOpen);
 		startTimerHz(30);
 	}
 
@@ -385,6 +414,14 @@ namespace g1gui
 		label("Assign/Morph", m_assign->getBounds().translated(-14, -15).withWidth(m_assign->getWidth() + 28).withHeight(13), g_textDark, 10.0f);
 		label("Shift", m_shift->getBounds().translated(0, -15).withHeight(13), g_textDark);
 
+		if(m_extrasOpen)
+		{
+			const juce::Rectangle<float> drawer(12.0f, 436.0f, static_cast<float>(getWidth()) - 24.0f, static_cast<float>(g_extrasHeight) - 12.0f);
+			_g.setColour(g_face);
+			_g.fillRoundedRectangle(drawer, 10.0f);
+			label("EXTRAS", drawer.toNearestInt().withWidth(110), g_textLight, 11.0f);
+		}
+
 		label("V I R T U A L      M O D U L A R      S Y N T H E S I Z E R      -      G 1 - E M U", {140, 362, 1030, 16}, g_textLight, 10.0f);
 	}
 
@@ -426,10 +463,27 @@ namespace g1gui
 		m_dial.setBounds(1094, 232, 72, 72);
 
 		// Settings, Report issue and Patreon: three small icon buttons at the right of the status bar
-		m_status.setBounds(14, 396, getWidth() - 28 - 3 * 32, 30);
+		m_status.setBounds(14, 396, getWidth() - 28 - 4 * 32, 30);
+		m_extras.setBounds(getWidth() - 14 - 26 - 96, 399, 26, 24);
+		m_random.setBounds(140, 446, 100, 28);
 		m_settings.setBounds(getWidth() - 14 - 26, 399, 26, 24);
 		m_report.setBounds(getWidth() - 14 - 26 - 32, 399, 26, 24);
 		m_patreon.setBounds(getWidth() - 14 - 26 - 64, 399, 26, 24);
+	}
+
+	void Panel::setExtrasOpen(const bool _open)
+	{
+		m_extrasOpen = _open;
+		m_extras.setIcon(_open ? IconButton::Icon::ExtrasClose : IconButton::Icon::ExtrasOpen);
+		m_extras.setTooltip(_open ? "Hide the extras" : "Extras: Random and more");
+		m_random.setVisible(_open);
+		setSize(1200, _open ? 440 + g_extrasHeight : 440);	// the window follows its content
+	}
+
+	void Panel::randomizeKnobs()
+	{
+		for(auto& k : m_knobs)
+			k.setValue(m_rng.nextInt(256), juce::sendNotificationSync);
 	}
 
 	void Panel::reportIssue()
