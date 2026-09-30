@@ -16,7 +16,8 @@ Older entries cite their commit by hand.
   3.42× real time against 2.40× with the old behaviour, the same as a fresh start (3.46×).
   `g1dspcheck` passes. The golden WAVs are byte-identical except `WavetableSynth`, whose S&H
   shifts with interrupt timing (same pitch and spectrum), so its reference was recorded again.
-  Details in `NOTES.md`. Not yet heard in `g1gui` by Javier.
+  Details in `NOTES.md`. Javier confirmed it by ear in `g1gui` (many heavy patches in a row, fast
+  FM no longer sticking), and #6 is closed.
 - **`g1patchtest` gains a real-time mode (Claude).** `G1_REALTIME=seconds` runs `EmuHost`'s pacing
   and `AudioBridge` against a simulated sound card and prints dropouts and lag, with
   `G1_RT_NOTES` and `G1_RT_KNOB` to load it. With it, and with `g1run` on JACK, the fast-modulation
