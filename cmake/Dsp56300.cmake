@@ -383,6 +383,30 @@ g1_dsp_replace(dsp.h
 
 		ASMJIT_FORCE_INLINE void execInterpreter() noexcept]=])
 
+# When DSP code wrote to program memory that had a compiled block, the core destroyed that block
+# and also marked the address "volatile" for ever: from then on it compiled a block that stops
+# there, so everything around it ran one instruction per block. The G1's OS writes module code
+# into program memory on every patch load and every module or cable added from the editor, over
+# code compiled for the previous patch. The marks piled up and never went away, so the emulator
+# slowed down with each load until it was restarted: after 30 uploads DSP 0 ran the same
+# instructions in 3.3 times as many blocks, 25 % slower overall, and a heavy patch (fast
+# audio-rate modulation, WavetableSynth.pch) no longer fit in real time and crackled (#6).
+# Destroying the written block is enough to be correct: a block ends right after its
+# program-memory write, so it never runs code it has just changed, and G1-Emu does not link blocks,
+# so the next entry recompiles. G1_VOLATILE_P=1 brings back the core's marks, only to compare.
+g1_dsp_replace(jit.cpp
+	[=[				m_volatileP.insert(pMemWriteAddr);
+				break;]=]
+	[=[				static const bool keepVolatileP = std::getenv("G1_VOLATILE_P") != nullptr;
+				if(keepVolatileP)
+					m_volatileP.insert(pMemWriteAddr);
+				break;]=])
+g1_dsp_replace(jit.cpp
+	[=[#include "jit.h"]=]
+	[=[#include "jit.h"
+
+#include <cstdlib>]=])
+
 foreach(source IN LISTS g1_dsp_files)
 	get_filename_component(name "${source}" NAME)
 	configure_file("${g1_dsp_prepare}/${name}" "${g1_dsp_overlay}/${name}" COPYONLY)

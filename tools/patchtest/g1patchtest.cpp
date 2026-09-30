@@ -2,6 +2,7 @@
 //
 //   g1patchtest ROM patch.pch [--note 60] [--seconds 2] [--wav output.wav] [--dump-packets dir] [--bench]
 //   (G1_CHORD / G1_SEQ: press and release notes through the editor's port, then measure)
+//   (G1_REALTIME=seconds: play in real time against a simulated sound card, counting dropouts)
 //
 // Boots the OS, greets like NME (IAm), uploads the patch with the same code NME uses
 // (PchFileIO -> PatchSerializer -> UploadPacketizer), packet by packet waiting for each
@@ -19,7 +20,11 @@
 #include "midi/NmMessages.h"
 #include "midi/SysExCodec.h"
 
+#include "../../app/audiobridge.h"
+
 #include <map>
+#include <atomic>
+#include <thread>
 #include <cmath>
 #include <chrono>
 #include <cstdio>
@@ -534,6 +539,102 @@ int main(int argc, char** argv)
 	{
 		const auto on = withChecksum({0xf0, 0x33, 0x5c, 0x06, static_cast<uint8_t>(pid), 0x56, 0x00, static_cast<uint8_t>(note)});
 		mc.getPcPort().receive(on);
+	}
+	// G1_REALTIME=seconds: plays the note in real time with EmuHost's own pacing and AudioBridge,
+	// against a simulated sound card (48 kHz, 256-frame periods), and prints once per second the
+	// dropouts, how far the emulator is behind the wall clock and how full the output queue is.
+	if(const char* rt = std::getenv("G1_REALTIME"))
+	{
+		using clock = std::chrono::steady_clock;
+		g1app::AudioBridge bridge(1.0f);
+		bridge.setRate(48000);
+		mc.getDsp(g1::g_dspCount - 1).setBlockCallback([&](const int32_t _a, const int32_t _b, const int32_t _c, const int32_t _d)
+		{
+			bridge.push(_a, _b, _c, _d);
+		});
+		std::atomic<bool> quit{false};
+		std::thread card([&]
+		{
+			constexpr size_t n = 256;
+			std::array<std::vector<float>, 4> o;
+			for(auto& v : o) v.resize(n);
+			std::array<float*, 4> op{o[0].data(), o[1].data(), o[2].data(), o[3].data()};
+			std::vector<float> in(n, 0.0f);
+			std::array<const float*, 2> ip{in.data(), in.data()};
+			auto next = clock::now();
+			while(!quit)
+			{
+				next += std::chrono::nanoseconds(static_cast<int64_t>(1e9 * n / 48000.0));
+				std::this_thread::sleep_until(next);
+				bridge.render(op.data(), 4, ip.data(), 2, n);
+			}
+		});
+		// G1_RT_NOTES=60,64,67: more notes through MIDI IN (channel 1) before it starts.
+		// G1_RT_KNOB=k,ms,from,to: knob k (1-18) swept up and down every ms, between seconds from and to.
+		if(const char* rn = std::getenv("G1_RT_NOTES"))
+			for(const auto& t : juce::StringArray::fromTokens(rn, ",", ""))
+				mc.getSci().write({0x90, static_cast<uint8_t>(t.getIntValue()), 100});
+		int knob = 0, knobMs = 10;
+		double knobFrom = 0, knobTo = 0;
+		if(const char* rk = std::getenv("G1_RT_KNOB"))
+		{
+			const auto f = juce::StringArray::fromTokens(rk, ",", "");
+			knob = f[0].getIntValue();
+			knobMs = std::max(1, f[1].getIntValue());
+			knobFrom = f[2].getDoubleValue();
+			knobTo = f[3].getDoubleValue();
+		}
+		static constexpr std::array<uint8_t, 18> adc = {0x31, 0x37, 0x2d, 0x32, 0x28, 0x2e, 0x33, 0x29, 0x2f, 0x34, 0x2a, 0x1a, 0x35, 0x2b, 0x1b, 0x36, 0x2c, 0x1c};
+		auto lastKnob = clock::now();
+		int knobValue = 0, knobStep = 7;
+		const auto start = clock::now();
+		const auto base = mc.ucCycles();
+		auto lastReport = start;
+		uint64_t lastXruns = 0;
+		const double total = std::atof(rt);
+		for(;;)
+		{
+			const auto t0 = clock::now();
+			const double elapsed = std::chrono::duration<double>(t0 - start).count();
+			if(elapsed >= total)
+				break;
+			if(knob >= 1 && knob <= 18 && elapsed >= knobFrom && elapsed < knobTo && t0 - lastKnob >= std::chrono::milliseconds(knobMs))
+			{
+				lastKnob = t0;
+				knobValue += knobStep;
+				if(knobValue <= 0 || knobValue >= 255) { knobStep = -knobStep; knobValue = std::clamp(knobValue, 0, 255); }
+				mc.setAdc(adc[static_cast<size_t>(knob - 1)], static_cast<uint8_t>(knobValue));
+			}
+			const auto target = base + static_cast<uint64_t>(elapsed * g1::g_ucClock);
+			const auto limit = mc.ucCycles() + g1::g_ucClock / 500;
+			while(mc.ucCycles() < target && mc.ucCycles() < limit)
+				mc.exec();
+			std::vector<uint8_t> drop;
+			mc.getPcPort().takeTx(drop);
+			if(mc.ucCycles() >= target)
+			{
+				mc.setIdle(true);
+				std::this_thread::sleep_for(std::chrono::microseconds(500));
+				mc.setIdle(false);
+			}
+			const auto t1 = clock::now();
+			if(t1 - lastReport >= std::chrono::seconds(1))
+			{
+				lastReport = t1;
+				const auto x = bridge.xruns();
+				const double behindMs = target > mc.ucCycles() ? 1000.0 * static_cast<double>(target - mc.ucCycles()) / g1::g_ucClock : 0.0;
+				std::printf("RT t=%5.1f s  dropouts %llu  behind %.1f ms\n", std::chrono::duration<double>(t1 - start).count(),
+					static_cast<unsigned long long>(x - lastXruns), behindMs);
+				std::fflush(stdout);
+				lastXruns = x;
+			}
+		}
+		quit = true;
+		card.join();
+		mc.syncDsps();
+		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+			std::printf("RT DSP%u overruns=%llu\n", d, static_cast<unsigned long long>(mc.getDsp(d).irqdOverruns()));
+		return 0;
 	}
 	// G1_MIDICLOCK=bpm sends MIDI clock (a start, then $F8 at 24 per beat) into MIDI IN while it
 	// plays: with the synth's clock set to external, that is what moves MIDIGlobal and whatever

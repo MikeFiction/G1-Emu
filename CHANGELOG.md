@@ -7,6 +7,21 @@ Older entries cite their commit by hand.
 
 ## 2026-09-30
 
+- **The emulator no longer slows down with every patch load (Claude, requested by Javier; #6).**
+  The DSP core marked program memory that the OS rewrote as "volatile" and never forgot it, so
+  code the OS loaded over a previous patch ran one instruction per JIT block from then on. After
+  30 uploads the same patch ran 25 % slower, and a heavy one (fast audio-rate modulation,
+  `WavetableSynth.pch`) crackled until the emulator was restarted. `cmake/Dsp56300.cmake` now
+  skips that mark (`G1_VOLATILE_P=1` restores it, to compare). Verified: after 30 uploads,
+  3.42× real time against 2.40× with the old behaviour, the same as a fresh start (3.46×).
+  `g1dspcheck` passes. The golden WAVs are byte-identical except `WavetableSynth`, whose S&H
+  shifts with interrupt timing (same pitch and spectrum), so its reference was recorded again.
+  Details in `NOTES.md`. Not yet heard in `g1gui` by Javier.
+- **`g1patchtest` gains a real-time mode (Claude).** `G1_REALTIME=seconds` runs `EmuHost`'s pacing
+  and `AudioBridge` against a simulated sound card and prints dropouts and lag, with
+  `G1_RT_NOTES` and `G1_RT_KNOB` to load it. With it, and with `g1run` on JACK, the fast-modulation
+  crackle did not reproduce on a fresh start, which is what pointed at state building up over
+  the session.
 - **Issues instead of memory (Claude, requested by Javier).** #4 closed: its reporter confirmed that
   heavy patches load clean, and `WavetableSynth.pch` is down to faint clicks. New issues: #6 (fast
   audio-rate modulation crackles and stays broken until a restart, the priority), #7 (VST3 and first

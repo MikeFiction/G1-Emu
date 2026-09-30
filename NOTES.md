@@ -334,6 +334,23 @@ Applied to a build copy; the Gearmulator clone is never modified.
   found it first.
 - The core's **interpreter** has the same LE mistake on IFcc and Bcc (Z = 1, N != V). Not fixed:
   G1-Emu never runs it (`G1_INTERP` is unusable with the G1's main loop), and `jitdiff` says so.
+- **"Volatile" program memory that never went away** (`jit.cpp`, `Jit::checkPMemWrite`, #6). When
+  DSP code writes to P memory where a block is compiled, the core destroys the block and also puts
+  the address in `m_volatileP` for good: every later block stops there, so the code around it
+  runs one instruction per block. The OS writes module code into P memory on every patch load and
+  every module or cable added from the editor, over the previous patch's compiled code, so the marks
+  piled up for the whole session. After 30 uploads DSP 0 ran `$36e`–`$37f` and beyond one
+  instruction per block on every sample: the same instructions, to the cycle, in 3.3 times as many
+  blocks, and the emulator 25 % slower (3.5× → 2.6× real time offline, where it levelled off). A
+  heavy patch then no longer fit in real time and crackled until a restart, which is what Javier
+  heard with fast audio-rate modulation. The marks are not needed for correctness: a block ends
+  right after a P write, so it never runs code it has just changed, and G1-Emu does not link blocks,
+  so the destroyed block is recompiled on the next entry. The mark is now skipped;
+  `G1_VOLATILE_P=1` brings it back, to compare. Found with `G1_BEFORE` (many uploads) plus
+  `--bench` (blocks per second rising while instructions stay the same) and `G1_PCHIST` (the
+  one-instruction blocks). It changes when some interrupts land by a few cycles, so the golden WAV
+  of `WavetableSynth.pch`, which uses S&H, is no longer byte-identical: same pitch, same spectral
+  peaks, both tonal. The other eight are identical, and the reference was recorded again.
 - `tools/jitdiff` finds this kind of bug: it runs instructions from a dump of P memory on the JIT
   and on the interpreter from random states, or runs windows of K instructions as one JIT block
   against the same JIT one instruction per block, and prints every register or memory word that
@@ -539,6 +556,10 @@ Both pass since the fix ([CI run 35570337853](https://github.com/animatek/G1-Emu
   `G1_PREPRESS` can be a knob (`k5=200`) or the dial (`d3`) instead of a button, so a whole panel
   gesture fits in one line (`1.2,1.6,k5=200,2.6`), and what the OS sends to the editor during it
   is printed. `G1_HOLD_END=1` keeps the held key down until every probe is over.
+  `G1_REALTIME=seconds` plays the note in real time with `EmuHost`'s pacing and `AudioBridge`
+  against a simulated 48 kHz card, printing dropouts and lag once per second; `G1_RT_NOTES=60,64,...`
+  adds notes through MIDI IN and `G1_RT_KNOB=k,ms,from,to` sweeps knob k every ms between those
+  seconds.
 - **Connector indices:** in a `.pch`, connectors go by their `index` in `modules.xml`, which is not
   always the list order (in the Overdrive, `in` is input 0 and `overdrive mod` is 1).
 - **Module battery** (`tools/battery/battery.py`, results in `docs/module-battery.md`): every
