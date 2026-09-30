@@ -257,7 +257,38 @@ namespace g1gui
 
 	// ________________________________________________________________________
 
-	Panel::Panel(g1app::EmuHost& _host) : m_host(_host), m_mc(_host.mc()), m_lcd(_host.mc().getLcd()), m_dial(_host.mc())
+	void KnobDisplay::set(const g1::KnobInfo& _info)
+	{
+		const juce::String top = _info.assigned ? juce::String(_info.moduleName) : juce::String();
+		juce::String bottom = _info.assigned ? juce::String(_info.paramName) : juce::String();
+		juce::String value = _info.assigned && _info.section != 2 ? juce::String(static_cast<int>(_info.value)) : juce::String();
+		const auto t = value.isEmpty() ? top : top.substring(0, 10 - value.length()).paddedRight(' ', 11 - value.length()) + value;
+		if(t == m_top && bottom == m_bottom && _info.assigned == m_assigned)
+			return;
+		m_top = t;
+		m_bottom = bottom;
+		m_assigned = _info.assigned;
+		repaint();
+	}
+
+	void KnobDisplay::paint(juce::Graphics& _g)
+	{
+		const auto r = getLocalBounds().toFloat();
+		_g.setColour(juce::Colour(0xff1c2a0e));
+		_g.fillRoundedRectangle(r, 3.0f);
+		const auto glass = r.reduced(1.5f);
+		_g.setColour(m_assigned ? juce::Colour(0xffa6c83a) : juce::Colour(0xff7d9434));
+		_g.fillRoundedRectangle(glass, 2.0f);
+		if(!m_assigned)
+			return;
+		_g.setColour(juce::Colour(0xff1c2a0e));
+		_g.setFont(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 9.5f, juce::Font::bold));
+		const auto text = glass.reduced(3.0f, 1.0f).toNearestInt();
+		_g.drawText(m_top, text.withHeight(text.getHeight() / 2), juce::Justification::centredLeft, false);
+		_g.drawText(m_bottom, text.withTrimmedTop(text.getHeight() / 2), juce::Justification::centredLeft, false);
+	}
+
+	Panel::Panel(g1app::EmuHost& _host) : m_host(_host), m_mc(_host.mc()), m_lcd(_host.mc().getLcd()), m_dial(_host.mc()), m_knobMap(_host.mc())
 	{
 		addAndMakeVisible(m_lcd);
 		addAndMakeVisible(m_dial);
@@ -337,9 +368,23 @@ namespace g1gui
 
 		// Random: each of the 18 knobs to a value of its own, as if turned by hand. What it
 		// changes is whatever the patch has assigned to them; knobs with nothing assigned do nothing.
-		m_random.setTooltip("Turn the 18 knobs to random positions");
-		m_random.onClick = [this] { randomizeKnobs(); };
+		m_random.setTooltip("Turn the 18 knobs to random positions (double click: back to the patch's values)");
+		m_random.onSingleClick = [this] { randomizeKnobs(); };
+		m_random.onDoubleClick = [this] { restoreKnobs(); };
 		addChildComponent(m_random);
+
+		m_displaysToggle.setTooltip("Show above each knob the module and parameter it moves");
+		m_displaysToggle.setColour(juce::ToggleButton::textColourId, g_textLight);
+		m_displaysToggle.onClick = [this]
+		{
+			setKnobDisplays(m_displaysToggle.getToggleState());
+			m_host.options().knobDisplays = m_displaysToggle.getToggleState();
+			m_host.options().save(g1app::EmuHost::defaultSettingsPath());
+		};
+		addChildComponent(m_displaysToggle);
+		for(auto& d : m_knobDisplays)
+			addChildComponent(d);
+		setKnobDisplays(m_host.options().knobDisplays);
 
 		setExtrasOpen(m_host.options().extrasOpen);
 		startTimerHz(30);
@@ -442,6 +487,7 @@ namespace g1gui
 			const int col = static_cast<int>(i / 3), row = static_cast<int>(i % 3);
 			m_knobs[i].setBounds(colX[col], rowY[row], 66, 66);
 			m_knobLeds[i]->setBounds(colX[col] + 66, rowY[row] - 14, 10, 10);
+			m_knobDisplays[i].setBounds(colX[col] - 8, rowY[row] - 25, 72, 23);
 		}
 
 		// Right: display, modes, slots, navigator, Assign/Morph, Shift and the dial
@@ -466,6 +512,7 @@ namespace g1gui
 		m_status.setBounds(14, 396, getWidth() - 28 - 4 * 32, 30);
 		m_extras.setBounds(getWidth() - 14 - 26 - 96, 399, 26, 24);
 		m_random.setBounds(140, 446, 100, 28);
+		m_displaysToggle.setBounds(260, 446, 180, 28);
 		m_settings.setBounds(getWidth() - 14 - 26, 399, 26, 24);
 		m_report.setBounds(getWidth() - 14 - 26 - 32, 399, 26, 24);
 		m_patreon.setBounds(getWidth() - 14 - 26 - 64, 399, 26, 24);
@@ -477,13 +524,53 @@ namespace g1gui
 		m_extras.setIcon(_open ? IconButton::Icon::ExtrasClose : IconButton::Icon::ExtrasOpen);
 		m_extras.setTooltip(_open ? "Hide the extras" : "Extras: Random and more");
 		m_random.setVisible(_open);
+		m_displaysToggle.setVisible(_open);
 		setSize(1200, _open ? 440 + g_extrasHeight : 440);	// the window follows its content
+	}
+
+	void Panel::setKnobDisplays(const bool _on)
+	{
+		m_displaysToggle.setToggleState(_on, juce::dontSendNotification);
+		for(auto& d : m_knobDisplays)
+			d.setVisible(_on);
 	}
 
 	void Panel::randomizeKnobs()
 	{
+		// Keep the patch's values the first time, and again once the assignments have changed.
+		bool same = m_haveSnapshot;
+		std::array<g1::KnobInfo, 18> now;
+		for(uint32_t k = 0; k < 18; ++k)
+		{
+			now[k] = m_knobMap.read(k);
+			const auto& a = now[k];
+			const auto& b = m_snapshot[k];
+			if(a.assigned != b.assigned || a.slot != b.slot || a.section != b.section || a.module != b.module || a.param != b.param || a.type != b.type)
+				same = false;
+		}
+		if(!same)
+		{
+			m_snapshot = now;
+			m_haveSnapshot = true;
+		}
 		for(auto& k : m_knobs)
-			k.setValue(m_rng.nextInt(256), juce::sendNotificationSync);
+			k.setValue(1 + m_rng.nextInt(254), juce::sendNotificationSync);	// 0 and 255 the OS ignores
+	}
+
+	void Panel::restoreKnobs()
+	{
+		if(!m_haveSnapshot)
+			return;
+		for(uint32_t k = 0; k < 18; ++k)
+		{
+			const auto& s = m_snapshot[k];
+			const auto now = m_knobMap.read(k);
+			// Only where the knob still moves the same parameter, and not the morph groups, whose
+			// value the snapshot does not have.
+			if(!s.assigned || s.section == 2 || !now.assigned || now.slot != s.slot || now.section != s.section || now.module != s.module || now.param != s.param)
+				continue;
+			m_knobs[k].setValue(g1::KnobMap::positionFor(s.value, s.max), juce::sendNotificationSync);
+		}
 	}
 
 	void Panel::reportIssue()
@@ -505,6 +592,9 @@ namespace g1gui
 	void Panel::timerCallback()
 	{
 		m_lcd.repaint();
+		if(m_knobDisplays[0].isVisible())
+			for(uint32_t k = 0; k < 18; ++k)
+				m_knobDisplays[k].set(m_knobMap.read(k));
 		for(auto& [led, bit] : m_ledMap)
 			led->setOn(!(m_mc.ledRow(static_cast<uint32_t>(bit.row)) & (1u << bit.bit)));
 

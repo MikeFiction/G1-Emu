@@ -93,6 +93,7 @@ the four outputs and the links between DSPs; it also has probes for the panel (s
 | `g1Lib/g1duart.h` | The PC PORT: SCN2681 DUART on a parallel bus (GP port + port E). |
 | `g1Lib/g1dsp.*` | A DSP56303 with its HI08 boot ROM, attached to the CPU host port. |
 | `g1Lib/g1lcd.h` | The display (HD44780). |
+| `g1Lib/g1knobs.h` | What each panel knob is assigned to (module, parameter, names, value), read from the OS's tables. |
 | `cmake/Dsp56300.cmake`, `g1Lib/dsp56300.cpp` | DSP core fixes (JIT and DMA), applied to a build copy. |
 | `app/emuhost.*` | The running G1 (flash, MIDI, audio, real time) on its own thread; used by `g1run` and `g1gui`. |
 | `app/g1run.cpp`, `g1.sh` | The console front end. |

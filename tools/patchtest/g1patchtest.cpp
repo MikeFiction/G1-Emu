@@ -10,6 +10,7 @@
 // Useful to test module by module what sounds and what does not, without touching anyone's G1.
 #include "g1Lib/g1mc.h"
 #include "g1Lib/g1dsp.h"
+#include "g1Lib/g1knobs.h"
 
 #include "model/ModuleDescriptions.h"
 #include "model/Patch.h"
@@ -402,6 +403,26 @@ int main(int argc, char** argv)
 	}
 	if(!knobs.empty())
 		run(mc, 200 * g_ms);
+	// G1_KNOBINFO=1: what the OS has on each of the 18 panel knobs (g1knobs.h), as the window shows it.
+	if(std::getenv("G1_KNOBINFO"))
+	{
+		g1::KnobMap map(mc);
+		for(uint32_t k = 0; k < 18; ++k)
+		{
+			const auto i = map.read(k);
+			if(i.assigned)
+				std::printf("KNOB %2u: slot %c section %u module %u (type %u) param %u  \"%s\" / \"%s\"  %u of %u\n", k + 1,
+					'A' + i.slot, i.section, i.module, i.type, i.param, i.moduleName.c_str(), i.paramName.c_str(), i.value, i.max);
+		}
+	}
+	// G1_RAMDUMP=file: the CPU's 1 MB of RAM once the patch and its knobs are in, to find the OS's
+	// own tables by diffing two runs that differ in one thing.
+	if(const char* rd = std::getenv("G1_RAMDUMP"))
+	{
+		std::ofstream out(rd, std::ios::binary);
+		for(uint32_t a = 0x100000; a < 0x200000; ++a)
+			out.put(static_cast<char>(mc.read8(a)));
+	}
 
 	for(uint32_t d = 0; d < g1::g_dspCount; ++d)
 		mc.getDsp(d).resetLinkPeak();

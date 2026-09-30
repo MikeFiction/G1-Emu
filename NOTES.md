@@ -507,6 +507,24 @@ Both pass since the fix ([CI run 35570337853](https://github.com/animatek/G1-Emu
   editor which knob moved; the factory test's table (`$9A56`) names the same twenty in the same
   order, master volume first (`VR1 (Mstr)`, so knob *n* is `VR`*n*`+1` on the board) and `Pedal`
   last.
+- **The knob assignments** (`g1Lib/g1knobs.h`, #13), found by diffing RAM dumps (`G1_RAMDUMP`) of
+  runs that only differ in one assignment, then reading the OS's own Edit-page code. `$110F9A(slot,
+  section, module, param, &moduleName, &paramName)` is the lookup the display uses:
+  - Each slot has a block at `$1AB988 + slot × $6000`. In it, **the knob table** at `+$5C36`: 23
+    entries of 4 bytes, `{section, module, param, -}` (knobs 1–18, then the pedal and the rest, in
+    NME's order); section 0 = common, 1 = poly, 2 = morph; module 0 = nothing assigned.
+  - **Module pointers**, one long per module index: `+$467A` (common) and `+$4C66` (poly). In a
+    module: its type at `+$0E`, the name given in the patch at `+$13`, and its parameters from
+    `+$25`, 8 bytes each, the current value in the fourth.
+  - **Parameter names:** `$1C3B1C + type × 48` holds a pointer to the type's list, 12 bytes per
+    parameter: 11 characters (`Freq coars`, `Pitch MA 1`) and the maximum value. The OS builds it in
+    RAM at boot from the ROM, so the names come from the user's ROM, not from us. Morph (section 2)
+    is named `Morph` (`$15BDD8`) with its groups at `$15BDDE + group × 8`.
+  - The active slot is `$1C3ABE`; with Panel Split on, the two tables at `$145A94` / `$145AA6` say
+    which slot and which of its knobs each panel knob is.
+  - **A knob's position to a value:** value = position × (max + 1) / 256 (measured: 100 → 50, 254 →
+    127 on a 0–127 parameter, 128 → 2 on a 0–3 one). Positions 0 and 255 change nothing, so the
+    window keeps to 1–254.
 - **The ADC returns the previous conversion.** Each read of `$202800` returns the result of the
   previous conversion and starts a new one on the selected channel. At runtime the OS selects the
   next channel, reads, and stores the value in the previous one (`$1041BE`); at boot it selects and
@@ -556,6 +574,8 @@ Both pass since the fix ([CI run 35570337853](https://github.com/animatek/G1-Emu
   `G1_PREPRESS` can be a knob (`k5=200`) or the dial (`d3`) instead of a button, so a whole panel
   gesture fits in one line (`1.2,1.6,k5=200,2.6`), and what the OS sends to the editor during it
   is printed. `G1_HOLD_END=1` keeps the held key down until every probe is over.
+  `G1_KNOBINFO=1` lists what each panel knob moves, as the window's displays show it;
+  `G1_RAMDUMP=file` writes the CPU's 1 MB of RAM once the patch and its knobs are in.
   `G1_REALTIME=seconds` plays the note in real time with `EmuHost`'s pacing and `AudioBridge`
   against a simulated 48 kHz card, printing dropouts and lag once per second; `G1_RT_NOTES=60,64,...`
   adds notes through MIDI IN and `G1_RT_KNOB=k,ms,from,to` sweeps knob k every ms between those

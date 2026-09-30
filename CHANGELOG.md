@@ -7,6 +7,18 @@ Older entries cite their commit by hand.
 
 ## 2026-09-30
 
+- **Parameter displays above the knobs, and double-click on Random (Claude, requested by Javier;
+  #13).** `g1Lib/g1knobs.h` reads from the OS's own tables what each panel knob is assigned to: the
+  module's name in the patch, the parameter's short name as the OS shows it in Edit mode (from the
+  user's ROM, built into RAM at boot), its value and its range, following the active slot and
+  Panel Split. The extras drawer gets a **Parameter displays** switch (remembered as
+  `knobDisplays`) that puts a small LCD above each knob with module, value and parameter. Random
+  now keeps the patch's values before its first use, and a **double click** turns each knob back
+  to the exact position that gives that value (value = position × (max + 1) / 256, measured).
+  `g1patchtest` gains `G1_KNOBINFO` and `G1_RAMDUMP`; the tables are in `NOTES.md`. Verified: the
+  reader lists `WavetableSynth.pch`'s nine knobs as the `.pch` assigns them; Javier checked the
+  displays on screen with a mixer patch, and that Random then a double click brings the original
+  sound back.
 - **Extras drawer with Random (Claude, requested by Javier; #12).** A chevron next to the icon
   buttons opens a drawer below the panel (the window grows 60 px; `extrasOpen` in `settings.conf`
   remembers it). Its first control, **Random**, turns the 18 knobs to random positions, as if by

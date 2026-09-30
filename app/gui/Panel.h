@@ -6,10 +6,13 @@
 // this thread. Where every button and LED sits in the matrices: see NOTES.md, "The panel".
 
 #include "emuhost.h"
+#include "g1Lib/g1knobs.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <array>
+#include <functional>
+#include <utility>
 #include <memory>
 #include <vector>
 
@@ -78,6 +81,43 @@ namespace g1gui
 		Icon m_icon;
 	};
 
+	// A small display above a knob, in the colours of the G1's own: the module and value on
+	// top, the parameter below, as the OS names them. Blank when the knob has nothing.
+	class KnobDisplay : public juce::Component
+	{
+	public:
+		void set(const g1::KnobInfo& _info);
+		void paint(juce::Graphics& _g) override;
+	private:
+		juce::String m_top, m_bottom;
+		bool m_assigned = false;
+	};
+
+	// A button that also answers a double click (Random: back to the patch's values). The double
+	// click arrives on the second press, and its release would still be a click: that one is eaten.
+	class DoubleClickButton : public juce::TextButton
+	{
+	public:
+		using juce::TextButton::TextButton;
+		std::function<void()> onSingleClick, onDoubleClick;
+		void mouseDoubleClick(const juce::MouseEvent&) override
+		{
+			m_eatClick = true;
+			if(onDoubleClick)
+				onDoubleClick();
+		}
+	protected:
+		void clicked() override
+		{
+			if(std::exchange(m_eatClick, false))
+				return;
+			if(onSingleClick)
+				onSingleClick();
+		}
+	private:
+		bool m_eatClick = false;
+	};
+
 	class KnobLook : public juce::LookAndFeel_V4
 	{
 	public:
@@ -99,6 +139,8 @@ namespace g1gui
 		void reportIssue();
 		void setExtrasOpen(bool _open);
 		void randomizeKnobs();
+		void restoreKnobs();
+		void setKnobDisplays(bool _on);
 
 		g1app::EmuHost& m_host;
 		g1::Microcontroller& m_mc;
@@ -134,8 +176,17 @@ namespace g1gui
 		// The extras drawer below the panel: what the hardware never had. Closed, the window is
 		// the panel alone.
 		bool m_extrasOpen = false;
-		juce::TextButton m_random{"Random"};
+		DoubleClickButton m_random{"Random"};
+		juce::ToggleButton m_displaysToggle{"Parameter displays"};
 		juce::Random m_rng;
+
+		// What each knob is assigned to, from the OS's tables (g1knobs.h), and the displays.
+		g1::KnobMap m_knobMap;
+		std::array<KnobDisplay, 18> m_knobDisplays;
+		// The patch's values, taken before the first Random, so a double click can put them
+		// back. Dropped when the knobs' assignments change (another patch).
+		std::array<g1::KnobInfo, 18> m_snapshot{};
+		bool m_haveSnapshot = false;
 		juce::TooltipWindow m_tooltips{this, 500};
 		double m_peakHold = 0;
 		uint64_t m_lastMidiIn = 0;

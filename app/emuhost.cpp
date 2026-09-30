@@ -122,6 +122,7 @@ namespace g1app
 			else if(key == "rom")			rom = value;
 			else if(key == "showDisclaimer") showDisclaimer = value != "0";
 			else if(key == "extrasOpen")	extrasOpen = value != "0";
+			else if(key == "knobDisplays")	knobDisplays = value != "0";
 			else if(key == "pcPortOutDevice") pcPortOutDevice = value;
 			else if(key == "pcPortInDevice")  pcPortInDevice = value;
 			else if(key == "midiOutDevice")   midiOutDevice = value;
@@ -145,6 +146,7 @@ namespace g1app
 		  << "rom = " << rom << "\n"
 		  << "showDisclaimer = " << (showDisclaimer ? 1 : 0) << "\n"
 		  << "extrasOpen = " << (extrasOpen ? 1 : 0) << "\n"
+		  << "knobDisplays = " << (knobDisplays ? 1 : 0) << "\n"
 		  << "pcPortOutDevice = " << pcPortOutDevice << "\n"
 		  << "pcPortInDevice = " << pcPortInDevice << "\n"
 		  << "midiOutDevice = " << midiOutDevice << "\n"

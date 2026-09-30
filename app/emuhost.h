@@ -46,6 +46,7 @@ namespace g1app
 			std::string rom;					// the ROM to use; empty: look for one (romfinder.h)
 			bool showDisclaimer = false;		// the notice at startup; the window can turn it back on
 			bool extrasOpen = false;			// the window's extras drawer (Random...) was left open
+			bool knobDisplays = false;			// a display above each knob with what it is assigned to
 
 			// Manual MIDI device pairing (JUCE backend only): the name of an existing system MIDI
 			// device to open instead of creating an owned port, one per direction. Empty means try
