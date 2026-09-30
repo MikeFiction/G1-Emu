@@ -18,16 +18,15 @@ namespace g1gui
 		constexpr MatrixBit g_btnA{0, 2}, g_btnB{0, 3}, g_btnC{0, 4}, g_btnD{0, 5};
 		constexpr MatrixBit g_btnStore{0, 6}, g_btnSystem{0, 7}, g_btnEdit{1, 2}, g_btnPatchLoad{1, 3};
 		constexpr MatrixBit g_btnUp{1, 4}, g_btnLeft{1, 5}, g_btnDown{1, 6}, g_btnRight{1, 7};
-		constexpr MatrixBit g_btnPanelSplit{2, 2}, g_btnFind{2, 3}, g_btnOctDown{2, 4};
-		constexpr MatrixBit g_btnOctUp{2, 5}, g_btnAssign{2, 6}, g_btnShift{2, 7};
+		constexpr MatrixBit g_btnPanelSplit{2, 2}, g_btnFind{2, 3}, g_btnAssign{2, 6}, g_btnShift{2, 7};
+		// Oct Shift -/+ ({2, 4} and {2, 5}) and their five LEDs belong to the keyboard model: the
+		// rack's OS keeps the value per slot but neither lights the LEDs nor transposes anything,
+		// so the window leaves them out (#11). See NOTES.md, "The panel".
 
 		// LEDs (active low). Knob LEDs: knob k (0-17) in row k%3, bit 1+k/3.
 		constexpr std::array<MatrixBit, 4> g_slotLeds = {MatrixBit{0, 7}, MatrixBit{1, 7}, MatrixBit{2, 7}, MatrixBit{3, 7}};
 		constexpr std::array<MatrixBit, 4> g_modeLeds = {MatrixBit{3, 3}, MatrixBit{3, 4}, MatrixBit{3, 5}, MatrixBit{3, 6}};
 		constexpr MatrixBit g_panelSplitLed{3, 2};
-		// Oct Shift, from −2 to +2: the OS lights one of these five for the octave of the
-		// active slot ($1C3AB8 + slot). The rack never does, see below.
-		constexpr std::array<MatrixBit, 5> g_octLeds = {MatrixBit{0, 0}, MatrixBit{1, 0}, MatrixBit{2, 0}, MatrixBit{3, 0}, MatrixBit{3, 1}};
 
 		const juce::Colour g_chassis(0xffb21f2d), g_face(0xff2b2346), g_panel(0xffc9c9c6), g_groupLine(0xffe0a040);
 		const juce::Colour g_textDark(0xff2b2346), g_textLight(0xffe8e8f0);
@@ -127,6 +126,57 @@ namespace g1gui
 		_g.drawRoundedRectangle(r, 4.0f, 1.0f);
 	}
 
+	void IconButton::paintButton(juce::Graphics& _g, const bool _over, const bool _down)
+	{
+		auto r = getLocalBounds().toFloat().reduced(1.0f);
+		if(_down)
+			r = r.translated(0, 1.0f);
+		_g.setColour(juce::Colour(0xff1b1b1e).brighter(_over ? 0.35f : 0.15f));
+		_g.fillRoundedRectangle(r, 4.0f);
+
+		// Drawn on a 24 x 24 grid and scaled into the button.
+		juce::Path p;
+		switch(m_icon)
+		{
+		case Icon::Settings:
+			// Eight teeth and a ring, all overlapping: non-zero winding fills them as one. The
+			// hole is painted over it below, in the button's colour.
+			for(int i = 0; i < 8; ++i)
+			{
+				juce::Path tooth;
+				tooth.addRoundedRectangle(10.5f, 1.5f, 3.0f, 5.0f, 0.8f);
+				tooth.applyTransform(juce::AffineTransform::rotation(juce::MathConstants<float>::twoPi * static_cast<float>(i) / 8.0f, 12.0f, 12.0f));
+				p.addPath(tooth);
+			}
+			p.addEllipse(4.5f, 4.5f, 15.0f, 15.0f);
+			break;
+		case Icon::Report:
+			p.startNewSubPath(12.0f, 2.0f);
+			p.lineTo(23.0f, 21.5f);
+			p.lineTo(1.0f, 21.5f);
+			p.closeSubPath();
+			p = p.createPathWithRoundedCorners(2.0f);
+			p.setUsingNonZeroWinding(false);	// the exclamation mark is cut out of the triangle
+			p.addRoundedRectangle(10.6f, 8.0f, 2.8f, 7.5f, 1.2f);
+			p.addEllipse(10.5f, 16.8f, 3.0f, 3.0f);
+			break;
+		case Icon::Patreon:
+			p.addEllipse(8.0f, 2.0f, 14.0f, 14.0f);
+			p.addRectangle(2.0f, 2.0f, 4.0f, 20.0f);
+			break;
+		}
+		const auto icon = r.reduced(5.0f);
+		_g.setColour(juce::Colour(0xffe8e8f0).withAlpha(isEnabled() ? 1.0f : 0.4f));
+		_g.fillPath(p, p.getTransformToScaleToFit(icon, true));
+		if(m_icon == Icon::Settings)
+		{
+			const float scale = std::min(icon.getWidth(), icon.getHeight()) / 24.0f;
+			const float d = 7.0f * scale;
+			_g.setColour(juce::Colour(0xff1b1b1e).brighter(_over ? 0.35f : 0.15f));
+			_g.fillEllipse(icon.getCentreX() - d / 2.0f, icon.getCentreY() - d / 2.0f, d, d);
+		}
+	}
+
 	// One detent every 8 pixels of drag, or one per wheel click; the pointer turns with it so
 	// that the movement can be seen.
 	void DialView::turn(const int _detents)
@@ -221,15 +271,6 @@ namespace g1gui
 		m_panelSplitLed = &addLed(g_panelSplitLed);
 		m_panelSplit = &addButton("Panel Split", g_btnPanelSplit);
 		m_find = &addButton("Find", g_btnFind);
-		m_oct[0] = &addButton("Oct Shift -", g_btnOctDown);
-		m_oct[1] = &addButton("Oct Shift +", g_btnOctUp);
-		// The octave shift moves the keyboard of the keyboard model, which the rack has not:
-		// its OS keeps the value per slot (it travels in the patch) but neither lights the
-		// LEDs nor transposes anything. See NOTES.md, "The panel".
-		for(auto* b : m_oct)
-			b->setTooltip(b->getName() + ": the keyboard model's; the rack OS keeps the value but does not use it");
-		for(size_t i = 0; i < m_octLeds.size(); ++i)
-			m_octLeds[i] = &addLed(g_octLeds[i]);
 
 		const char* modes[] = {"Store", "System", "Edit", "Patch/Load"};
 		const MatrixBit modeBits[] = {g_btnStore, g_btnSystem, g_btnEdit, g_btnPatchLoad};
@@ -261,6 +302,15 @@ namespace g1gui
 		m_settings.setTooltip("Audio driver, output level and raw MIDI");
 		m_settings.onClick = [this] { SettingsView::show(m_host, this); };
 		addAndMakeVisible(m_settings);
+
+		// Also not on the hardware: a new GitHub issue with what we always have to ask for.
+		m_report.setTooltip("Open a new issue on GitHub, with this build and setup filled in");
+		m_report.onClick = [this] { reportIssue(); };
+		addAndMakeVisible(m_report);
+
+		m_patreon.setTooltip("Support G1-Emu and Animatek NME on Patreon");
+		m_patreon.onClick = [] { juce::URL("https://www.patreon.com/c/animatek").launchInDefaultBrowser(); };
+		addAndMakeVisible(m_patreon);
 
 		setSize(1200, 440);
 		startTimerHz(30);
@@ -319,7 +369,6 @@ namespace g1gui
 		label("Panel Split", m_panelSplitLed->getBounds().withWidth(80).translated(14, -1), g_textLight, 11.0f, juce::Justification::centredLeft);
 		label("Find", m_find->getBounds().translated(0, -15).withHeight(13), g_textLight);
 		label("Panic", m_find->getBounds().translated(0, m_find->getHeight() + 2).withHeight(12), juce::Colour(0xffe0404a), 10.0f);
-		label("Oct Shift", {20, 283, 110, 14}, g_textLight);
 
 		for(size_t i = 0; i < m_knobs.size(); ++i)
 			label(juce::String(static_cast<int>(i + 1)), m_knobLeds[i]->getBounds().withSizeKeepingCentre(24, 12).translated(0, 13), g_textDark, 10.0f);
@@ -347,10 +396,6 @@ namespace g1gui
 		m_panelSplitLed->setBounds(34, 158, 10, 10);
 		m_panelSplit->setBounds(40, 174, 70, 28);
 		m_find->setBounds(40, 234, 70, 28);
-		for(size_t i = 0; i < m_octLeds.size(); ++i)
-			m_octLeds[i]->setBounds(38 + static_cast<int>(i) * 15, 300, 10, 10);
-		m_oct[0]->setBounds(42, 316, 28, 38);
-		m_oct[1]->setBounds(78, 316, 28, 38);
 
 		// Knobs: 1-3 and 4-6 in the first group, 7-12 in the second, 13-15 and 16-18 in the others
 		const int colX[] = {158, 250, 368, 460, 578, 692};
@@ -380,8 +425,27 @@ namespace g1gui
 		m_shift->setBounds(1128, 178, 40, 28);
 		m_dial.setBounds(1094, 232, 72, 72);
 
-		m_status.setBounds(14, 396, getWidth() - 28 - 86, 30);
-		m_settings.setBounds(getWidth() - 14 - 80, 399, 80, 24);
+		// Settings, Report issue and Patreon: three small icon buttons at the right of the status bar
+		m_status.setBounds(14, 396, getWidth() - 28 - 3 * 32, 30);
+		m_settings.setBounds(getWidth() - 14 - 26, 399, 26, 24);
+		m_report.setBounds(getWidth() - 14 - 26 - 32, 399, 26, 24);
+		m_patreon.setBounds(getWidth() - 14 - 26 - 64, 399, 26, 24);
+	}
+
+	void Panel::reportIssue()
+	{
+		const auto s = m_host.stats();
+		juce::String body;
+		body << "**What happens**\n\n\n**How to reproduce it** (attach the patch if one is involved)\n\n\n"
+			 << "---\n"
+			 << "- G1-Emu: " << G1_BUILD_VERSION << "\n"
+			 << "- System: " << juce::SystemStats::getOperatingSystemName() << ", "
+			 << juce::SystemStats::getCpuModel() << " (" << juce::SystemStats::getNumCpus() << " threads)\n"
+			 << "- Audio: " << juce::String(s.audio) << "\n"
+			 << "- MIDI: " << juce::String(s.midi) << (s.rawMidi.empty() ? juce::String() : ", raw: " + juce::String(s.rawMidi)) << "\n"
+			 << "- " << juce::String::formatted("speed %.1f%%, load %.0f%%", s.speed, s.load)
+			 << ", dropouts " << juce::String(static_cast<juce::int64>(s.xruns)) << "\n";
+		juce::URL("https://github.com/animatek/G1-Emu/issues/new?body=" + juce::URL::addEscapeChars(body, true)).launchInDefaultBrowser();
 	}
 
 	void Panel::timerCallback()

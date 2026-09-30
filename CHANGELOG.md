@@ -7,6 +7,14 @@ Older entries cite their commit by hand.
 
 ## 2026-09-30
 
+- **The window loses Oct Shift and gains Patreon, Report issue and Settings as icons (Claude,
+  requested by Javier; #10, #11).** The Oct Shift buttons, their five LEDs and the label are gone:
+  they belong to the keyboard model and the rack's OS does nothing with them. At the right of the
+  status bar, three small icon buttons: Patreon (opens the Animatek page), Report issue (a new
+  GitHub issue prefilled with the build's `git describe`, the system and CPU, the audio and MIDI
+  in use, speed, load and dropouts) and Settings. The panel now has a tooltip window, so those
+  three, the knobs and the dial show what they are. Verified: builds; Javier checked the panel,
+  the icons and both links on screen.
 - **The emulator no longer slows down with every patch load (Claude, requested by Javier; #6).**
   The DSP core marked program memory that the OS rewrote as "volatile" and never forgot it, so
   code the OS loaded over a previous patch ran one instruction per JIT block from then on. After

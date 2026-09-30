@@ -65,6 +65,18 @@ namespace g1gui
 		float m_angle = 0;
 	};
 
+	// A small square button with an icon instead of text, for what is not on the hardware
+	// (Settings, Report issue, Patreon). The tooltip says what it does.
+	class IconButton : public juce::Button
+	{
+	public:
+		enum class Icon { Settings, Report, Patreon };
+		IconButton(const juce::String& _name, Icon _icon) : juce::Button(_name), m_icon(_icon) {}
+		void paintButton(juce::Graphics& _g, bool _over, bool _down) override;
+	private:
+		Icon m_icon;
+	};
+
 	class KnobLook : public juce::LookAndFeel_V4
 	{
 	public:
@@ -83,6 +95,7 @@ namespace g1gui
 		void timerCallback() override;
 		PanelButton& addButton(const juce::String& _name, MatrixBit _bit);
 		LedView& addLed(MatrixBit _bit);
+		void reportIssue();
 
 		g1app::EmuHost& m_host;
 		g1::Microcontroller& m_mc;
@@ -100,8 +113,6 @@ namespace g1gui
 		LedView* m_panelSplitLed = nullptr;
 		PanelButton* m_panelSplit = nullptr;
 		PanelButton* m_find = nullptr;
-		std::array<PanelButton*, 2> m_oct{};
-		std::array<LedView*, 5> m_octLeds{};
 		std::array<PanelButton*, 4> m_modeButtons{};	// Store, System, Edit, Patch/Load
 		std::array<LedView*, 4> m_modeLeds{};
 		std::array<PanelButton*, 4> m_slotButtons{};	// A-D
@@ -112,7 +123,10 @@ namespace g1gui
 		DialView m_dial;
 
 		juce::Label m_status;
-		juce::TextButton m_settings{"Settings"};
+		IconButton m_settings{"Settings", IconButton::Icon::Settings};
+		IconButton m_report{"Report issue", IconButton::Icon::Report};
+		IconButton m_patreon{"Patreon", IconButton::Icon::Patreon};
+		juce::TooltipWindow m_tooltips{this, 500};
 		double m_peakHold = 0;
 		uint64_t m_lastMidiIn = 0;
 		int m_midiHold = 0;
