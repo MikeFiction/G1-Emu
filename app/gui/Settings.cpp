@@ -1,5 +1,7 @@
 #include "Settings.h"
 
+#include "Panel.h"
+
 #include "romfinder.h"
 #ifdef G1_BACKEND_JUCE
 #include "juceaudio.h"
@@ -48,18 +50,6 @@ namespace g1gui
 	}
 
 	// The same text as the README's "Please read this first".
-	const char* disclaimerText()
-	{
-		return
-			"G1-Emu is an independent, open-source emulator of the Nord Modular G1.\n\n"
-			"- It is not affiliated with, endorsed by or connected to Clavia DMI in any way. "
-			"\"Nord\" and \"Nord Modular\" are trademarks of Clavia DMI.\n\n"
-			"- No ROMs or firmware are included, and none will ever be provided. Please do not ask "
-			"for them: you will not find them here.\n\n"
-			"- There is no support. This is a pre-alpha community project, made in spare time. Bug "
-			"reports and contributions are welcome on GitHub; requests for help, ROMs or builds are not.";
-	}
-
 	void SettingsView::show(g1app::EmuHost& _host, juce::Component*)
 	{
 		if(SettingsWindow::s_open)

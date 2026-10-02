@@ -1,7 +1,19 @@
 # Standalone instances and VST3 hosting
 
 Design proposal, 2026-09-20. Requested by Javier; researched by Codex.
-This is a delivery plan, not implemented multi-instance or plugin support.
+
+**Status, 2026-09-30:** the minimal VST3 instrument exists (`app/plugin/`, issue #7): the shared
+engine (`app/engine.*`) is extracted and `EmuHost` sits on it, the plugin paces it by the host's
+blocks with a reported latency, keeps user state (never the OS) in the project, and runs several
+instances in one process. See `CLAUDE.md`, "The VST3". Still open: multi-instance standalone
+(profiles, endpoint lifetime), the editor connection for a plugin instance (#8), and panel
+commands through an engine boundary instead of the shared `Microcontroller`.
+
+**2026-10-02:** a plugin instance now reaches an editor through a virtual MIDI port of its own,
+`G1-Emu PC Port` (`G1-Emu 2 PC Port` and so on, by live instance), created by the processor and
+fed by the runner's worker. It is the hardware's name rather than the `G1Emu Editor` proposed
+below, so NME and the standalone agree. It does not cover Windows, where JUCE cannot create the
+port; the direct link of #8 remains for that.
 
 ## User-facing contract
 

@@ -1,0 +1,87 @@
+#include "hostconfig.h"
+
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
+
+namespace g1app
+{
+	const char* const HostOptions::audioNames[3] = {"jack", "alsa", "no"};
+
+	std::string defaultFlashPath()
+	{
+#ifdef _WIN32
+		// HOME is normally unset in a native Windows process. Falling back to "." made the
+		// settings and flash follow the executable's working directory, so launching the same
+		// build from Explorer and a terminal produced two independent G1s. APPDATA is the native,
+		// per-user location and remains stable regardless of how the program was started.
+		if(const char* appData = std::getenv("APPDATA"))
+			return (std::filesystem::path(appData) / "Animatek/G1-Emu/flash.bin").string();
+#endif
+		const char* home = std::getenv("HOME");
+		return std::string(home ? home : ".") + "/.local/share/Animatek/G1-Emu/flash.bin";
+	}
+
+	std::string defaultSettingsPath()
+	{
+		return (std::filesystem::path(defaultFlashPath()).parent_path() / "settings.conf").string();
+	}
+
+	bool HostOptions::load(const std::string& _path)
+	{
+		std::ifstream f(_path);
+		if(!f)
+			return false;
+		std::string line;
+		while(std::getline(f, line))
+		{
+			const auto eq = line.find('=');
+			if(line.empty() || line[0] == '#' || eq == std::string::npos)
+				continue;
+			auto trim = [](std::string _s)
+			{
+				const auto a = _s.find_first_not_of(" \t\r");
+				const auto b = _s.find_last_not_of(" \t\r");
+				return a == std::string::npos ? std::string() : _s.substr(a, b - a + 1);
+			};
+			const auto key = trim(line.substr(0, eq));
+			const auto value = trim(line.substr(eq + 1));
+			if(key == "audio")				audio = value;
+			else if(key == "gainDb")		gainDb = static_cast<float>(std::atof(value.c_str()));
+			else if(key == "jackConnect")	jackConnect = value != "0";
+			else if(key == "rawMidiCard")	rawMidiCard = value;
+			else if(key == "rom")			rom = value;
+			else if(key == "showDisclaimer") showDisclaimer = value != "0";
+			else if(key == "extrasOpen")	extrasOpen = value != "0";
+			else if(key == "knobDisplays")	knobDisplays = value != "0";
+			else if(key == "pcPortOutDevice") pcPortOutDevice = value;
+			else if(key == "pcPortInDevice")  pcPortInDevice = value;
+			else if(key == "midiOutDevice")   midiOutDevice = value;
+			else if(key == "midiInDevice")    midiInDevice = value;
+		}
+		return true;
+	}
+
+	bool HostOptions::save(const std::string& _path) const
+	{
+		std::error_code ec;
+		std::filesystem::create_directories(std::filesystem::path(_path).parent_path(), ec);
+		std::ofstream f(_path, std::ios::trunc);
+		if(!f)
+			return false;
+		f << "# G1-Emu settings. The G1_* environment variables still win over this file.\n"
+		  << "audio = " << audio << "\n"
+		  << "gainDb = " << gainDb << "\n"
+		  << "jackConnect = " << (jackConnect ? 1 : 0) << "\n"
+		  << "rawMidiCard = " << rawMidiCard << "\n"
+		  << "rom = " << rom << "\n"
+		  << "showDisclaimer = " << (showDisclaimer ? 1 : 0) << "\n"
+		  << "extrasOpen = " << (extrasOpen ? 1 : 0) << "\n"
+		  << "knobDisplays = " << (knobDisplays ? 1 : 0) << "\n"
+		  << "pcPortOutDevice = " << pcPortOutDevice << "\n"
+		  << "pcPortInDevice = " << pcPortInDevice << "\n"
+		  << "midiOutDevice = " << midiOutDevice << "\n"
+		  << "midiInDevice = " << midiInDevice << "\n";
+		return f.good();
+	}
+}

@@ -75,6 +75,15 @@ jobs:
           ref: 8.0.12
           path: JUCE
 
+      # For the CLAP build of the plugin. Pinned: the first commit known to build against JUCE 8.0.12.
+      - name: clap-juce-extensions
+        uses: actions/checkout@v4
+        with:
+          repository: free-audio/clap-juce-extensions
+          ref: 55525c9858d4b25687be7759a5e0f70eccef218e
+          path: clap-juce-extensions
+          submodules: recursive
+
       - name: Linux build dependencies
         if: runner.os == 'Linux'
         run: |
@@ -88,6 +97,7 @@ jobs:
           cmake -B build -S G1-Emu -DCMAKE_BUILD_TYPE=Release
           -DGEARMULATOR_DIR=${{ github.workspace }}/gearmulator-md-mm
           -DG1_JUCE_DIR=${{ github.workspace }}/JUCE
+          -DG1_CLAP_DIR=${{ github.workspace }}/clap-juce-extensions
           -DG1_BACKEND=${{ matrix.backend }}
           ${{ matrix.extra_cmake }}
 
@@ -128,6 +138,8 @@ jobs:
           mkdir -p package
           cp build/app/g1run package/
           cp -R build/app/gui/g1gui_artefacts/Release/G1-Emu* package/
+          cp -R build/app/plugin/g1plugin_artefacts/Release/VST3/G1-Emu.vst3 package/
+          cp -R build/app/plugin/g1plugin_artefacts/Release/CLAP/G1-Emu.clap package/
           cp G1-Emu/README.md G1-Emu/LICENSE package/
           tar -czf G1-Emu-${{ matrix.artifact }}.tar.gz -C package .
 
@@ -138,6 +150,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path package | Out-Null
           Copy-Item build/app/Release/g1run.exe package/
           Copy-Item build/app/gui/g1gui_artefacts/Release/G1-Emu.exe package/
+          Copy-Item -Recurse build/app/plugin/g1plugin_artefacts/Release/VST3/G1-Emu.vst3 package/
+          Copy-Item build/app/plugin/g1plugin_artefacts/Release/CLAP/G1-Emu.clap package/
           Copy-Item G1-Emu/README.md, G1-Emu/WINDOWS.md, G1-Emu/LICENSE package/
 
       - uses: actions/upload-artifact@v4

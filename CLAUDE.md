@@ -58,6 +58,40 @@ the OS puts on the master volume); `G1_THREADS=0` runs the DSPs serially; `G1_RE
 records a 4-channel WAV. The memory map, the loader and the findings are in `NOTES.md`. The
 template is Gearmulator's Nord Lead 2X emulation (`source/nord/n2x`).
 
+## The VST3 (issue #7, beta)
+
+`g1plugin` builds `G1-Emu.vst3` on `g1Core` alone: no ALSA/JACK backend, no file written except
+`rom =` in the settings file when the user picks a ROM by hand. Its one MIDI port is the PC Port:
+`JuceMidi` (`app/jucemidi.h`) creates `G1-Emu PC Port` (`G1-Emu 2 PC Port`... per live instance) in
+the processor, which keeps it across engine swaps, and the runner's worker polls it and sends the
+G1's replies (`G1_PLUGIN_PC_PORT=0` leaves it out; on Windows JUCE makes no virtual port; in CLAP,
+an instance created after the last one in its process closed has none, because JUCE 8 never
+recreates its MIDI endpoints after shutting down). The 18 knobs are `KnobParameter`s, named after
+what they move: the host's changes reach the ADC in `processBlock`, the panel's go to the host from
+a timer, a new engine sets them (`knobsFromEngine`). 128 programs are Program Changes on channel 1,
+since VST3 has no Program Change as MIDI. The same target builds `G1-Emu.clap` when
+`G1_CLAP_DIR` (default `~/src/clap-juce-extensions`, not Gearmulator's older copy) has
+clap-juce-extensions; `clap-validator` passes it. The design is
+`docs/instance-hosting.md`; what matters when touching it:
+
+- **Pacing** (`app/plugin/runner.*`): a worker thread keeps the emulator `ahead` = max block + 5 ms
+  (`G1_PLUGIN_MARGIN_MS`) past what the host has taken, and stops there. Events are queued at
+  `consumed + latency + offset`, where `latency = ahead + guard` (0.5 ms, at least 32 frames): the
+  guard covers the one-DSP-sync overshoot, so no event is ever behind the emulator and each reaches
+  the G1 at the same emulated frame whatever the host's block sizes. `g1runnertest` checks that
+  as bit-identical output between blocks of 256 and random blocks. The audio callback never runs
+  the emulator nor locks; offline it waits for the worker. Underruns are paid back by dropping
+  the late frames, so timing stays locked.
+- **State:** `Engine::userState()` (runs of bytes differing from the factory flash, with a hash of
+  the factory flash so another ROM is refused), gzip + base64 in XML, plus the 256 ADC values, the
+  panel's two preferences and the last Bank Select/Program Change per channel, replayed at boot
+  because the OS does not keep what each slot held. A state that cannot be applied is handed back
+  untouched. A new instance copies the standalone's `flash.bin` (read only).
+- **Engine swaps** (a project's state arriving) happen on the message thread with processing
+  suspended; the editor drops its panel first (`Editor::engineGoing`).
+- Known: a patch load runs slower than real time (host-port syncs), ~0.3 s of dropouts at the
+  Program Change while the G1 is muted anyway. The G1's MIDI OUT still goes nowhere.
+
 ## Two backends for audio and MIDI
 
 `-DG1_BACKEND=native` (the default on Linux) is ALSA sequencer ports and the JACK graph with the
@@ -95,10 +129,13 @@ the four outputs and the links between DSPs; it also has probes for the panel (s
 | `g1Lib/g1lcd.h` | The display (HD44780). |
 | `g1Lib/g1knobs.h` | What each panel knob is assigned to (module, parameter, names, value), read from the OS's tables. |
 | `cmake/Dsp56300.cmake`, `g1Lib/dsp56300.cpp` | DSP core fixes (JIT and DMA), applied to a build copy. |
+| `app/engine.*` | `Engine`: the G1 with nothing around it (ROM in, factory OS in the flash), and its user state as a difference against the factory flash, which never carries the OS. |
+| `app/hostconfig.*` | What every front end shares: the per-user directory, the settings file (`HostOptions`) and the status figures (`HostStats`). |
 | `app/emuhost.*` | The running G1 (flash, MIDI, audio, real time) on its own thread; used by `g1run` and `g1gui`. |
 | `app/g1run.cpp`, `g1.sh` | The console front end. |
 | `app/gui/`, `g1gui.sh` | `g1gui`: the window with the panel. |
 | `app/gui/Settings.*` | The settings window: ROM, audio driver and device, level, raw MIDI card. |
+| `app/plugin/` | The VST3 (`g1plugin`): `Processor`, `Editor` (the same `Panel`, through `PanelHost`), and `runner.*`, which paces the engine by the host's blocks. `g1runnertest` tests the runner without a DAW. |
 | `app/romfinder.*`, `g1Lib/g1rom.h` | Where the ROM comes from, and whether a file is the right one. |
 | `app/audiobridge.h` | Rate conversion and the lock-free queues between the emulator and the card. |
 | `app/miditransport.*` | `MidiTransport`, the interface every way of carrying the G1's MIDI bytes implements, and `makeMidiTransport()`, the one place that picks which. `EmuHost` knows none of them by name. |
@@ -108,6 +145,7 @@ the four outputs and the links between DSPs; it also has probes for the panel (s
 | `tools/g1boot.cpp` | Headless boot and disassembler. |
 | `tools/patchtest/` | `g1patchtest`: the test bench. |
 | `tools/battery/` | `battery.py`: one patch per module type, played and measured (`docs/module-battery.md`). |
+| `tools/vst3check/` | `g1vst3check`: loads the built `.vst3` through JUCE's VST3 host, two instances at once, and checks sound, state, editor, that each PC Port answers NME's greeting on its own port, the knobs as parameters and the host's program. |
 | `tools/dspdis.cpp` | DSP56300 disassembler (hex words on stdin). |
 | `tools/jitdiff.cpp` | Runs DSP instructions on the JIT and on the interpreter (or as one block against one per block) from random states and prints what differs. |
 

@@ -7,6 +7,44 @@ Older entries cite their commit by hand.
 
 ## 2026-10-02
 
+- **The plugin's knobs are automatable, it takes Program Changes in VST3, and it is also a CLAP
+  (Claude, requested by Javier; #14, #7).**
+  - **The 18 knobs as parameters**, named after what each one moves in the patch (`Knob 3: OscA
+    Freq coars`, from the OS's tables) and showing the OS's value. The host's changes reach the G1
+    in `processBlock`; turning a knob on the panel (or Random) goes to the host from a timer, as a
+    gesture; a new engine sets them from its state. The range is the knob's 254 positions. The
+    panel's knobs now follow the G1's positions, so automation moves them on screen.
+  - **Program Changes in VST3**, which carries none as MIDI: 128 programs, sent to the G1 as
+    Program Changes on channel 1 and remembered in the project like one from the track.
+  - **CLAP**: `g1plugin_CLAP` builds `G1-Emu.clap` with clap-juce-extensions (upstream, not
+    Gearmulator's copy, which predates JUCE 8.0.11). `clap-validator` 0.4.1 found and we fixed:
+    state saved before the plugin ever ran was empty (now the settings and knob positions, loaded
+    back as a new instance; saved again as it came while the G1 has not run), knob text that did
+    not read back, and a crash creating the PC Port after the last instance in a process had shut
+    JUCE down (JUCE 8 never recreates its MIDI endpoints: that instance now has no PC Port and says
+    so). The CI checks out clap-juce-extensions and packages `G1-Emu.vst3` and `G1-Emu.clap` on
+    every system.
+  - Checked: `clap-validator` 34 passed, 0 failed; `g1vst3check` all good, now also with the
+    knobs (host sets knob 1 to 0.75, kept after playing, back in a reopened project) and the host's
+    program reaching the project; ctest passes. Not yet tried in Bitwig.
+- **The VST3 has a PC Port: editing an instance from Animatek NME inside a DAW (Claude, requested
+  by Javier).** Each instance creates a virtual MIDI port,
+  **G1-Emu PC Port** (`G1-Emu 2 PC Port` for the second live instance, a freed number is reused),
+  through `JuceMidi` (`app/jucemidi.h`) in the processor, so it survives engine swaps and NME stays
+  connected; the runner's worker polls it on every pass and sends what the G1 puts out on its PC
+  Port, which until now was discarded. Linux and macOS; on Windows JUCE cannot create the port and
+  the instance's Settings say so (the direct link of #8 is still the way there).
+  `G1_PLUGIN_PC_PORT=0` leaves it out. `g1vst3check` now greets each instance's PC Port as NME
+  does: with two instances playing and only A greeted, A answered IAm 5 times and B none; sound,
+  state and editor as before, ctest passes. Not yet tried with NME in Bitwig.
+- **Holding Shift and several slots at once (Claude, requested by Javier).** A mouse presses one button at a time, and the G1 needs two together (Shift + a key,
+  A + B to select several slots). In the panel (window and plugin, `app/gui/Panel.*`): **Shift on
+  the computer's keyboard holds the panel's Shift**, read from the system so it works with the
+  mouse over the panel even without the focus, and stays held until released; **A-D hold the slot
+  buttons**, as many as are pressed (with the panel focused, which a click on it gives); and a
+  **right click (Ctrl+click on a Mac) latches any button** down until the next right click. A
+  held button is drawn down and lit in amber. Checked: `g1gui` and `g1plugin_VST3` build, ctest
+  passes; Javier confirmed the keyboard Shift works.
 - **`g1patchtest --note -1` and `--note-at S` (Claude, requested by Javier).** `--note -1` plays no
   note, so what is measured is what the patch does by itself; `--note-at S` plays the note S
   seconds into the measurement, so one boot measures the patch alone and then with the note (it
@@ -17,6 +55,39 @@ Older entries cite their commit by hand.
   `--note-at`.
 
 ## 2026-09-30
+
+- **First beta of the VST3 instrument (Claude, requested by Javier; #7).** `G1-Emu.vst3` plays the emulated G1 from a DAW track: notes and controllers in,
+  outputs 1/2 and 3/4 out as two stereo buses, In L/R as an optional input, and the same panel as
+  the window for editor. It creates no MIDI port, no audio client and no virtual card.
+  - **The engine is split out** (`app/engine.*`, library `g1Core` with `romfinder` and the new
+    `hostconfig.*`): ROM in, factory OS in the flash, and the user state as the runs of bytes that
+    differ from the factory flash, with a hash that refuses another ROM. The OS never goes into a
+    project. `EmuHost` is built on it; `HostOptions`/`HostStats` moved out of it unchanged
+    (`EmuHost::Options`/`Stats` remain as aliases). The panel takes a `PanelHost` instead of an
+    `EmuHost`, and its knobs start where the G1's ADC is instead of forcing 0 (a reopened plugin
+    editor would otherwise turn all 18). `disclaimerText()` moved to the panel and the missing-ROM
+    message to `romfinder`, shared by the window and the plugin.
+  - **Pacing** (`app/plugin/runner.*`): a worker keeps the emulator one host block + 5 ms ahead of
+    what the host has taken; events are scheduled at a fixed latency (reported to the host) plus
+    their offset, with a 0.5 ms guard so they are never behind the emulator. The audio callback
+    only pulls from a lock-free ring (it waits only when rendering offline); an underrun is paid
+    back by dropping the late frames, so timing stays locked. `AudioBridge` gains a pull mode.
+  - **State in the project:** the flash difference (gzip + base64), the knob positions, the
+    panel's preferences, and the last Bank Select/Program Change per channel, sent again at boot
+    because the OS does not remember what each slot held. A new instance starts from a read-only
+    copy of the standalone's flash. A state that cannot be applied is kept and handed back as it came.
+  - **Tests:** `g1runnertest` (a ctest, skipped without a ROM) and `tools/vst3check`
+    (`g1vst3check`, the built `.vst3` through JUCE's VST3 host).
+  - Verified on Linux (Ryzen 7 5700X): `g1runnertest` renders 8 s offline with blocks of 256 and
+    with random blocks of 1–512 **bit-identical**; a Program Change and note 60 give −19 dBFS, onset
+    784 frames (the reported latency) + 53 frames (the G1's MIDI IN) after the note. In real time,
+    blocks of 256: 0 dropouts over 12 s with the worker at 38 %; with a Program Change, ~0.3 s of
+    dropouts while the patch loads, all over silence (the G1 is muted then). `g1vst3check`: two
+    instances at once in one process, −18.9 and −18.3 dBFS with programs 1 and 2; A's state
+    (357 KB) restored into a third instance plays its patch with no Program Change sent, same
+    latency; the editor opens at 1200×440. `ctest -L g1` passes; `g1run` boots from the same flash
+    and leaves it unchanged; `g1run`, `g1gui` and the plugin also build with `G1_BACKEND=juce`.
+    Not yet checked inside Bitwig itself.
 
 - **Parameter displays above the knobs, and double-click on Random (Claude, requested by Javier;
   #13).** `g1Lib/g1knobs.h` reads from the OS's own tables what each panel knob is assigned to: the

@@ -91,6 +91,7 @@ namespace g1app
 				for(size_t c = 0; c < Outs; ++c)
 					f[c] = std::clamp(static_cast<float>(m_prevOut[c] + (cur[c] - m_prevOut[c]) * m_outPos), -1.0f, 1.0f);
 				m_out.push(f);	// full: the emulator is ahead of the card; dropped
+				m_produced.store(m_produced.load(std::memory_order_relaxed) + 1, std::memory_order_release);
 				m_outPos += step;
 			}
 			m_outPos -= 1.0;
@@ -149,7 +150,49 @@ namespace g1app
 			}
 		}
 
+		// For a consumer that paces the emulator itself instead of buffering against a card that
+		// runs on its own clock (the plugin, plugin/runner.h). No cushion and no trimming: it is the
+		// caller who keeps the emulator exactly as far ahead as it wants.
+		//
+		// Frames produced at the device rate since this bridge was made (emulator thread).
+		uint64_t produced() const { return m_produced.load(std::memory_order_acquire); }
+		size_t queued() const { return m_out.available(); }
+
+		// Up to _frames frames into _outs from _offset on; returns how many there were. The rest is
+		// left untouched (audio thread).
+		size_t pull(float* const* _outs, const size_t _numOuts, const size_t _offset, const size_t _frames)
+		{
+			size_t k = 0;
+			for(std::array<float, Outs> f; k < _frames && m_out.pop(f); ++k)
+				for(size_t c = 0; c < _numOuts && c < Outs; ++c)
+					if(_outs[c])
+						_outs[c][_offset + k] = f[c];
+			return k;
+		}
+
+		// Throws away up to _frames frames; returns how many (audio thread).
+		size_t skip(const size_t _frames)
+		{
+			size_t k = 0;
+			for(std::array<float, Outs> f; k < _frames && m_out.pop(f); ++k) {}
+			return k;
+		}
+
+		// The L/R inputs, for pullInput() to hand to DSP 0 (audio thread).
+		void pushInputs(const float* const* _ins, const size_t _numIns, const size_t _offset, const size_t _frames)
+		{
+			for(size_t k = 0; k < _frames; ++k)
+			{
+				std::array<float, Ins> in{};
+				for(size_t c = 0; c < Ins && c < _numIns; ++c)
+					if(_ins[c])
+						in[c] = _ins[c][_offset + k];
+				m_in.push(in);
+			}
+		}
+
 	private:
+		std::atomic<uint64_t> m_produced{0};
 		std::atomic<float> m_gain;
 		FrameRing<Outs> m_out;
 		FrameRing<Ins> m_in;

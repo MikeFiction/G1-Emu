@@ -4,8 +4,11 @@
 // with their LEDs, the buttons, and a status bar with speed and load. It reads and writes the
 // emulator's panel (Microcontroller: getLcd, ledRow, setButton, setAdc), which can be used from
 // this thread. Where every button and LED sits in the matrices: see NOTES.md, "The panel".
+//
+// The same panel is the window of g1gui and the editor of the plugin: what it needs from
+// whoever runs the G1 is PanelHost.
 
-#include "emuhost.h"
+#include "hostconfig.h"
 #include "g1Lib/g1knobs.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -18,7 +21,28 @@
 
 namespace g1gui
 {
+	// The notice about Clavia, ROMs and support. It is the same text as the README's "Please read
+	// this first", shown in the settings window and, the first time G1-Emu runs, at startup; the plugin shows it
+	// in its Settings.
+	const char* disclaimerText();
+
 	struct MatrixBit { int row = -1, bit = -1; bool known() const { return row >= 0; } };
+
+	// What the panel needs from whoever runs the G1: the G1 itself, the figures for the status
+	// bar, where to keep the panel's own preferences, and what its Settings button opens.
+	class PanelHost
+	{
+	public:
+		virtual ~PanelHost() = default;
+		virtual g1::Microcontroller& mc() = 0;
+		virtual g1app::HostStats stats() = 0;
+		virtual bool extrasOpen() const = 0;
+		virtual void setExtrasOpen(bool _open) = 0;
+		virtual bool knobDisplays() const = 0;
+		virtual void setKnobDisplays(bool _on) = 0;
+		virtual juce::String settingsTooltip() const = 0;
+		virtual void showSettings(juce::Component* _parent) = 0;
+	};
 
 	class LcdView : public juce::Component
 	{
@@ -39,16 +63,25 @@ namespace g1gui
 	};
 
 	// A panel button: while pressed, its matrix bit is 1. Without a known bit it is drawn
-	// greyed out and does nothing.
+	// greyed out and does nothing. A mouse presses one button at a time, so a button can also be
+	// held without it: from the computer's keyboard (Shift, A-D), or latched with a right click
+	// (another right click lets it go). A held button is drawn down and lit.
 	class PanelButton : public juce::Button
 	{
 	public:
 		PanelButton(const juce::String& _name, g1::Microcontroller& _mc, MatrixBit _bit);
 		void paintButton(juce::Graphics& _g, bool _over, bool _down) override;
+		void setKeyHeld(bool _held) { if(_held != m_keyHeld) { m_keyHeld = _held; update(); } }
+		void mouseDown(const juce::MouseEvent& _e) override;
+		void mouseDrag(const juce::MouseEvent& _e) override;
+		void mouseUp(const juce::MouseEvent& _e) override;
 	private:
+		void update();
+		bool held() const { return m_keyHeld || m_latched; }
 		g1::Microcontroller& m_mc;
 		MatrixBit m_bit;
 		bool m_down = false;
+		bool m_keyHeld = false, m_latched = false;
 	};
 
 	// The dial: the rotary encoder to the right of the display. Dragging it up and down or
@@ -127,13 +160,18 @@ namespace g1gui
 	class Panel : public juce::Component, private juce::Timer
 	{
 	public:
-		explicit Panel(g1app::EmuHost& _host);
+		explicit Panel(PanelHost& _host);
 		~Panel() override;
 		void paint(juce::Graphics& _g) override;
 		void resized() override;
+		bool keyPressed(const juce::KeyPress& _key) override;
+		bool keyStateChanged(bool _isKeyDown) override;
+		void mouseDown(const juce::MouseEvent& _e) override;
+		void focusLost(FocusChangeType) override { updateHeldKeys(); }
 
 	private:
 		void timerCallback() override;
+		void updateHeldKeys();
 		PanelButton& addButton(const juce::String& _name, MatrixBit _bit);
 		LedView& addLed(MatrixBit _bit);
 		void reportIssue();
@@ -142,7 +180,7 @@ namespace g1gui
 		void restoreKnobs();
 		void setKnobDisplays(bool _on);
 
-		g1app::EmuHost& m_host;
+		PanelHost& m_host;
 		g1::Microcontroller& m_mc;
 		KnobLook m_knobLook;
 
@@ -164,6 +202,7 @@ namespace g1gui
 		std::array<LedView*, 4> m_slotLeds{};
 		PanelButton* m_assign = nullptr;
 		PanelButton* m_shift = nullptr;
+		bool m_shiftKey = false;	// Shift on the computer's keyboard, held
 		std::array<PanelButton*, 4> m_nav{};			// up, left, right, down
 		DialView m_dial;
 

@@ -121,6 +121,45 @@ want to hear about it.
 - The level is low because the OS itself caps the master volume at −36 dB; it is compensated with
   +36 dB (`G1_GAIN_DB`). More settings in [`CLAUDE.md`](CLAUDE.md).
 
+## The VST3 and CLAP plugin (beta)
+
+The same G1 as an instrument inside a DAW: **notes from the track, audio back to the track**, with
+no JACK client and no virtual MIDI card. Its one MIDI port is the PC Port, for the editor (below).
+Tested on Linux; it builds everywhere the standalone does.
+
+```bash
+cmake --build build --target g1plugin_VST3 g1plugin_CLAP -j$(nproc)
+cp -r build/app/plugin/g1plugin_artefacts/Release/VST3/G1-Emu.vst3 ~/.vst3/
+cp build/app/plugin/g1plugin_artefacts/Release/CLAP/G1-Emu.clap ~/.clap/
+```
+
+The CLAP build needs a clone of [clap-juce-extensions](https://github.com/free-audio/clap-juce-extensions)
+with its submodules in `~/src/clap-juce-extensions` (or `-DG1_CLAP_DIR=...`); without it, only the
+VST3 is built.
+
+- **Outputs 1/2 and 3/4** as two stereo buses, and **In L/R** as an optional input.
+- **The ROM** is found exactly like the standalone finds it; with none, the plugin's window says
+  what it needs and lets you pick the file (remembered in the same settings file).
+- **Each instance has its own G1.** A new one starts from a *copy* of the standalone's flash, so
+  your banks are already there; from then on its patches and synth settings live in the DAW
+  project, never in the standalone's files. What is saved is only what differs from the factory
+  flash — the OS, which is the ROM's, never goes into your project.
+- **The 18 knobs are parameters** the DAW can automate. Each one is named after what it moves in
+  the current patch (`Knob 3: OscA Freq coars`) and shows the value the OS gives it; turning one
+  on the panel moves the parameter too.
+- **Choosing a patch:** a MIDI Program Change (and Bank Select) from the track, or Patch/Load on
+  the panel. VST3 carries no Program Change as MIDI, so the plugin also has 128 programs: a host
+  that sends Program Changes to a VST3 sets those, and they reach the G1 on channel 1. The G1 does not remember what each slot had, so the plugin remembers the last Program
+  Change of each channel and sends it again when the project opens.
+- **Latency** is one host block plus about 5.5 ms, and it is reported to the DAW, which
+  compensates for it: notes land on the exact sample the DAW put them on, whatever the block size.
+- **Editing from Animatek NME:** each instance opens a virtual MIDI port for its PC Port,
+  **G1-Emu PC Port** (the second instance **G1-Emu 2 PC Port**, and so on). Choose it in NME as
+  input and output, as with the hardware. Linux and macOS; on Windows JUCE cannot create the port,
+  and the direct link of [#8](https://github.com/animatek/G1-Emu/issues/8) is what will cover it.
+  `G1_PLUGIN_PC_PORT=0` leaves the port out.
+- Loading a patch mutes the G1 for a moment, as on the hardware.
+
 ## License and credits
 
 GPLv3 (see [`LICENSE`](LICENSE)), because it links Gearmulator. Thanks to The Usual Suspects for

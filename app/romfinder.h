@@ -40,6 +40,10 @@ namespace g1app
 
 	RomSearch findRom(const std::string& _fromCommandLine, const std::string& _fromSettings);
 
+	// What to tell a user whose search found nothing usable: what is needed, where to put it,
+	// and what was wrong with what was there.
+	std::string missingRomMessage(const RomSearch& _search);
+
 	// Reads a ROM and says what it is, without going near the emulator.
 	g1::RomCheck inspectRom(const std::string& _path, std::vector<uint8_t>& _data);
 }

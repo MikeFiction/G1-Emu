@@ -243,6 +243,7 @@ namespace g1
 		// Panel knobs: ADC value for each multiplexer code (what the OS writes to $202000)
 		void setAdc(uint8_t _value) { m_adc.fill(_value); }
 		void setAdc(uint8_t _select, uint8_t _value) { m_adc[_select] = _value; }
+		uint8_t adc(uint8_t _select) const { return m_adc[_select]; }
 		uint32_t getSR() const;
 	private:
 		uint32_t m_sciDataWrites = 0;

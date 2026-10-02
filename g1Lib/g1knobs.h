@@ -46,6 +46,10 @@ namespace g1
 		static constexpr uint32_t PanelSplitOff = 0x18c0e4;	// 0 = split on
 		static constexpr uint32_t SplitSlot = 0x145a94, SplitKnob = 0x145aa6;	// per panel knob, when split
 
+		// Knobs 1-18: their ADC multiplexer channel (Microcontroller::setAdc). Checked by assigning
+		// a knob to each module and moving each channel: the OS tells the editor which knob moved.
+		static constexpr std::array<uint8_t, 18> KnobAdc = {0x31, 0x37, 0x2d, 0x32, 0x28, 0x2e, 0x33, 0x29, 0x2f, 0x34, 0x2a, 0x1a, 0x35, 0x2b, 0x1b, 0x36, 0x2c, 0x1c};
+
 		explicit KnobMap(Microcontroller& _mc) : m_mc(_mc) {}
 
 		// Panel knob 0-17.

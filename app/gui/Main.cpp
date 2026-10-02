@@ -19,18 +19,39 @@
 
 namespace g1gui
 {
+	// The panel's view of EmuHost: its preferences go to the settings file, and Settings opens
+	// the settings window.
+	class WindowHost : public PanelHost
+	{
+	public:
+		explicit WindowHost(g1app::EmuHost& _host) : m_host(_host) {}
+		g1::Microcontroller& mc() override { return m_host.mc(); }
+		g1app::HostStats stats() override { return m_host.stats(); }
+		bool extrasOpen() const override { return m_host.options().extrasOpen; }
+		void setExtrasOpen(const bool _open) override { m_host.options().extrasOpen = _open; save(); }
+		bool knobDisplays() const override { return m_host.options().knobDisplays; }
+		void setKnobDisplays(const bool _on) override { m_host.options().knobDisplays = _on; save(); }
+		juce::String settingsTooltip() const override { return "Audio driver, output level and raw MIDI"; }
+		void showSettings(juce::Component* _parent) override { SettingsView::show(m_host, _parent); }
+	private:
+		void save() { m_host.options().save(g1app::EmuHost::defaultSettingsPath()); }
+		g1app::EmuHost& m_host;
+	};
+
 	class MainWindow : public juce::DocumentWindow
 	{
 	public:
-		MainWindow(g1app::EmuHost& _host) : DocumentWindow("G1-Emu", juce::Colours::black, DocumentWindow::closeButton | DocumentWindow::minimiseButton)
+		MainWindow(g1app::EmuHost& _host) : DocumentWindow("G1-Emu", juce::Colours::black, DocumentWindow::closeButton | DocumentWindow::minimiseButton), m_panelHost(_host)
 		{
 			setUsingNativeTitleBar(true);
-			setContentOwned(new Panel(_host), true);
+			setContentOwned(new Panel(m_panelHost), true);
 			setResizable(false, false);
 			centreWithSize(getWidth(), getHeight());
 			setVisible(true);
 		}
 		void closeButtonPressed() override { juce::JUCEApplication::getInstance()->systemRequestedQuit(); }
+	private:
+		WindowHost m_panelHost;
 	};
 
 	class App : public juce::JUCEApplication

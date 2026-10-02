@@ -20,9 +20,6 @@
 
 namespace g1gui
 {
-	// The notice about Clavia, ROMs and support. It is the same text as the README's "Please read
-	// this first", shown in the settings window and, the first time G1-Emu runs, at startup.
-	const char* disclaimerText();
 
 	class SettingsView : public juce::Component, private juce::Timer
 	{

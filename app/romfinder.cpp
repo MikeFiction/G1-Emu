@@ -1,6 +1,6 @@
 #include "romfinder.h"
 
-#include "emuhost.h"
+#include "hostconfig.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -73,7 +73,7 @@ namespace g1app
 	{
 		std::vector<std::string> out;
 		out.push_back(publicRomFolder());
-		out.push_back((std::filesystem::path(EmuHost::defaultFlashPath()).parent_path() / "roms").string());
+		out.push_back((std::filesystem::path(defaultFlashPath()).parent_path() / "roms").string());
 		addSourceFolders(out);
 		out.erase(std::unique(out.begin(), out.end()), out.end());
 		return out;
@@ -153,5 +153,25 @@ namespace g1app
 			}
 		}
 		return result;
+	}
+
+	std::string missingRomMessage(const RomSearch& _search)
+	{
+		std::string msg = "G1-Emu needs the 512 KB ROM of a Nord Modular rack, and it includes none.\n\n";
+		if(!_search.rejected.empty())
+		{
+			msg += "What was looked at and why it does not serve:\n";
+			for(const auto& [file, why] : _search.rejected)
+				msg += "  " + file + "\n      " + why + "\n";
+			msg += "\n";
+		}
+		msg += "Put a dump of your own unit's ROM in:\n  " + publicRomFolder() + "\n";
+		if(_search.looked.size() > 1)
+		{
+			msg += "\nAlso looked in:\n";
+			for(size_t i = 1; i < _search.looked.size(); ++i)
+				msg += "  " + _search.looked[i] + "\n";
+		}
+		return msg;
 	}
 }

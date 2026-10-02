@@ -1,17 +1,15 @@
 #include "Panel.h"
 
-#include "Settings.h"
 #include "LcdFont.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace g1gui
 {
 	namespace
 	{
-		// Knobs 1-18: their ADC multiplexer channel. Checked by assigning a knob to each
-		// module and moving each channel: the OS tells the editor which knob moved.
-		constexpr std::array<uint8_t, 18> g_knobAdc = {0x31, 0x37, 0x2d, 0x32, 0x28, 0x2e, 0x33, 0x29, 0x2f, 0x34, 0x2a, 0x1a, 0x35, 0x2b, 0x1b, 0x36, 0x2c, 0x1c};
+		constexpr const auto& g_knobAdc = g1::KnobMap::KnobAdc;
 		constexpr uint8_t g_volumeAdc = 0x30;
 
 		// Buttons (matrix row.bit), identified by pressing them one by one with g1patchtest.
@@ -31,6 +29,18 @@ namespace g1gui
 		const juce::Colour g_chassis(0xffb21f2d), g_face(0xff2b2346), g_panel(0xffc9c9c6), g_groupLine(0xffe0a040);
 		const juce::Colour g_textDark(0xff2b2346), g_textLight(0xffe8e8f0);
 		constexpr int g_extrasHeight = 60;	// what the extras drawer adds below the panel
+	}
+
+	const char* disclaimerText()
+	{
+		return
+			"G1-Emu is an independent, open-source emulator of the Nord Modular G1.\n\n"
+			"- It is not affiliated with, endorsed by or connected to Clavia DMI in any way. "
+			"\"Nord\" and \"Nord Modular\" are trademarks of Clavia DMI.\n\n"
+			"- No ROMs or firmware are included, and none will ever be provided. Please do not ask "
+			"for them: you will not find them here.\n\n"
+			"- There is no support. This is a pre-alpha community project, made in spare time. Bug "
+			"reports and contributions are welcome on GitHub; requests for help, ROMs or builds are not.";
 	}
 
 	// ________________________________________________________________________
@@ -101,16 +111,45 @@ namespace g1gui
 			setTooltip(_name + ": not yet identified in the panel matrix");
 			return;
 		}
-		setTooltip(_name);
-		onStateChange = [this]
+		setTooltip(_name + " (right click: hold it down)");
+		setWantsKeyboardFocus(false);	// the keys are the panel's: see Panel::keyPressed
+		onStateChange = [this] { update(); };
+	}
+
+	void PanelButton::update()
+	{
+		const bool down = isDown() || held();
+		if(down != m_down)
 		{
-			const bool down = isDown();
-			if(down != m_down)
-			{
-				m_down = down;
-				m_mc.setButton(static_cast<uint32_t>(m_bit.row), static_cast<uint32_t>(m_bit.bit), down);
-			}
-		};
+			m_down = down;
+			m_mc.setButton(static_cast<uint32_t>(m_bit.row), static_cast<uint32_t>(m_bit.bit), down);
+		}
+		repaint();
+	}
+
+	// A right click (Ctrl+click on a Mac) latches the button instead of pressing it, so several
+	// can be down at once: hold A, click B, and the G1 sees both.
+	void PanelButton::mouseDown(const juce::MouseEvent& _e)
+	{
+		if(!_e.mods.isPopupMenu())
+			return juce::Button::mouseDown(_e);
+		if(isEnabled())
+		{
+			m_latched = !m_latched;
+			update();
+		}
+	}
+
+	void PanelButton::mouseDrag(const juce::MouseEvent& _e)
+	{
+		if(!_e.mods.isPopupMenu())
+			juce::Button::mouseDrag(_e);
+	}
+
+	void PanelButton::mouseUp(const juce::MouseEvent& _e)
+	{
+		if(!_e.mods.isPopupMenu())
+			juce::Button::mouseUp(_e);
 	}
 
 	void PanelButton::paintButton(juce::Graphics& _g, const bool _over, const bool _down)
@@ -118,13 +157,21 @@ namespace g1gui
 		auto r = getLocalBounds().toFloat().reduced(1.5f);
 		_g.setColour(juce::Colours::black.withAlpha(0.5f));
 		_g.fillRoundedRectangle(r.translated(0, 2.0f), 4.0f);
-		if(_down)
+		if(_down || held())
 			r = r.translated(0, 1.5f);
 		const auto base = isEnabled() ? juce::Colour(0xff1b1b1e) : juce::Colour(0xff4a4a50);
 		_g.setGradientFill(juce::ColourGradient(base.brighter(_over ? 0.35f : 0.2f), r.getX(), r.getY(), base, r.getX(), r.getBottom(), false));
 		_g.fillRoundedRectangle(r, 4.0f);
 		_g.setColour(juce::Colours::black);
 		_g.drawRoundedRectangle(r, 4.0f, 1.0f);
+		// Held without the mouse: lit, so it shows that the G1 sees it down.
+		if(held())
+		{
+			_g.setColour(g_groupLine.withAlpha(0.35f));
+			_g.fillRoundedRectangle(r.reduced(2.0f), 3.0f);
+			_g.setColour(g_groupLine);
+			_g.drawRoundedRectangle(r.reduced(0.5f), 4.0f, 2.0f);
+		}
 	}
 
 	void IconButton::paintButton(juce::Graphics& _g, const bool _over, const bool _down)
@@ -288,12 +335,14 @@ namespace g1gui
 		_g.drawText(m_bottom, text.withTrimmedTop(text.getHeight() / 2), juce::Justification::centredLeft, false);
 	}
 
-	Panel::Panel(g1app::EmuHost& _host) : m_host(_host), m_mc(_host.mc()), m_lcd(_host.mc().getLcd()), m_dial(_host.mc()), m_knobMap(_host.mc())
+	Panel::Panel(PanelHost& _host) : m_host(_host), m_mc(_host.mc()), m_lcd(_host.mc().getLcd()), m_dial(_host.mc()), m_knobMap(_host.mc())
 	{
 		addAndMakeVisible(m_lcd);
 		addAndMakeVisible(m_dial);
 
-		auto setupKnob = [this](juce::Slider& _s, const uint8_t _adc, const double _initial, const juce::String& _tip)
+		// Each knob starts where the G1's ADC says it is: the G1 is already running (and in the
+		// plugin, the editor comes and goes), so writing a position here would be turning it.
+		auto setupKnob = [this](juce::Slider& _s, const uint8_t _adc, const juce::String& _tip)
 		{
 			_s.setLookAndFeel(&m_knobLook);
 			_s.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
@@ -301,15 +350,14 @@ namespace g1gui
 			_s.setRange(0, 255, 1);
 			_s.setRotaryParameters(juce::MathConstants<float>::pi * 1.25f, juce::MathConstants<float>::pi * 2.75f, true);
 			_s.setTooltip(_tip);
-			_s.setValue(_initial, juce::dontSendNotification);
+			_s.setValue(m_mc.adc(_adc), juce::dontSendNotification);
 			_s.onValueChange = [this, &_s, _adc] { m_mc.setAdc(_adc, static_cast<uint8_t>(_s.getValue())); };
-			m_mc.setAdc(_adc, static_cast<uint8_t>(_initial));
 			addAndMakeVisible(_s);
 		};
-		setupKnob(m_volume, g_volumeAdc, 255, "Master Volume");
+		setupKnob(m_volume, g_volumeAdc, "Master Volume");
 		for(size_t i = 0; i < m_knobs.size(); ++i)
 		{
-			setupKnob(m_knobs[i], g_knobAdc[i], 0, "Knob " + juce::String(static_cast<int>(i + 1)));
+			setupKnob(m_knobs[i], g_knobAdc[i], "Knob " + juce::String(static_cast<int>(i + 1)));
 			m_knobLeds[i] = &addLed({static_cast<int>(i % 3), 1 + static_cast<int>(i / 3)});
 		}
 
@@ -343,10 +391,10 @@ namespace g1gui
 		m_status.setColour(juce::Label::textColourId, juce::Colours::white);
 		addAndMakeVisible(m_status);
 
-		// Not on the hardware: the audio driver, the level and the raw MIDI card live here
-		// instead of only in the G1_* variables.
-		m_settings.setTooltip("Audio driver, output level and raw MIDI");
-		m_settings.onClick = [this] { SettingsView::show(m_host, this); };
+		// Not on the hardware: what the host lets the user choose (in the window, the audio driver,
+		// the level and the raw MIDI card instead of only the G1_* variables).
+		m_settings.setTooltip(m_host.settingsTooltip());
+		m_settings.onClick = [this] { m_host.showSettings(this); };
 		addAndMakeVisible(m_settings);
 
 		// Also not on the hardware: a new GitHub issue with what we always have to ask for.
@@ -361,8 +409,7 @@ namespace g1gui
 		m_extras.onClick = [this]
 		{
 			setExtrasOpen(!m_extrasOpen);
-			m_host.options().extrasOpen = m_extrasOpen;
-			m_host.options().save(g1app::EmuHost::defaultSettingsPath());
+			m_host.setExtrasOpen(m_extrasOpen);
 		};
 		addAndMakeVisible(m_extras);
 
@@ -378,15 +425,19 @@ namespace g1gui
 		m_displaysToggle.onClick = [this]
 		{
 			setKnobDisplays(m_displaysToggle.getToggleState());
-			m_host.options().knobDisplays = m_displaysToggle.getToggleState();
-			m_host.options().save(g1app::EmuHost::defaultSettingsPath());
+			m_host.setKnobDisplays(m_displaysToggle.getToggleState());
 		};
 		addChildComponent(m_displaysToggle);
 		for(auto& d : m_knobDisplays)
 			addChildComponent(d);
-		setKnobDisplays(m_host.options().knobDisplays);
+		setKnobDisplays(m_host.knobDisplays());
 
-		setExtrasOpen(m_host.options().extrasOpen);
+		setExtrasOpen(m_host.extrasOpen());
+
+		// The computer's keyboard holds what a mouse cannot: Shift, and A-D together. The keys
+		// reach the panel when it has the focus, which a click anywhere on it gives it.
+		setWantsKeyboardFocus(true);
+		addMouseListener(this, true);
 		startTimerHz(30);
 	}
 
@@ -589,9 +640,54 @@ namespace g1gui
 		juce::URL("https://github.com/animatek/G1-Emu/issues/new?body=" + juce::URL::addEscapeChars(body, true)).launchInDefaultBrowser();
 	}
 
+	namespace
+	{
+		constexpr std::array<int, 4> g_slotKeys = {'A', 'B', 'C', 'D'};
+	}
+
+	bool Panel::keyPressed(const juce::KeyPress& _key)
+	{
+		// A-D are the slot buttons, with or without Shift: taken here so the host does not act on them.
+		const int code = juce::CharacterFunctions::toUpperCase(static_cast<juce::juce_wchar>(_key.getKeyCode()));
+		return std::find(g_slotKeys.begin(), g_slotKeys.end(), code) != g_slotKeys.end();
+	}
+
+	bool Panel::keyStateChanged(bool)
+	{
+		updateHeldKeys();
+		return false;
+	}
+
+	void Panel::mouseDown(const juce::MouseEvent&)
+	{
+		if(!hasKeyboardFocus(true))
+			grabKeyboardFocus();
+	}
+
+	// Shift and A-D on the computer's keyboard hold the panel's Shift and slot buttons, as many at
+	// once as are pressed. Shift is read from the system, not from key events, so it also works
+	// while the mouse is over the panel without the focus (a plugin window in a DAW); once down it
+	// stays down until released wherever the mouse goes. Called on every key change and by the timer,
+	// which catches what happens while the panel does not get the events.
+	void Panel::updateHeldKeys()
+	{
+		const bool focused = hasKeyboardFocus(true);
+		const bool shift = juce::ModifierKeys::getCurrentModifiersRealtime().isShiftDown();
+		m_shiftKey = shift && (m_shiftKey || focused || isMouseOver(true));
+		m_shift->setKeyHeld(m_shiftKey);
+		for(size_t i = 0; i < 4; ++i)
+			m_slotButtons[i]->setKeyHeld(focused && juce::KeyPress::isKeyCurrentlyDown(g_slotKeys[i]));
+	}
+
 	void Panel::timerCallback()
 	{
 		m_lcd.repaint();
+		updateHeldKeys();
+		// The knobs follow the G1's own positions, which something else may have moved (the
+		// plugin's host automation), except the one being turned by hand.
+		for(size_t i = 0; i < m_knobs.size(); ++i)
+			if(!m_knobs[i].isMouseButtonDown())
+				m_knobs[i].setValue(m_mc.adc(g_knobAdc[i]), juce::dontSendNotification);
 		if(m_knobDisplays[0].isVisible())
 			for(uint32_t k = 0; k < 18; ++k)
 				m_knobDisplays[k].set(m_knobMap.read(k));

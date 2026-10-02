@@ -63,95 +63,15 @@ namespace g1app
 #endif
 		}
 
-		// The outputs carry DSP 3's X:$5F offset ($155, almost nothing); on the hardware the
-		// output capacitor removes it. It is subtracted so no DC reaches the sound card.
-		constexpr int32_t g_dc = 0x155;
+		// Subtracted so no DC reaches the sound card (see Engine::OutputDc).
+		constexpr int32_t g_dc = Engine::OutputDc;
 	}
-
-	const char* const EmuHost::Options::audioNames[3] = {"jack", "alsa", "no"};
 
 	EmuHost::EmuHost() = default;
 
 	EmuHost::~EmuHost()
 	{
 		stop();
-	}
-
-	std::string EmuHost::defaultFlashPath()
-	{
-#ifdef _WIN32
-		// HOME is normally unset in a native Windows process. Falling back to "." made the
-		// settings and flash follow the executable's working directory, so launching the same
-		// build from Explorer and a terminal produced two independent G1s. APPDATA is the native,
-		// per-user location and remains stable regardless of how the program was started.
-		if(const char* appData = std::getenv("APPDATA"))
-			return (std::filesystem::path(appData) / "Animatek/G1-Emu/flash.bin").string();
-#endif
-		const char* home = std::getenv("HOME");
-		return std::string(home ? home : ".") + "/.local/share/Animatek/G1-Emu/flash.bin";
-	}
-
-	std::string EmuHost::defaultSettingsPath()
-	{
-		return (std::filesystem::path(defaultFlashPath()).parent_path() / "settings.conf").string();
-	}
-
-	bool EmuHost::Options::load(const std::string& _path)
-	{
-		std::ifstream f(_path);
-		if(!f)
-			return false;
-		std::string line;
-		while(std::getline(f, line))
-		{
-			const auto eq = line.find('=');
-			if(line.empty() || line[0] == '#' || eq == std::string::npos)
-				continue;
-			auto trim = [](std::string _s)
-			{
-				const auto a = _s.find_first_not_of(" \t\r");
-				const auto b = _s.find_last_not_of(" \t\r");
-				return a == std::string::npos ? std::string() : _s.substr(a, b - a + 1);
-			};
-			const auto key = trim(line.substr(0, eq));
-			const auto value = trim(line.substr(eq + 1));
-			if(key == "audio")				audio = value;
-			else if(key == "gainDb")		gainDb = static_cast<float>(std::atof(value.c_str()));
-			else if(key == "jackConnect")	jackConnect = value != "0";
-			else if(key == "rawMidiCard")	rawMidiCard = value;
-			else if(key == "rom")			rom = value;
-			else if(key == "showDisclaimer") showDisclaimer = value != "0";
-			else if(key == "extrasOpen")	extrasOpen = value != "0";
-			else if(key == "knobDisplays")	knobDisplays = value != "0";
-			else if(key == "pcPortOutDevice") pcPortOutDevice = value;
-			else if(key == "pcPortInDevice")  pcPortInDevice = value;
-			else if(key == "midiOutDevice")   midiOutDevice = value;
-			else if(key == "midiInDevice")    midiInDevice = value;
-		}
-		return true;
-	}
-
-	bool EmuHost::Options::save(const std::string& _path) const
-	{
-		std::error_code ec;
-		std::filesystem::create_directories(std::filesystem::path(_path).parent_path(), ec);
-		std::ofstream f(_path, std::ios::trunc);
-		if(!f)
-			return false;
-		f << "# G1-Emu settings. The G1_* environment variables still win over this file.\n"
-		  << "audio = " << audio << "\n"
-		  << "gainDb = " << gainDb << "\n"
-		  << "jackConnect = " << (jackConnect ? 1 : 0) << "\n"
-		  << "rawMidiCard = " << rawMidiCard << "\n"
-		  << "rom = " << rom << "\n"
-		  << "showDisclaimer = " << (showDisclaimer ? 1 : 0) << "\n"
-		  << "extrasOpen = " << (extrasOpen ? 1 : 0) << "\n"
-		  << "knobDisplays = " << (knobDisplays ? 1 : 0) << "\n"
-		  << "pcPortOutDevice = " << pcPortOutDevice << "\n"
-		  << "pcPortInDevice = " << pcPortInDevice << "\n"
-		  << "midiOutDevice = " << midiOutDevice << "\n"
-		  << "midiInDevice = " << midiInDevice << "\n";
-		return f.good();
 	}
 
 	bool EmuHost::start(const std::string& _romPath, const std::string& _flashPath, std::string& _log)
@@ -186,21 +106,7 @@ namespace g1app
 		std::vector<uint8_t> rom;
 		if(!search.found() || !inspectRom(search.path, rom).ok())
 		{
-			std::string msg = "G1-Emu needs the 512 KB ROM of a Nord Modular rack, and it includes none.\n\n";
-			if(!search.rejected.empty())
-			{
-				msg += "What was looked at and why it does not serve:\n";
-				for(const auto& [file, why] : search.rejected)
-					msg += "  " + file + "\n      " + why + "\n";
-				msg += "\n";
-			}
-			msg += "Put a dump of your own unit's ROM in:\n  " + publicRomFolder() + "\n";
-			if(search.looked.size() > 1)
-			{
-				msg += "\nAlso looked in:\n";
-				for(size_t i = 1; i < search.looked.size(); ++i)
-					msg += "  " + search.looked[i] + "\n";
-			}
+			const auto msg = missingRomMessage(search);
 			m_romProblem = msg;
 			_log += msg;
 			return false;
@@ -209,19 +115,14 @@ namespace g1app
 		_log += "ROM: " + search.path + "\n";
 
 		m_flashPath = _flashPath.empty() ? defaultFlashPath() : _flashPath;
-		m_mc = std::make_unique<g1::Microcontroller>(rom);
+		m_engine = std::make_unique<Engine>(rom);
+		auto& mc = m_engine->mc();
 
 		std::vector<uint8_t> flash;
-		if(loadFile(m_flashPath, flash) && flash.size() == g1::Flash::Size)
-		{
-			m_mc->getFlash().data() = flash;
+		if(loadFile(m_flashPath, flash) && m_engine->loadFlash(flash))
 			_log += "flash loaded from " + m_flashPath + "\n";
-		}
 		else
-		{
-			m_mc->installRomOsInFlash();
 			_log += "new flash with the factory OS (will be saved in " + m_flashPath + ")\n";
-		}
 
 		m_midi = makeMidiTransport("G1-Emu", _log);
 		if(!m_midi)
@@ -253,7 +154,7 @@ namespace g1app
 				m_juceAudio.reset();
 			}
 			if(m_juceAudio)
-				m_mc->getDsp(0).setInputProvider([this](int32_t& _l, int32_t& _r) { m_juceAudio->pullInput(_l, _r); });
+				mc.getDsp(0).setInputProvider([this](int32_t& _l, int32_t& _r) { m_juceAudio->pullInput(_l, _r); });
 #else
 #ifdef G1_HAVE_JACK
 			if(m_options.audio == "jack")
@@ -262,7 +163,7 @@ namespace g1app
 				if(m_jack->valid())
 				{
 					std::snprintf(buf, sizeof(buf), "JACK G1-Emu at %u Hz, %+.0f dB (out_1..4, in_L/R)", m_jack->rate(), static_cast<double>(gainDb));
-					m_mc->getDsp(0).setInputProvider([this](int32_t& _l, int32_t& _r) { m_jack->pullInput(_l, _r); });
+					mc.getDsp(0).setInputProvider([this](int32_t& _l, int32_t& _r) { m_jack->pullInput(_l, _r); });
 				}
 				else
 					m_jack.reset();
@@ -297,7 +198,7 @@ namespace g1app
 		}
 
 		// One sample per DSP 3 block (96 kHz): the four outputs.
-		m_mc->getDsp(3).setBlockCallback([this](const int32_t _o1, const int32_t _o2, const int32_t _o3, const int32_t _o4)
+		mc.getDsp(3).setBlockCallback([this](const int32_t _o1, const int32_t _o2, const int32_t _o3, const int32_t _o4)
 		{
 #ifdef G1_BACKEND_JUCE
 			if(m_juceAudio)
@@ -396,13 +297,13 @@ namespace g1app
 
 	void EmuHost::saveFlash()
 	{
-		if(!m_mc)
+		if(!m_engine)
 			return;
 		std::filesystem::create_directories(std::filesystem::path(m_flashPath).parent_path());
 		const auto tmp = m_flashPath + ".tmp";
 		{
 			std::ofstream f(tmp, std::ios::binary);
-			const auto& d = m_mc->getFlash().data();
+			const auto& d = m_engine->mc().getFlash().data();
 			f.write(reinterpret_cast<const char*>(d.data()), static_cast<std::streamsize>(d.size()));
 		}
 		std::filesystem::rename(tmp, m_flashPath);
@@ -426,7 +327,7 @@ namespace g1app
 
 	void EmuHost::run()
 	{
-		auto& mc = *m_mc;
+		auto& mc = m_engine->mc();
 		using clock = std::chrono::steady_clock;
 		const auto start = clock::now();
 		auto lastStats = start;
@@ -579,7 +480,7 @@ namespace g1app
 	std::string EmuHost::report()
 	{
 		const auto s = stats();
-		auto& mc = *m_mc;
+		auto& mc = m_engine->mc();
 		char buf[256];
 		std::string r;
 		std::snprintf(buf, sizeof(buf), "[%6.0fs] speed %5.1f%%  load %3.0f%%  CPU %.1f cores  DSP:", s.seconds, s.speed, s.load, s.cpuCores);

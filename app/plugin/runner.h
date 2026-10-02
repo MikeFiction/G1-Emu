@@ -1,0 +1,117 @@
+#pragma once
+
+// Runner: an Engine driven by a DAW's audio blocks instead of the wall clock.
+//
+// A worker thread keeps the emulator exactly `latency()` frames ahead of what the host has taken,
+// and stops there. The audio callback only takes finished frames out of a lock-free ring: it never
+// runs the emulator, never locks and never waits (except when rendering offline, where waiting is
+// the point). The latency is reported to the host, which delays everything else to match.
+//
+// Because the emulator never gets further ahead than that, a MIDI event at offset o of the block
+// that starts at host frame C can be given to the G1 at exactly frame C + latency + o of its
+// output: the notes land where the DAW put them, shifted by the reported latency, whatever the
+// block size. (Then the G1's MIDI IN takes its 1 ms per three bytes, like the hardware.)
+//
+// If the worker falls behind anyway, the callback puts out silence for the missing frames and
+// throws their late copies away when they arrive, so the timing stays locked to the host.
+
+#include "audiobridge.h"
+#include "engine.h"
+#include "hostconfig.h"
+#include "miditransport.h"
+
+#include <array>
+#include <atomic>
+#include <cstdint>
+#include <memory>
+#include <mutex>
+#include <thread>
+#include <vector>
+
+namespace g1app
+{
+	// One producer, one consumer, fixed size, and the consumer can look before it takes.
+	template<typename T, size_t N> class SpscQueue
+	{
+		static_assert((N & (N - 1)) == 0, "a power of two");
+	public:
+		bool push(const T& _v)
+		{
+			const auto w = m_write.load(std::memory_order_relaxed);
+			if(w - m_read.load(std::memory_order_acquire) == N)
+				return false;
+			m_data[w & (N - 1)] = _v;
+			m_write.store(w + 1, std::memory_order_release);
+			return true;
+		}
+		const T* front() const
+		{
+			const auto r = m_read.load(std::memory_order_relaxed);
+			return r == m_write.load(std::memory_order_acquire) ? nullptr : &m_data[r & (N - 1)];
+		}
+		void pop() { m_read.store(m_read.load(std::memory_order_relaxed) + 1, std::memory_order_release); }
+	private:
+		std::array<T, N> m_data{};
+		std::atomic<size_t> m_write{0}, m_read{0};
+	};
+
+	class Runner
+	{
+	public:
+		// Starts the worker. _maxBlock is the largest block the host announced; the latency is that
+		// plus a margin for the worker's own unevenness (G1_PLUGIN_MARGIN_MS, 5 ms by default) and
+		// a guard of 0.5 ms that keeps every event ahead of the emulator.
+		// _pcPort, if given, carries the G1's PC Port (an editor's SysEx) on its port _pcIndex:
+		// the worker polls it and sends the replies. It must outlive the runner.
+		Runner(Engine& _engine, double _rate, size_t _maxBlock, float _gainDb,
+			MidiTransport* _pcPort = nullptr, int _pcIndex = 0);
+		~Runner();	// stops the worker and detaches from the engine; the engine keeps its state
+
+		size_t latency() const { return m_latency; }
+		double rate() const { return m_rate; }
+
+		// Audio thread. First the block's MIDI (offsets within the block), then the block itself.
+		// Only short messages: SysEx from the track is not passed on in this version.
+		void queueMidi(uint32_t _offset, const uint8_t* _data, size_t _size);
+		void process(float* const* _outs, size_t _numOuts, const float* const* _ins, size_t _numIns, size_t _frames, bool _offline);
+
+		void setGainDb(float _gainDb);
+
+		// Held by the worker while it emulates: whoever wants to read the G1's state from
+		// another thread (the flash, to save it) takes it for as long as it reads.
+		std::unique_lock<std::mutex> lockEngine() { return std::unique_lock<std::mutex>(m_engineMutex); }
+
+		HostStats stats();
+
+	private:
+		struct Event
+		{
+			uint64_t frame = 0;		// the output frame at which the G1 gets it
+			uint8_t size = 0;
+			uint8_t bytes[3] = {};
+		};
+
+		void run();
+
+		Engine& m_engine;
+		MidiTransport* const m_pcPort;
+		const int m_pcIndex;
+		const double m_rate;
+		const size_t m_ahead;		// how far the worker may run past what the host has taken
+		const size_t m_latency;		// where the events go: ahead plus a guard (runner.cpp)
+		AudioBridge m_bridge;
+		SpscQueue<Event, 1024> m_events;
+
+		std::atomic<uint64_t> m_consumed{0};	// frames the host has taken (audio thread writes)
+		uint64_t m_debt = 0;					// frames owed: put out as silence, not yet arrived
+		bool m_primed = false;					// the first full block has gone out
+
+		std::mutex m_engineMutex;
+		std::thread m_thread;
+		std::atomic<bool> m_quit{false};
+
+		std::mutex m_statsMutex;
+		HostStats m_stats;
+		std::atomic<uint64_t> m_midiIn{0}, m_midiOut{0}, m_pcIn{0}, m_pcOut{0}, m_xruns{0}, m_dropped{0};
+	};
+}
