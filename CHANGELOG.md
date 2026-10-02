@@ -5,6 +5,17 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-02
+
+- **`g1patchtest --note -1` and `--note-at S` (Claude, requested by Javier).** `--note -1` plays no
+  note, so what is measured is what the patch does by itself; `--note-at S` plays the note S
+  seconds into the measurement, so one boot measures the patch alone and then with the note (it
+  also works with `G1_MIDICLOCK`). Used by g1-taller to listen to the 29,639 readable patches of
+  the community archive. Checked: a self-playing drone ("Suelo de bruma") sounds in both halves; a
+  bass that needs a key (`LP-BP Bass02`) is silent before the note and sounds after it; a
+  MIDI-clocked patch (`Iman-A02`) sounds the same with the note from the start and with
+  `--note-at`.
+
 ## 2026-09-30
 
 - **Parameter displays above the knobs, and double-click on Random (Claude, requested by Javier;

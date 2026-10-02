@@ -1,6 +1,8 @@
 // g1patchtest: test bench for the emulated G1, with no window and no editor.
 //
 //   g1patchtest ROM patch.pch [--note 60] [--seconds 2] [--wav output.wav] [--dump-packets dir] [--bench]
+//   (--note -1 plays no note: what is measured is what the patch does by itself)
+//   (--note-at S plays the note S seconds into the measurement: before it, the patch alone)
 //   (G1_CHORD / G1_SEQ: press and release notes through the editor's port, then measure)
 //   (G1_REALTIME=seconds: play in real time against a simulated sound card, counting dropouts)
 //
@@ -114,12 +116,13 @@ int main(int argc, char** argv)
 {
 	if(argc < 3)
 	{
-		std::fprintf(stderr, "usage: g1patchtest ROM patch.pch [--note N] [--seconds S] [--wav file.wav] [--input-sine Hz] [--dump-packets dir] [--bench]\n");
+		std::fprintf(stderr, "usage: g1patchtest ROM patch.pch [--note N|-1] [--note-at S] [--seconds S] [--wav file.wav] [--input-sine Hz] [--dump-packets dir] [--bench]\n");
 		std::fprintf(stderr, "cycle diagnostic: G1_JITBLOCK=1 G1_CYCPROF=0..3 (after the note, with disassembly)\n");
 		return 2;
 	}
 	int note = 60;
 	double seconds = 2.0;
+	double noteAt = -1.0;	// --note-at S: play the note S seconds into the measurement
 	std::string wavPath;
 	double inputHz = 0;
 	std::string dumpDir;
@@ -143,6 +146,7 @@ int main(int argc, char** argv)
 		if(i + 1 >= argc) break;
 		if(!std::strcmp(argv[i], "--note")) note = std::atoi(argv[i + 1]);
 		else if(!std::strcmp(argv[i], "--seconds")) seconds = std::atof(argv[i + 1]);
+		else if(!std::strcmp(argv[i], "--note-at")) noteAt = std::atof(argv[i + 1]);
 		else if(!std::strcmp(argv[i], "--wav")) wavPath = argv[i + 1];
 		else if(!std::strcmp(argv[i], "--input-sine")) inputHz = std::atof(argv[i + 1]);
 		else if(!std::strcmp(argv[i], "--dump-packets")) dumpDir = argv[i + 1];
@@ -556,11 +560,16 @@ int main(int argc, char** argv)
 		const auto ch = static_cast<uint8_t>((std::atoi(mn) - 1) & 0x0f);
 		mc.getSci().write({static_cast<uint8_t>(0x90 | ch), static_cast<uint8_t>(note), 100});
 	}
-	else
+	auto sendNote = [&]
 	{
 		const auto on = withChecksum({0xf0, 0x33, 0x5c, 0x06, static_cast<uint8_t>(pid), 0x56, 0x00, static_cast<uint8_t>(note)});
 		mc.getPcPort().receive(on);
-	}
+	};
+	// --note -1: no note at all, to hear whether the patch sounds by itself. With --note-at the
+	// note comes later, during the measurement (see below): one boot measures both halves.
+	const bool noteLater = note >= 0 && noteAt >= 0.0;
+	if(!std::getenv("G1_CHORD") && !std::getenv("G1_MIDINOTE") && note >= 0 && !noteLater)
+		sendNote();
 	// G1_REALTIME=seconds: plays the note in real time with EmuHost's own pacing and AudioBridge,
 	// against a simulated sound card (48 kHz, 256-frame periods), and prints once per second the
 	// dropouts, how far the emulator is behind the wall clock and how full the output queue is.
@@ -677,12 +686,24 @@ int main(int argc, char** argv)
 		const double tickMs = 60000.0 / (std::atof(mcl) * 24.0);
 		mc.getSci().write({0xfa});
 		double t = 0;
+		bool noteSent = false;
 		while(t < seconds * 1000)
 		{
+			if(noteLater && !noteSent && t >= noteAt * 1000)
+			{
+				sendNote();
+				noteSent = true;
+			}
 			mc.getSci().write({0xf8});
 			run(mc, static_cast<uint64_t>(tickMs * static_cast<double>(g_ms)));
 			t += tickMs;
 		}
+	}
+	else if(noteLater && noteAt < seconds)
+	{
+		run(mc, static_cast<uint64_t>(noteAt * 1000) * g_ms);
+		sendNote();
+		run(mc, static_cast<uint64_t>((seconds - noteAt) * 1000) * g_ms);
 	}
 	else
 		run(mc, static_cast<uint64_t>(seconds * 1000) * g_ms);
