@@ -1,34 +1,59 @@
-# G1-Emu v0.1.0-alpha.10
+# G1-Emu v0.1.0-alpha.11
 
-**This pre-release makes the emulator 50–70 % faster and halves its CPU use in real time**, with
-exactly the same sound. It is built and DSP-tested in CI on Linux x86-64 (native and JUCE backends),
-Linux arm64, macOS universal and Windows x86-64. The changes are in the emulation shared by every
-platform; they were measured on Linux.
+**This pre-release brings G1-Emu into your DAW: a VST3 and CLAP instrument plugin**, on the same
+emulation as the standalone. The plugin is new and has only been played on Linux so far: on macOS
+and Windows it builds, but has not yet been tried in a DAW. Please try it and report what you find
+with the **Report issue** button in the window.
 
-## What alpha.10 changes
+## The plugin (VST3 and CLAP)
 
-- **Faster.** Measured over nine patches, from light to very heavy, the emulator now runs 2.5–3.3
-  times faster than real time where it ran 1.7–2.2 times: more headroom before a heavy patch
-  stutters, and room for slower computers. How:
-  - the emulated CPU runs on while the four DSPs catch up, instead of waiting for them;
-  - when the CPU talks to one DSP, only that DSP has to be brought up to date, not all four;
-  - a DSP with little to do no longer emulates its idle waiting instruction by instruction;
-  - builds use link-time optimization.
-- **Lighter.** In real time the emulator used over three CPU cores whatever the patch, because its
-  DSP threads kept spinning while waiting. They now sleep when there is nothing to do: about 1.7
-  cores on the same machine.
-- **Same sound.** Every change was checked against recordings of nine patches, which come out
-  byte-for-byte identical, and against a battery of all 109 module types.
+- **The G1 on a DAW track:** notes, controllers and Program Changes from the track; outputs 1/2
+  and 3/4 as two stereo buses, and In L/R as an optional input. Latency is reported to the DAW,
+  which compensates for it.
+- **Edit it from Animatek NME while it plays in the DAW (Linux and macOS).** Each instance opens
+  its own PC Port: **G1-Emu PC Port**, **G1-Emu 2 PC Port** for the second, and so on. Choose it
+  in NME as input and output. On Windows the plugin cannot open a MIDI port yet: edit with the
+  standalone, as in alpha.10.
+- **The 18 knobs are automatable parameters**, each named after what it moves in the current
+  patch (`Knob 3: OscA Freq coars`). Turning one on the panel moves the parameter too.
+- **Its patches live in the DAW project.** A new instance starts from a copy of the standalone's
+  banks; from then on what you store goes into the project, not into the standalone's files.
+- **Program Changes:** from the track, or through the plugin's 128 programs, which is how a VST3
+  host sends them (to channel 1).
 
-## Also in this build (from alpha.5 to alpha.9)
+**Installing it:** copy `G1-Emu.vst3` and/or `G1-Emu.clap` from the archive to the plugin folder.
 
-- Heavy patches no longer turn into noise or grit, on the first load or after others (alpha.8,
-  alpha.9).
-- The emulator no longer stops answering after many uploads in a row (alpha.8).
-- The synth's internal master clock runs (sequencers and clocked patches). Set the clock to
-  **internal** in the synth settings; in Animatek NME's Synth Settings dialog that option is shown
-  the wrong way round for now: choose **External** there.
-- Upload timeouts fixed; the sawtooth of `OscA`, `OscB` and `OscSlvC` sounds on every platform.
+| System | VST3 | CLAP |
+| --- | --- | --- |
+| macOS | `~/Library/Audio/Plug-Ins/VST3` | `~/Library/Audio/Plug-Ins/CLAP` |
+| Windows | `C:\Program Files\Common Files\VST3` | `C:\Program Files\Common Files\CLAP` |
+| Linux | `~/.vst3` | `~/.clap` |
+
+On macOS the plugin is not signed: if the DAW refuses it, run
+`xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/G1-Emu.vst3` (and the same for the
+`.clap`), then rescan.
+
+## Also new since alpha.10
+
+- **The emulator no longer slows down with every patch load** (#6). After a number of patch
+  changes the load could climb to 100 % and stay there, with dropouts. Fixed in the emulation, so
+  in every build.
+- **Shift and several slots at once from the keyboard.** Shift on the computer's keyboard holds
+  the panel's Shift (lit while held); A, B, C and D hold the slot buttons, several together. A
+  right click latches any panel button down until the next right click.
+- **An extras drawer below the panel** (the chevron next to the icons): **Random** turns the 18
+  knobs to random positions, a double click puts the patch's values back; **Parameter displays**
+  shows above each knob the module and parameter it moves.
+- **Patreon, Report issue and Settings** as icons; **Report issue** opens a GitHub issue with
+  your build and setup filled in. Oct Shift is gone from the panel: the rack never used it.
+
+## Known issues
+
+- **macOS:** patch uploads from Animatek NME can time out (#3).
+- **Windows:** the plugin has no PC Port; a direct link between NME and the emulator, with no
+  MIDI port, is planned (#8).
+- **CLAP:** if you remove every G1-Emu instance and then add a new one, that new one may have no
+  PC Port until the DAW reloads the plugin; its Settings say so.
 
 ## Windows quick start
 
@@ -78,5 +103,6 @@ awaiting the November 2026 Windows release.
 ## Files
 
 `G1-Emu` / `G1-Emu.exe` is the panel application. `g1run` / `g1run.exe` is the console front end.
+`G1-Emu.vst3` and `G1-Emu.clap` are the plugin.
 Every archive contains the README and GPLv3 licence; the Windows ZIP also contains `WINDOWS.md`.
 The source of this build is the tag attached to the release.

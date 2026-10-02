@@ -7,6 +7,12 @@ Older entries cite their commit by hand.
 
 ## 2026-10-02
 
+- **`v0.1.0-alpha.11` release notes (Claude, requested by Javier).** `docs/release-notes.md` now
+  presents the VST3/CLAP plugin (with the PC Port for NME on Linux and macOS, the automatable knobs,
+  where to install it on each system and how to unblock it on macOS), what else changed since
+  alpha.10 (#6, keyboard Shift and slots, the extras drawer, the icons) and the known issues (#3,
+  no PC Port in the Windows plugin, the CLAP PC Port caveat). Named alpha.11 and not beta 1: the
+  plugin has not been tried in a DAW on macOS or Windows yet, and #3 is still open.
 - **Each plugin instance's PC Port has a name of its own, also across processes (Claude, reported
   by Javier).** In Bitwig two instances both showed up in NME as "G1-Emu PC Port": Bitwig can host
   each instance in a process of its own, and the numbering only counted the instances of one
