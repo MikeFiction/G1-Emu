@@ -47,18 +47,38 @@ namespace g1plugin
 		}
 
 		// The numbers of the live instances, so each PC Port gets a name of its own and a freed
-		// number is reused (close the second of three and the next one is 2 again).
+		// number is reused (close the second of three and the next one is 2 again). A host can put
+		// each instance in a process of its own (Bitwig does), so a number is held with a lock
+		// every process sees (a file lock: the system lets it go if the process dies), kept for
+		// the instance's life. JUCE's list of MIDI ports is no use for this: another process's
+		// new port reaches it late. It is checked as well, for ports made some other way.
 		std::mutex g_instancesMutex;
 		std::set<int> g_instances;
 
-		int takeInstanceNumber()
+		std::string pcPortClient(const int _n)
 		{
+			return _n == 1 ? std::string("G1-Emu") : "G1-Emu " + std::to_string(_n);
+		}
+
+		int takeInstanceNumber(std::unique_ptr<juce::InterProcessLock>& _hold)
+		{
+			std::set<juce::String> taken;
+			for(const auto& d : juce::MidiInput::getAvailableDevices())
+				taken.insert(d.name);
+			for(const auto& d : juce::MidiOutput::getAvailableDevices())
+				taken.insert(d.name);
 			std::lock_guard<std::mutex> lock(g_instancesMutex);
-			int n = 1;
-			while(g_instances.count(n))
-				++n;
-			g_instances.insert(n);
-			return n;
+			for(int n = 1;; ++n)
+			{
+				if(g_instances.count(n) || taken.count(juce::String(pcPortClient(n) + " PC Port")))
+					continue;
+				auto hold = std::make_unique<juce::InterProcessLock>("G1-Emu PC Port " + juce::String(n));
+				if(!hold->enter(0))
+					continue;
+				_hold = std::move(hold);
+				g_instances.insert(n);
+				return n;
+			}
 		}
 
 		void releaseInstanceNumber(const int _n)
@@ -145,14 +165,15 @@ namespace g1plugin
 			m_engine.reset();
 		}
 		m_pcPort.reset();
-		releaseInstanceNumber(m_instance);
+		if(m_instance > 0)
+			releaseInstanceNumber(m_instance);
+		m_instanceLock.reset();
 	}
 
 	// The G1's PC Port as a virtual MIDI port, for the editor (#8 will add a direct link beside it).
 	// G1_PLUGIN_PC_PORT=0 leaves it out.
 	void Processor::openPcPort()
 	{
-		m_instance = takeInstanceNumber();
 		if(const char* v = std::getenv("G1_PLUGIN_PC_PORT"); v && *v == '0')
 		{
 			m_pcProblem = "off (G1_PLUGIN_PC_PORT=0)";
@@ -168,8 +189,8 @@ namespace g1plugin
 				"process (CLAP). Reload the plugin, or keep one instance open, to have it";
 			return;
 		}
-		const auto client = m_instance == 1 ? std::string("G1-Emu") : "G1-Emu " + std::to_string(m_instance);
-		m_pcPort = std::make_unique<g1app::JuceMidi>(client.c_str());
+		m_instance = takeInstanceNumber(m_instanceLock);
+		m_pcPort = std::make_unique<g1app::JuceMidi>(pcPortClient(m_instance).c_str());
 		m_pcIndex = m_pcPort->addPort("PC Port");
 	}
 
@@ -697,7 +718,7 @@ namespace g1plugin
 		if(!m_pcPort)
 			d += "PC Port: " + m_pcProblem + ".";
 		else if(m_pcPort->virtualPorts())
-			d += "PC Port: the MIDI port \"" + std::string(m_instance == 1 ? "G1-Emu" : "G1-Emu " + std::to_string(m_instance))
+			d += "PC Port: the MIDI port \"" + pcPortClient(m_instance)
 				+ " PC Port\". Choose it in Animatek NME as input and output to edit this instance.";
 		else
 			d += "PC Port: " + m_pcPort->describe() + ".";

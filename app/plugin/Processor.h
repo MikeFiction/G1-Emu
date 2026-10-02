@@ -130,6 +130,7 @@ namespace g1plugin
 		void startFromStandalone(g1app::Engine& _engine);
 
 		// The PC Port's virtual MIDI port. Declared before the engine and the runner so it goes after them.
+		std::unique_ptr<juce::InterProcessLock> m_instanceLock;	// holds m_instance's number for every process
 		int m_instance = 0;						// 1 for the first live instance, 2 for the next...
 		std::unique_ptr<g1app::JuceMidi> m_pcPort;
 		int m_pcIndex = -1;

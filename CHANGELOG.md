@@ -7,6 +7,15 @@ Older entries cite their commit by hand.
 
 ## 2026-10-02
 
+- **Each plugin instance's PC Port has a name of its own, also across processes (Claude, reported
+  by Javier).** In Bitwig two instances both showed up in NME as "G1-Emu PC Port": Bitwig can host
+  each instance in a process of its own, and the numbering only counted the instances of one
+  process. A number is now held with a file lock every process sees (`juce::InterProcessLock`,
+  let go by the system if the process dies), kept for the instance's life; JUCE's list of MIDI
+  ports is checked too, but cannot be the only check, because another process's new port reaches
+  it late. Checked: three `g1vst3check` processes started together gave six distinct ports
+  ("G1-Emu PC Port" to "G1-Emu 6 PC Port"), where before the lock two names came out twice;
+  `g1vst3check` alone, `clap-validator` (34 passed, 0 failed) and ctest as before.
 - **The plugin's knobs are automatable, it takes Program Changes in VST3, and it is also a CLAP
   (Claude, requested by Javier; #14, #7).**
   - **The 18 knobs as parameters**, named after what each one moves in the patch (`Knob 3: OscA
