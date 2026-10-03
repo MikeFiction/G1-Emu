@@ -57,6 +57,8 @@ namespace g1app
 		double load = 0;			// % of the time the emulator thread is busy
 		double cpuCores = 0;		// cores used by the process (the DSP threads spin while waiting)
 		bool dspOn[g1::g_dspCount] = {};
+		bool dspFailed[g1::g_dspCount] = {};	// stopped because the JIT could not generate its code (#17)
+		std::string dspProblem;		// why, for the status bar and a report (empty: none)
 		uint64_t pcIn = 0, pcOut = 0, midiIn = 0, midiOut = 0;
 		float peak = 0;				// peak of outputs 1/2 (0-1) since the last query
 		uint64_t xruns = 0;

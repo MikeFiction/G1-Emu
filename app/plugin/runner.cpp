@@ -1,6 +1,7 @@
 #include "runner.h"
 
 #include <algorithm>
+#include <string>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -227,7 +228,12 @@ namespace g1app
 				m_stats.speed = 100.0 * static_cast<double>(cycles - lastCycles) / g1::g_ucClock / wall;
 				m_stats.load = 100.0 * busy / wall;
 				for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+				{
 					m_stats.dspOn[d] = mc.getDsp(d).booted();
+					m_stats.dspFailed[d] = mc.getDsp(d).jitFailed();
+					if(mc.getDsp(d).jitFailed() && m_stats.dspProblem.empty())
+						m_stats.dspProblem = "DSP " + std::to_string(d) + " stopped: the JIT could not generate its code (" + mc.getDsp(d).jitFailure() + ")";
+				}
 				lastCycles = cycles;
 				lastStats = t1;
 				busy = 0;

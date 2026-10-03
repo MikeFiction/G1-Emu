@@ -167,7 +167,7 @@ namespace g1
 		m_hdiUc.setReadIsrCallback([this](const uint8_t _isr) { return readIsr(_isr); });
 		m_hdiUc.setRxEmptyCallback([this](const bool _needMoreData)
 		{
-			if(_needMoreData && m_booted && !hdi08().hasTX())
+			if(_needMoreData && m_booted && !m_jitDead && !hdi08().hasTX())
 				runUntil(m_dsp.getCycles() + g_waitClamp);
 			transferToHost();
 		});
@@ -262,6 +262,11 @@ namespace g1
 		// Between two catch-ups the CPU may have written the host port (HF0, which the idle loop
 		// tests, changes no DSP register): what skipIdle learned is only valid within one.
 		m_idle.valid = false;
+		if(m_jitDead)
+		{
+			runDead(_cycles);
+			return;
+		}
 		while(m_booted && m_dsp.getCycles() < _cycles)
 		{
 			// `jmp $FF0000`: the program returns to the boot ROM.
@@ -320,6 +325,11 @@ namespace g1
 				m_dsp.execInterpreter();
 			else
 				m_dsp.execInlinePeripheralCheck();	// the core's exec(), with the no-op checkpoint tested inline
+			if(!m_interpreter && m_dsp.getJit().hasFailed() && !onJitFailure())
+			{
+				runDead(_cycles);
+				return;
+			}
 			if(static_cast<dsp56k::TWord>(m_dsp.regs().la.var) != m_lastLa && !m_noLaFix)
 				onLaChanged();
 			const auto now = m_dsp.getCycles();
@@ -543,6 +553,43 @@ namespace g1
 		++m_laChanges;
 	}
 
+	bool Dsp::onJitFailure()
+	{
+		auto& jit = m_dsp.getJit();
+		const auto reason = jit.failReason();
+		jit.clearFailure();
+		// Out of JIT memory is the likely cause, and throwing every block away frees it all. One
+		// retry per second of DSP time: a failure that comes straight back is not passing.
+		const auto now = m_dsp.getCycles();
+		if(m_jitRecoveries == 0 || now - m_lastJitRecovery > g_dspClock)
+		{
+			++m_jitRecoveries;
+			m_lastJitRecovery = now;
+			std::fprintf(stderr, "G1-Emu: DSP %u: the JIT could not generate a block (%s); emptying its cache and going on\n", m_index, reason.c_str());
+			jit.destroyAllBlocks();
+			return true;
+		}
+		m_jitDead = true;
+		m_jitFailure = reason;
+		m_deadCycles = now;
+		std::fprintf(stderr, "G1-Emu: DSP %u: the JIT keeps failing (%s); this DSP is stopped and gives silence\n", m_index, reason.c_str());
+		return false;
+	}
+
+	void Dsp::runDead(const uint64_t _cycles)
+	{
+		// The DSP's own clock no longer moves. Its sample clock still does, here, so whoever waits
+		// for its audio (the output, the next DSP) gets silence on time and nothing stalls. A
+		// silent output carries DSP 3's X:$5F offset, as a running one does.
+		constexpr dsp56k::TWord silence = 0x155;
+		while(m_deadCycles + g_cyclesPerFrame <= _cycles)
+		{
+			m_deadCycles += g_cyclesPerFrame;
+			if(m_blockCallback)
+				m_blocks.push_back({silence, silence, silence, silence});
+		}
+	}
+
 	void Dsp::catchUp(const uint64_t _cycles, const bool _toHost)
 	{
 		runUntil(_cycles);
@@ -643,7 +690,7 @@ namespace g1
 	{
 		// HRX holds a single word: if the previous one is still there, let the DSP run.
 		const auto stop = m_dsp.getCycles() + g_waitClamp;
-		while(hdi08().hasRXData() && m_booted && m_dsp.getCycles() < stop)
+		while(hdi08().hasRXData() && m_booted && !m_jitDead && m_dsp.getCycles() < stop)
 			runUntil(m_dsp.getCycles() + 64);
 		// If meanwhile the program went back to the boot ROM, the word belongs to it.
 		if(!m_booted)
@@ -667,7 +714,7 @@ namespace g1
 		// its sample routine fills the block) never leaves it for the 200,000 cycles allowed, so the
 		// command was dropped, and the 68k polled the HI08 for an answer that never came.
 		const auto stop = m_dsp.getCycles() + g_waitClamp;
-		while(m_dsp.hasPendingExternalInterrupts() && m_booted && m_dsp.getCycles() < stop)
+		while(m_dsp.hasPendingExternalInterrupts() && m_booted && !m_jitDead && m_dsp.getCycles() < stop)
 			runUntil(m_dsp.getCycles() + 16);
 		if(m_dsp.hasPendingExternalInterrupts())
 			return;	// the DSP does not service them (stopped): better to lose the command than hang
@@ -686,7 +733,7 @@ namespace g1
 		if(m_booted && hdi08().hasRXData())
 		{
 			const auto stop = m_dsp.getCycles() + g_isrWaitClamp;
-			while(hdi08().hasRXData() && m_booted && m_dsp.getCycles() < stop)
+			while(hdi08().hasRXData() && m_booted && !m_jitDead && m_dsp.getCycles() < stop)
 				runUntil(m_dsp.getCycles() + 64);
 		}
 		transferToHost();

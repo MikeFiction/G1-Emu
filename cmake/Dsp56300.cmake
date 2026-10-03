@@ -407,6 +407,91 @@ g1_dsp_replace(jit.cpp
 
 #include <cstdlib>]=])
 
+# Issue #17: a block the JIT cannot generate (asmjit out of memory, or code generation failing).
+# create() left the "create" stub in place and executed it, which called create() again with no
+# end: a stack overflow, and in a plugin the whole host down. Now create() returns, the JIT keeps
+# a sticky failure (and why) for the G1's Dsp to see, and a child that could not be made is not
+# linked. G1_JIT_FAIL_AT=n fails the n-th block emitted (counted over all DSPs), and
+# G1_JIT_FAIL_FROM=n every block from the n-th on, to test that path.
+g1_dsp_replace(jit.h
+	[=[#include <memory>]=]
+	[=[#include <memory>
+#include <string>]=])
+g1_dsp_replace(jit.h
+	[=[		void checkPMemWrite() noexcept;]=]
+	[=[		void checkPMemWrite() noexcept;
+	public:
+		void setFailure(const char* _reason) { if(m_failure.empty()) m_failure = _reason; }
+		bool hasFailed() const { return !m_failure.empty(); }
+		const std::string& failReason() const { return m_failure; }
+		void clearFailure() { m_failure.clear(); }
+	private:
+		std::string m_failure;]=])
+g1_dsp_replace(jitblockchain.cpp
+	[=[#include "jitblockemitter.h"]=]
+	[=[#include "jitblockemitter.h"
+
+#include <atomic>
+#include <cstdlib>]=])
+g1_dsp_replace(jitblockchain.cpp
+	[=[		emit(_pc);
+		if(_execute)
+			exec(_pc);]=]
+	[=[		if(!emit(_pc))
+			return;	// the stub left in place would only call create() again
+		if(_execute)
+			exec(_pc);]=])
+g1_dsp_replace(jitblockchain.cpp
+	[=[		auto* emitter = m_jit.acquireEmitter(_pc);
+
+//		m_logger->addFlags]=]
+	[=[		{
+			static const long failAt = std::getenv("G1_JIT_FAIL_AT") ? std::atol(std::getenv("G1_JIT_FAIL_AT")) : 0;
+			static const long failFrom = std::getenv("G1_JIT_FAIL_FROM") ? std::atol(std::getenv("G1_JIT_FAIL_FROM")) : 0;
+			static std::atomic<long> emitted{0};
+			if(failAt > 0 || failFrom > 0)
+			{
+				const auto n = ++emitted;
+				if(n == failAt || (failFrom > 0 && n >= failFrom))
+				{
+					m_jit.setFailure("simulated (G1_JIT_FAIL_AT / G1_JIT_FAIL_FROM)");
+					return nullptr;
+				}
+			}
+		}
+		auto* emitter = m_jit.acquireEmitter(_pc);
+
+//		m_logger->addFlags]=])
+g1_dsp_replace(jitblockchain.cpp
+	[=[			LOG("JIT emitter init failed: " << initError << " - " << errString
+				<< "PC " << HEX(_pc));
+			m_jit.releaseEmitter(emitter);]=]
+	[=[			LOG("JIT emitter init failed: " << initError << " - " << errString
+				<< "PC " << HEX(_pc));
+			m_jit.setFailure(errString);
+			m_jit.releaseEmitter(emitter);]=])
+g1_dsp_replace(jitblockchain.cpp
+	[=[			LOG("FATAL: code generation failed for PC " << HEX(_pc));
+			m_jit.releaseBlockRuntimeData(b);]=]
+	[=[			LOG("FATAL: code generation failed for PC " << HEX(_pc));
+			m_jit.setFailure("code generation failed");
+			m_jit.releaseBlockRuntimeData(b);]=])
+g1_dsp_replace(jitblockchain.cpp
+	[=[			LOG("JIT failed: " << err << " - " << errString << "PC " << HEX(_pc));
+			m_jit.releaseBlockRuntimeData(b);]=]
+	[=[			LOG("JIT failed: " << err << " - " << errString << "PC " << HEX(_pc));
+			m_jit.setFailure(errString);
+			m_jit.releaseBlockRuntimeData(b);]=])
+g1_dsp_replace(jitblockchain.cpp
+	[=[		create(_pc, false);
+
+		if (!canBeDefaultExecuted(_pc))
+			return nullptr;]=]
+	[=[		create(_pc, false);
+
+		if (!m_jitCache[_pc].block || !canBeDefaultExecuted(_pc))
+			return nullptr;	// not generated (#17): the parent calls the stub instead of linking]=])
+
 foreach(source IN LISTS g1_dsp_files)
 	get_filename_component(name "${source}" NAME)
 	configure_file("${g1_dsp_prepare}/${name}" "${g1_dsp_overlay}/${name}" COPYONLY)

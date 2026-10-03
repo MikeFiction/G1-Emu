@@ -452,7 +452,12 @@ namespace g1app
 				m_stats.load = 100.0 * busy / wall;
 				m_stats.cpuCores = (cpu - lastCpu) / wall;
 				for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+				{
 					m_stats.dspOn[d] = mc.getDsp(d).booted();
+					m_stats.dspFailed[d] = mc.getDsp(d).jitFailed();
+					if(mc.getDsp(d).jitFailed() && m_stats.dspProblem.empty())
+						m_stats.dspProblem = "DSP " + std::to_string(d) + " stopped: the JIT could not generate its code (" + mc.getDsp(d).jitFailure() + ")";
+				}
 				lastCpu = cpu;
 				busy = 0;
 				lastStats = t1;
@@ -486,7 +491,7 @@ namespace g1app
 		std::snprintf(buf, sizeof(buf), "[%6.0fs] speed %5.1f%%  load %3.0f%%  CPU %.1f cores  DSP:", s.seconds, s.speed, s.load, s.cpuCores);
 		r += buf;
 		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
-			r += s.dspOn[d] ? " on" : " --";
+			r += s.dspFailed[d] ? " XX" : s.dspOn[d] ? " on" : " --";
 		r += "  HI08 words/HC/replies:";
 		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
 		{

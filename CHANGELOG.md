@@ -7,6 +7,16 @@ Older entries cite their commit by hand.
 
 ## 2026-10-03
 
+- **A JIT that cannot generate a block no longer takes the host down (Claude, requested by
+  Javier; #17).** When the DSP JIT ran out of memory or failed to generate code, the core
+  re-entered its "create" stub with no end, a stack overflow that crashes the DAW, more likely with
+  several plugin instances. The core overlay now returns and records the failure; the DSP empties
+  its JIT cache and goes on, and if the JIT keeps failing that DSP is given up: silence on time, no
+  hang, and the status bar shows it (`x` and the reason). `G1_JIT_FAIL_AT` / `G1_JIT_FAIL_FROM`
+  simulate it. Checked with the new `g1jitfailtest` (ctest) through the plugin's runner: one
+  failure recovers and SimpleOSC keeps sounding (−25.8 dBFS); a JIT that always fails gives up
+  all four DSPs and renders 8 s of silence in 1.5 s. `ctest` passes and the nine bench patches
+  render byte for byte as before. Details in `NOTES.md`, "When the JIT cannot generate a block".
 - **The internal master clock runs at the synth's tempo (Claude, requested by Javier; #22).**
   MIDIGlobal's clock, and every sequencer or divider it drives, ran 4 times too fast with the
   internal clock (192 Hz at 120 BPM instead of 48), while MIDI clock was right. Two faults in

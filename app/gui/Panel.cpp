@@ -636,7 +636,8 @@ namespace g1gui
 			 << "- Audio: " << juce::String(s.audio) << "\n"
 			 << "- MIDI: " << juce::String(s.midi) << (s.rawMidi.empty() ? juce::String() : ", raw: " + juce::String(s.rawMidi)) << "\n"
 			 << "- " << juce::String::formatted("speed %.1f%%, load %.0f%%", s.speed, s.load)
-			 << ", dropouts " << juce::String(static_cast<juce::int64>(s.xruns)) << "\n";
+			 << ", dropouts " << juce::String(static_cast<juce::int64>(s.xruns)) << "\n"
+			 << (s.dspProblem.empty() ? juce::String() : "- " + juce::String(s.dspProblem) + "\n");
 		juce::URL("https://github.com/animatek/G1-Emu/issues/new?body=" + juce::URL::addEscapeChars(body, true)).launchInDefaultBrowser();
 	}
 
@@ -707,8 +708,8 @@ namespace g1gui
 
 		m_peakHold = std::max(static_cast<double>(s.peak), m_peakHold * 0.9);
 		juce::String dsp;
-		for(bool on : s.dspOn)
-			dsp << (on ? "o" : "-");
+		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+			dsp << (s.dspFailed[d] ? "x" : s.dspOn[d] ? "o" : "-");
 		// String::formatted uses wide printf on Windows: never pass UTF-8 pointers to %s.
 		juce::String status = juce::String::formatted("speed %5.1f%%   load %3.0f%%", s.speed, s.load);
 #ifdef __linux__
@@ -723,6 +724,7 @@ namespace g1gui
 			+ juce::String::formatted("  |  PC Port in/out %llu/%llu   MIDI in/out %llu/%llu",
 				static_cast<unsigned long long>(s.pcIn), static_cast<unsigned long long>(s.pcOut),
 				static_cast<unsigned long long>(s.midiIn), static_cast<unsigned long long>(s.midiOut))
-			+ (s.rawMidi.empty() ? juce::String() : "  |  raw: " + juce::String(s.rawMidi)), juce::dontSendNotification);
+			+ (s.rawMidi.empty() ? juce::String() : "  |  raw: " + juce::String(s.rawMidi))
+			+ (s.dspProblem.empty() ? juce::String() : "  |  " + juce::String(s.dspProblem)), juce::dontSendNotification);
 	}
 }

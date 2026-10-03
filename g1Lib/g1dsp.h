@@ -22,6 +22,7 @@
 #include <functional>
 #include <deque>
 #include <map>
+#include <string>
 #include <memory>
 #include <vector>
 
@@ -42,6 +43,11 @@ namespace g1
 		uint32_t bootCount() const { return m_bootCount; }
 		uint32_t index() const { return m_index; }
 		uint64_t stalls() const { return m_stalls; }
+		// Issue #17: the JIT could not generate a block. After one retry with its cache emptied,
+		// the DSP is given up: it stops running and gives silence on time, and the rest goes on.
+		bool jitFailed() const { return m_jitDead; }
+		const std::string& jitFailure() const { return m_jitFailure; }
+		uint32_t jitRecoveries() const { return m_jitRecoveries; }
 		uint64_t audioFrames() const { return m_audioFrames; }
 		uint64_t hostWords() const { return m_hostWords; }
 		uint64_t irqdCount() const { return m_irqdCount; }
@@ -139,6 +145,13 @@ namespace g1
 		uint64_t m_laChanges = 0;
 		uint32_t m_bootCount = 0;
 		uint64_t m_stalls = 0;
+		bool onJitFailure();				// true: retry, false: the DSP is given up
+		void runDead(uint64_t _cycles);		// silent blocks on the sample clock instead of running
+		bool m_jitDead = false;
+		std::string m_jitFailure;
+		uint32_t m_jitRecoveries = 0;
+		uint64_t m_lastJitRecovery = 0;		// DSP cycles
+		uint64_t m_deadCycles = 0;			// where runDead has got to
 		uint64_t m_audioFrames = 0;
 		uint64_t m_hostWords = 0, m_hostCommands = 0, m_wordsToHost = 0;
 		uint64_t m_execBlocks = 0;

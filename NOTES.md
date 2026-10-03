@@ -420,6 +420,22 @@ Applied to a build copy; the Gearmulator clone is never modified.
   idle-port test counts frames in a callback that never blocks, so without the fix it fails
   instead of hanging.
 
+### When the JIT cannot generate a block (issue #17)
+
+When asmjit cannot take a block (out of JIT memory, typically, with several plugin instances of
+four DSPs each) or code generation fails, the core's `create()` left the "create" stub for that PC
+and executed it, which called `create()` again with no end: a stack overflow that took the host
+down. The overlay makes `create()` return, gives the JIT a sticky failure with its reason
+(`Jit::setFailure`/`hasFailed`/`failReason`/`clearFailure`) and stops a parent from linking a
+child that was not generated. `Dsp::runUntilImpl` checks it after each block: the first time it
+empties that DSP's JIT cache (`destroyAllBlocks`, which frees its code memory) and goes on, at most
+once per second of DSP time; if it fails again the DSP is given up: it runs no more, and
+`runDead` puts out silent blocks on its sample clock, so the output and the next DSP get silence
+on time and the plugin's runner never waits. The CPU's waits on that DSP's host port return at
+once. The status bar shows the DSP as `x` with the reason, and a report includes it.
+`G1_JIT_FAIL_AT=n` fails the n-th block emitted (over all DSPs) and `G1_JIT_FAIL_FROM=n` every one
+from the n-th on; `g1jitfailtest recover|fail` (ctest) uses them through the plugin's runner.
+
 ### The DSP JIT on ARM
 
 **Cause found, and it was never the G1's `FV` extension.** `g1dspcheck` raised an illegal
