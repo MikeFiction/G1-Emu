@@ -5,6 +5,31 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-03
+
+- **`g1patchtest --input-raw file.f32` (Claude, requested by Javier).** Feeds mono float32
+  samples into both audio inputs from the first measured sample on, so impulses, noise and sweeps
+  can go through a patch and input and output line up (33 samples from AudioIn to an output).
+  Used to measure FilterE. It shows that **the audio input path runs at 48 kHz**: only even
+  samples get in (an impulse on an odd sample vanishes, 40 kHz comes out as 8 kHz) and each one is
+  held for two output frames, while an OscA comes out at the full 96 kHz. **That is a bug in the
+  emulator**: the real G1 runs its inputs at 96 kHz (Javier), so it is in how DSP 0's codec
+  receivers are clocked (NOTES.md, "Inputs"), not yet fixed. `tools/filtersweep` holds the FilterE
+  measurements so far (a two-pole state-variable filter, 24 dB as two in cascade; see its README).
+- **`tools/envsweep`: the G1's envelopes measured for a VCV Rack module (Claude, requested by
+  Javier).** Records every step of the ADSR's attack (three shapes), decay and release, four
+  envelopes per run, plus the AD envelope, retriggers and short gates, and turns them into the
+  tables of ADSRtek in the Animatek VCV plugin, which is modelled on these recordings and not on
+  the DSP code. Findings in `tools/envsweep/README.md`: times follow the editor's table to half a
+  percent in the median and run long at the top; decay and release are one exponential timed to
+  1%; Log and Exp attacks are level-driven, which is why a retrigger carries on from where it
+  is; everything moves at 24 kHz. `compare.py` runs the emulator and the module side by side:
+  0.06-1.1% worst error over eight ADSR cases and four AD ones, except one 0.46 ms attack that is
+  off by one tick. To support it, **`g1patchtest` takes `--note-off-at S` and `--events
+  +S,-S,...`**, which press and release the note at those times during the measurement (the
+  first `--note-at` keeps working: it is now the first event). Checked by recording the same ADSR
+  both ways: the curves agree to 0.0004, the grid of one 24 kHz tick.
+
 ## 2026-10-02
 
 - **`v0.1.0-alpha.11` release notes (Claude, requested by Javier).** `docs/release-notes.md` now

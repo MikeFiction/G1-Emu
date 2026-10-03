@@ -3,6 +3,11 @@
 //   g1patchtest ROM patch.pch [--note 60] [--seconds 2] [--wav output.wav] [--dump-packets dir] [--bench]
 //   (--note -1 plays no note: what is measured is what the patch does by itself)
 //   (--note-at S plays the note S seconds into the measurement: before it, the patch alone)
+//   (--note-off-at S releases it S seconds in, after --note-at: an envelope's release, measured)
+//   (--events +0.1,-0.3,+0.35 presses (+) and releases (-) the note at those seconds into the
+//    measurement, in order: retriggers and short gates, all in one recording)
+//   (--input-raw file.f32 feeds mono float32 samples (1.0 = full scale, 96 kHz) into both audio
+//    inputs from the first measured sample on: impulses, sweeps, noise, for measuring filters)
 //   (G1_CHORD / G1_SEQ: press and release notes through the editor's port, then measure)
 //   (G1_REALTIME=seconds: play in real time against a simulated sound card, counting dropouts)
 //
@@ -116,15 +121,18 @@ int main(int argc, char** argv)
 {
 	if(argc < 3)
 	{
-		std::fprintf(stderr, "usage: g1patchtest ROM patch.pch [--note N|-1] [--note-at S] [--seconds S] [--wav file.wav] [--input-sine Hz] [--dump-packets dir] [--bench]\n");
+		std::fprintf(stderr, "usage: g1patchtest ROM patch.pch [--note N|-1] [--note-at S] [--note-off-at S] [--events +S,-S,...] [--seconds S] [--wav file.wav] [--input-sine Hz] [--input-raw file.f32] [--dump-packets dir] [--bench]\n");
 		std::fprintf(stderr, "cycle diagnostic: G1_JITBLOCK=1 G1_CYCPROF=0..3 (after the note, with disassembly)\n");
 		return 2;
 	}
 	int note = 60;
 	double seconds = 2.0;
 	double noteAt = -1.0;	// --note-at S: play the note S seconds into the measurement
+	double noteOffAt = -1.0;	// --note-off-at S: release it S seconds in (needs --note-at)
+	std::vector<std::pair<double, bool>> events;	// --events: (seconds, press) in time order
 	std::string wavPath;
 	double inputHz = 0;
+	std::vector<float> inputRaw;	// --input-raw: fed from the first captured sample
 	std::string dumpDir;
 	bool bench = std::getenv("G1_BENCH") != nullptr;
 	int cycleProfile = -1;
@@ -147,8 +155,26 @@ int main(int argc, char** argv)
 		if(!std::strcmp(argv[i], "--note")) note = std::atoi(argv[i + 1]);
 		else if(!std::strcmp(argv[i], "--seconds")) seconds = std::atof(argv[i + 1]);
 		else if(!std::strcmp(argv[i], "--note-at")) noteAt = std::atof(argv[i + 1]);
+		else if(!std::strcmp(argv[i], "--note-off-at")) noteOffAt = std::atof(argv[i + 1]);
+		else if(!std::strcmp(argv[i], "--events"))
+		{
+			for(const char* c = argv[i + 1]; *c; )
+			{
+				events.emplace_back(std::atof(c + 1), *c == '+');
+				while(*c && *c != ',') ++c;
+				if(*c == ',') ++c;
+			}
+		}
 		else if(!std::strcmp(argv[i], "--wav")) wavPath = argv[i + 1];
 		else if(!std::strcmp(argv[i], "--input-sine")) inputHz = std::atof(argv[i + 1]);
+		else if(!std::strcmp(argv[i], "--input-raw"))
+		{
+			std::ifstream f(argv[i + 1], std::ios::binary);
+			f.seekg(0, std::ios::end);
+			inputRaw.resize(static_cast<size_t>(f.tellg()) / sizeof(float));
+			f.seekg(0);
+			f.read(reinterpret_cast<char*>(inputRaw.data()), static_cast<std::streamsize>(inputRaw.size() * sizeof(float)));
+		}
 		else if(!std::strcmp(argv[i], "--dump-packets")) dumpDir = argv[i + 1];
 		i += 2;
 	}
@@ -199,6 +225,20 @@ int main(int argc, char** argv)
 			constexpr double twoPi = 6.28318530717958647692;
 			_l = static_cast<int32_t>(0.25 * 8388607.0 * std::sin(twoPi * inputHz * t));
 			_r = static_cast<int32_t>(0.25 * 8388607.0 * std::sin(twoPi * 2.0 * inputHz * t));
+		});
+
+	// --input-raw: silence until the measurement starts, then the file sample by sample, so input
+	// sample i and captured output frame i line up (up to the patch's own fixed latency).
+	size_t inputPos = 0;
+	if(!inputRaw.empty())
+		mc.getDsp(0).setInputProvider([&](int32_t& _l, int32_t& _r)
+		{
+			float v = 0.0f;
+			if(capture && inputPos < inputRaw.size())
+				v = inputRaw[inputPos++];
+			const auto x = static_cast<int32_t>(std::max(-1.0f, std::min(1.0f, v)) * 8388607.0f);
+			_l = x;
+			_r = x;
 		});
 
 	// Boot and handshake.
@@ -567,7 +607,13 @@ int main(int argc, char** argv)
 	};
 	// --note -1: no note at all, to hear whether the patch sounds by itself. With --note-at the
 	// note comes later, during the measurement (see below): one boot measures both halves.
-	const bool noteLater = note >= 0 && noteAt >= 0.0;
+	if(note >= 0 && noteAt >= 0.0 && events.empty())
+	{
+		events.emplace_back(noteAt, true);
+		if(noteOffAt > noteAt)
+			events.emplace_back(noteOffAt, false);
+	}
+	const bool noteLater = note >= 0 && !events.empty();
 	if(!std::getenv("G1_CHORD") && !std::getenv("G1_MIDINOTE") && note >= 0 && !noteLater)
 		sendNote();
 	// G1_REALTIME=seconds: plays the note in real time with EmuHost's own pacing and AudioBridge,
@@ -689,7 +735,7 @@ int main(int argc, char** argv)
 		bool noteSent = false;
 		while(t < seconds * 1000)
 		{
-			if(noteLater && !noteSent && t >= noteAt * 1000)
+			if(noteLater && !noteSent && t >= events.front().first * 1000)
 			{
 				sendNote();
 				noteSent = true;
@@ -699,11 +745,21 @@ int main(int argc, char** argv)
 			t += tickMs;
 		}
 	}
-	else if(noteLater && noteAt < seconds)
+	else if(noteLater)
 	{
-		run(mc, static_cast<uint64_t>(noteAt * 1000) * g_ms);
-		sendNote();
-		run(mc, static_cast<uint64_t>((seconds - noteAt) * 1000) * g_ms);
+		// Each event at its time, in whole milliseconds like the rest of the bench.
+		uint64_t nowMs = 0;
+		for(const auto& [at, press] : events)
+		{
+			const auto atMs = static_cast<uint64_t>(std::min(at, seconds) * 1000);
+			if(atMs > nowMs)
+				run(mc, (atMs - nowMs) * g_ms);
+			nowMs = std::max(nowMs, atMs);
+			mc.getPcPort().receive(withChecksum({0xf0, 0x33, 0x5c, 0x06, static_cast<uint8_t>(pid), 0x56, static_cast<uint8_t>(press ? 0 : 1), static_cast<uint8_t>(note)}));
+		}
+		const auto endMs = static_cast<uint64_t>(seconds * 1000);
+		if(endMs > nowMs)
+			run(mc, (endMs - nowMs) * g_ms);
 	}
 	else
 		run(mc, static_cast<uint64_t>(seconds * 1000) * g_ms);
