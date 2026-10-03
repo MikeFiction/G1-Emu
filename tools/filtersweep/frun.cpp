@@ -15,12 +15,12 @@ int main(int argc, char** argv) {
     FILE* f = fopen(argv[6], "rb"); std::vector<float> in;
     float v; while (fread(&v, sizeof v, 1, f) == 1) in.push_back(v); fclose(f);
     Module::ProcessArgs a; a.sampleRate = 96000; a.sampleTime = 1.f / 96000; a.frame = 0;
-    m.inputs[FilterTek::IN_INPUT].channels = 1;
+    m.inputs[FilterTek::IN_L_INPUT].channels = 1;
     std::vector<float> out;
     for (float x : in) {
-        m.inputs[FilterTek::IN_INPUT].setVoltage(x * 20.f);
+        m.inputs[FilterTek::IN_L_INPUT].setVoltage(x * 20.f);
         m.process(a);
-        out.push_back(m.outputs[FilterTek::OUT_OUTPUT].getVoltage() / 20.f);
+        out.push_back(m.outputs[FilterTek::OUT_L_OUTPUT].getVoltage() / 20.f);
     }
     f = fopen(argv[7], "wb"); fwrite(out.data(), sizeof(float), out.size(), f); fclose(f);
     return 0;

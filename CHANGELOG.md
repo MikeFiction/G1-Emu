@@ -7,6 +7,9 @@ Older entries cite their commit by hand.
 
 ## 2026-10-03
 
+- **`tools/filtersweep/frun.cpp` follows FILTERtek going stereo (Claude, requested by Javier).**
+  It drives the left side (`IN_L`/`OUT_L`); with DRIVE at 0 the comparison against the emulator
+  gives the same figures as before, case by case.
 - **`tools/filtersweep`: FilterE measured end to end (Claude, requested by Javier).** Every
   cutoff and resonance step, both slopes, the four types, the gain control, the modulation inputs
   and the saturation, turned into the tables of FILTERtek in the Animatek VCV plugin. It is a
