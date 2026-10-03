@@ -101,6 +101,21 @@ Two things kept it still:
   clock never ticked, even with the setting at 1. `Microcontroller::gptMaskWritten` now injects the
   interrupt when TMSK1 gains an OCxI bit whose flag is set.
 
+**The clock's rate (issue #22, 2026-10-03).** MIDIGlobal's clock output gives 24 pulses per beat
+(NME's help for the Clock Divider): 48 Hz at 120 BPM, 8 Hz after a divider set to 6. With MIDI
+clock (`G1_CLOCKSRC=0 G1_MIDICLOCK=120`) it always did; the internal clock gave 192 Hz, 4 times too
+fast. The OS's tempo table (`$145B4C`, a word per BPM) holds the period for 24 ticks per beat with
+the GPT counting the system clock /32 (TMSK2 = `$23`, CPR 3): `$3556` at 120 BPM. Each tick its
+handler (`$117E3C`) clears OC2F, adds the period to TOC2 and sends host command `$C8` to every DSP;
+the PIT routine sends `$C7` about 2 ms later (a countdown at `$1C3AAE`), and the DSPs make the
+pulse. Two GPT faults in Gearmulator, fixed in a build copy of `gpt.cpp` (`cmake/Mc68k.cmake`):
+the prescaler was ignored (always /4: 8 times too fast) and a compare matched by level, so the
+handler, clearing OC2F before moving TOC2, got a second interrupt at once (two ticks together and
+a gap of two periods: half the pulses). With both fixed, `tools/patches/ClockTest.pch` (MIDIGlobal
+into a Clock Divider set to 6, both to the outputs) gives 48.00 Hz and 8.00 Hz with the internal
+clock, as with MIDI clock, and the OS counts 2 beats a second. Of the bench patches only `progger`
+changes (it is clocked); the rest render byte for byte as before.
+
 With both, `progger.pch` measures in the emulator what a real G1 gives (a real-vs-emulator
 comparison: the patch loaded in the real synth through NME, a note over MIDI, both outputs
 recorded, against `g1patchtest --wav`). Checked against the real G1 the same way and matching in

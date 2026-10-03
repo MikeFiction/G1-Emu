@@ -137,6 +137,7 @@ the four outputs and the links between DSPs; it also has probes for the panel (s
 | `g1Lib/g1lcd.h` | The display (HD44780). |
 | `g1Lib/g1knobs.h` | What each panel knob is assigned to (module, parameter, names, value), read from the OS's tables. |
 | `cmake/Dsp56300.cmake`, `g1Lib/dsp56300.cpp` | DSP core fixes (JIT and DMA), applied to a build copy. |
+| `cmake/Mc68k.cmake` | 68331 timer (GPT) fixes: the prescaler and compares that match once (#22), applied to a build copy of `gpt.cpp`. |
 | `app/engine.*` | `Engine`: the G1 with nothing around it (ROM in, factory OS in the flash), and its user state as a difference against the factory flash, which never carries the OS. |
 | `app/hostconfig.*` | What every front end shares: the per-user directory, the settings file (`HostOptions`) and the status figures (`HostStats`). |
 | `app/emuhost.*` | The running G1 (flash, MIDI, audio, real time) on its own thread; used by `g1run` and `g1gui`. |

@@ -48,6 +48,7 @@ add_library(g1Midi STATIC
 target_include_directories(g1Midi PUBLIC ${GEARMULATOR_DIR}/source)
 target_link_libraries(g1Midi PUBLIC 68kEmu)
 include(cmake/Dsp56300.cmake)
+include(cmake/Mc68k.cmake)
 
 # JUCE, for the window (app/gui) and the test bench (tools/patchtest). By default the one in
 # Animatek NME next to this repo (../Nomad2026/JUCE); G1_JUCE_DIR to use another. Without JUCE

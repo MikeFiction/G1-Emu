@@ -7,6 +7,19 @@ Older entries cite their commit by hand.
 
 ## 2026-10-03
 
+- **The internal master clock runs at the synth's tempo (Claude, requested by Javier; #22).**
+  MIDIGlobal's clock, and every sequencer or divider it drives, ran 4 times too fast with the
+  internal clock (192 Hz at 120 BPM instead of 48), while MIDI clock was right. Two faults in
+  Gearmulator's 68331 timer, which the OS times the clock with: it ignored the prescaler the OS
+  selects (/32; it always counted /4) and an output compare matched for as long as the counter was
+  past it, so the OS's handler got a second interrupt at once. Both fixed in a build copy of
+  `gpt.cpp` (`cmake/Mc68k.cmake`, the clone untouched). Checked with the new
+  `tools/patches/ClockTest.pch` (MIDIGlobal into a Clock Divider at 6): 48.00 Hz and 8.00 Hz with
+  the internal clock, the same as with MIDI clock and as the manual's 24 pulses per beat, and the
+  OS counts 2 beats a second at 120 BPM. `ctest` passes; of the bench patches only `progger`
+  (clocked) renders differently, the rest byte for byte as before (the references for DungeonDub
+  and 4VoiceChoir were already out of date and were recorded again). Details in `NOTES.md`, "The
+  master clock".
 - **The plugin saves what each slot holds and brings it back with the project (Claude, requested
   by Javier; #25).** Until now a project kept the banks, the knobs and the last Program Change:
   a patch sent by an editor, loaded from the panel, or edited since was lost on reopening. The
