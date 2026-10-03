@@ -7,6 +7,15 @@ Older entries cite their commit by hand.
 
 ## 2026-10-03
 
+- **`tools/filtersweep`: FilterE measured end to end (Claude, requested by Javier).** Every
+  cutoff and resonance step, both slopes, the four types, the gain control, the modulation inputs
+  and the saturation, turned into the tables of FILTERtek in the Animatek VCV plugin. It is a
+  Chamberlin state-variable filter whose damping follows the cutoff, 24 dB as two identical
+  sections, band reject with a gentler damping of its own, gain control at the input (12 dB) or
+  between the sections (24 dB), and every internal value saturating at full scale; findings and
+  scripts in its README. `fcompare.py` runs the module against the emulator: 33-55 dB below the
+  signal in nine of ten cases, and the tenth (24 dB at resonance 124 driven hard) matches in
+  spectrum to half a dB in the median.
 - **`g1patchtest --input-raw file.f32` (Claude, requested by Javier).** Feeds mono float32
   samples into both audio inputs from the first measured sample on, so impulses, noise and sweeps
   can go through a patch and input and output line up (33 samples from AudioIn to an output).

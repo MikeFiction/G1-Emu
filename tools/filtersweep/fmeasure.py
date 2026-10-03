@@ -30,6 +30,15 @@ def patch(chains):
     L+=["[/NameDump]","[NameDump]","0 ","[/NameDump]"]
     return "\n".join(L)+"\n"
 
+def read_wav(wav):
+    d=open(wav,'rb').read(); i=d.index(b'fmt '); ch=struct.unpack('<H',d[i+10:i+12])[0]; bits=struct.unpack('<H',d[i+22:i+24])[0]
+    j=d.index(b'data'); n=struct.unpack('<I',d[j+4:j+8])[0]; raw_=d[j+8:j+8+n]
+    if bits==32: a=np.frombuffer(raw_,dtype='<i4').astype(np.float64)/2**31
+    elif bits==16: a=np.frombuffer(raw_,dtype='<i2').astype(np.float64)/2**15
+    else:
+        a=np.frombuffer(raw_,dtype=np.uint8).reshape(-1,3); a=(a[:,0].astype(np.int32)|(a[:,1].astype(np.int32)<<8)|(a[:,2].astype(np.int32)<<16)); a=np.where(a>=2**23,a-2**24,a).astype(np.float64)/2**23
+    return a.reshape(-1,ch)
+
 def run(tag, chains, signal, extra=0.2):
     pch=f"{OUT}/{tag}.pch"; wav=f"{OUT}/{tag}.wav"; raw=f"{OUT}/{tag}.f32"
     open(pch,'w').write(patch(chains)); np.asarray(signal,dtype=np.float32).tofile(raw)
