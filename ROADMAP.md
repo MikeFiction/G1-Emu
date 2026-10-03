@@ -172,8 +172,9 @@ the modules that exist).
 ### Other G1 models
 
 - **Nord Modular keyboard:** in principle the rack plus keys; the ROM/OS and the panel change.
-- **Micro Modular:** possibly a single DSP, which would make a simpler engine. To confirm: its
-  hardware and getting its OS.
+- **Micro Modular:** one DSP, confirmed in its OS (`NOTES.md`, "The official OS update"), which
+  makes a simpler engine with no links between DSPs. Open: its boot ROM (not in the update, so it
+  needs the same boot replacement as #16) and the ESSI clock towards its codec.
 
 ### New modules inside the G1 (modified OS)
 

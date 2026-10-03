@@ -8,8 +8,8 @@ addresses are in RAM unless stated otherwise.
 ## The ROM
 
 The rack OS 3.03: 512 KB, sha256 `d9b199f2…c997e`, file `Roms/NORD-MODULAR-RACK-VER-3.03.BIN`.
-It never goes into Git. The official updater (`Nord Modular OS v3.03b Update`, 1999) should carry
-the same OS in another format and can be used to cross-check it.
+It never goes into Git. The official updater carries the same OS linked differently (see "The
+official OS update").
 
 | Range (ROM) | Contents |
 | --- | --- |
@@ -22,6 +22,30 @@ the same OS in another format and can be used to cross-check it.
 
 The OS runs from RAM at `$100000`, copied from the ROM at `$C800`: RAM address X is at ROM offset
 `X − $100000 + $C800`.
+
+## The official OS update
+
+Clavia's updaters (`Nord Modular OS v3.03b Update`, `Nord Micro Modular OS v3.03b Update`) each
+carry an OS image that runs from RAM at `$100000`. Getting it out of the updater is not described
+here; what was found in it is:
+
+**Rack: the same OS as the ROM's, linked differently.** Both say 3.03 and hold the same strings,
+tables and DSP programs; with the absolute addresses masked out, ~94% of the image matches the
+factory OS at ROM `$C800` byte for byte. The rest is moved references: most of the code sits `$20`
+higher (the DSP-port table is at `$15BD88` instead of `$15BD68`, the DSP count at `$1AB93C` instead
+of `$1AB91C`), some tables a little more. Whether any small fix hides in the difference has not
+been checked. **Everything that reads the OS by address breaks on it** (`g1Lib/g1knobs.h`: slot
+base, type table, morph, active slot, panel split), so booting from the update (#16) needs those
+addresses per OS build.
+
+**Micro Modular: the same code base with one DSP.** It keeps the eight-port HI08 table, but where
+the rack checks for the expansion and sets 4 or 8 DSPs (`$10BB12`), the Micro sets 1 (`$1050E4`)
+and boots only DSP 0. Its DSP program is the rack's DSP 0 program (codec input) carrying DSP 3's
+duties too (output to the codec with the master volume at `X:$5F`, slot mask `$FFFFF9`), with the
+same PLL (`$3C001A`) but another ESSI clock towards the codec (CRA `$181808`, PM=8, against the
+rack's `$181801`/`$181802`), so its codec framing differs. No LCD (`$202004`–`$202007` are never
+touched); the knobs are still read through `$202000`/`$202800`. The update holds only the OS: the
+Micro's boot ROM is not in it.
 
 ## Boot and memory map
 

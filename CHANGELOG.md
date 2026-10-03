@@ -7,6 +7,13 @@ Older entries cite their commit by hand.
 
 ## 2026-10-03
 
+- **What the official OS updates hold, rack and Micro Modular (Claude, requested by Javier).**
+  `NOTES.md`, "The official OS update": the rack's is the same OS 3.03 as the ROM's, linked `$20`
+  higher in most places (~94% identical with addresses masked), so `g1Lib/g1knobs.h`, which reads
+  the OS by address, will need its addresses per build for #16; the Micro's sets one DSP, boots
+  only DSP 0 and drives the codec from it with another ESSI clock. The Micro entry in
+  `ROADMAP.md` is updated. Checked by disassembling both images against the ROM. Documentation
+  only.
 - **`tools/filtersweep/frun.cpp` follows FILTERtek going stereo (Claude, requested by Javier).**
   It drives the left side (`IN_L`/`OUT_L`); with DRIVE at 0 the comparison against the emulator
   gives the same figures as before, case by case.
