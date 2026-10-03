@@ -212,6 +212,27 @@ first note-off. `g1patchtest` shows it with `G1_SEQ=+60,+64,-64,-60 G1_CHORD=1`.
   `$1C–$1F` without the command bit) messages with the one the OS gave, and redoes the checksum
   (sum from `F0` to the payload, `& $7F`).
 
+## Reading a slot back (issue #25)
+
+- **RequestPatch** (`F0 33 5C+slot 06 41 35`) is answered with an ACK `$36` carrying the slot's
+  pid; then the 13 **GetPatch** requests editors send (`pid sc [payload]`, cc `$17`), each answered
+  by one section in patch packets (cc `$1C`–`$1F`, 7-bit packed, MSB first). An empty slot answers
+  too, with pid 0 and a patch of no modules.
+- **The replies are the upload sections**, byte-aligned, with three differences: the header
+  request (`$20 $28`) brings the Header (11 bytes, no padding) and then PatchName2 (39) in one
+  reply, where an upload starts with PatchName (55: the same name after three zero bytes); the
+  padding bits of a section's last byte are whatever the OS had (an upload ignores them); and the
+  OS may list cables in another order. The Header's last 3 bits (`unknown4`) change with every
+  upload. **No CustomDump (91) comes back**: what it carries in a `.pch` is editor-only (frequency
+  display units, a zoom, a slider position, per `modules.xml`), so an empty one goes up.
+- `g1patchtest` with `G1_FETCHCHECK=1` reads the patch back, uploads what it read over the same
+  slot and reads it again: on the 97 patches of the maintainer's banks every upload was accepted
+  and every patch came back the same (sections equal apart from the above).
+- **While an upload waits for its next packet the DSPs are stopped** (reload stop), so in the
+  plugin, where audio paces the emulator, the G1's time runs far ahead of the wall clock until
+  the upload ends: a pause of 0.1 s between an editor's packets became 10 s of G1 time. Anything
+  that times out on G1 time between an editor's packets will fire; the keeper does not.
+
 ## How each DSP processes audio
 
 - **Clocks, from the OS itself.** All four programs write `PCTL=$3C001A`: MF+1=27, PD+1=4. With a

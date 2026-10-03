@@ -248,9 +248,11 @@ namespace g1plugin
 	{
 		m_runner.reset();
 		m_engine.reset();
+		m_keeper.reset();
 		if(m_rom.empty())
 			return;
 		auto engine = std::make_unique<g1app::Engine>(m_rom);
+		m_keeper = std::make_unique<g1app::SlotKeeper>();
 		m_unstarted = false;
 		if(_state)
 			applyState(*engine, *_state);
@@ -300,7 +302,7 @@ namespace g1plugin
 		if(!m_engine || !m_prepared)
 			return;
 		m_runner = std::make_unique<g1app::Runner>(*m_engine, m_rate, static_cast<size_t>(m_maxBlock), m_gainDb,
-			m_pcPort && m_pcPort->virtualPorts() ? m_pcPort.get() : nullptr, m_pcIndex);
+			m_pcPort && m_pcPort->virtualPorts() ? m_pcPort.get() : nullptr, m_pcIndex, m_keeper.get());
 		setLatencySamples(static_cast<int>(m_runner->latency()));
 		m_unstarted = false;
 		if(std::exchange(m_engineFresh, false))
@@ -504,6 +506,9 @@ namespace g1plugin
 		xml.setAttribute("programs", juce::String(programsToString()));
 		xml.createNewChildElement("Flash")->addTextElement(packBytes(flash));
 		xml.createNewChildElement("Knobs")->addTextElement(packBytes(knobs));
+		// What each slot holds, which the flash does not (issue #25): as the keeper last read it.
+		if(m_keeper)
+			xml.createNewChildElement("Slots")->addTextElement(packBytes(g1app::SlotKeeper::pack(m_keeper->slots())));
 		juce::MemoryBlock out;
 		copyXmlToBinary(xml, out);
 		return out;
@@ -548,6 +553,13 @@ namespace g1plugin
 		if(const auto* knobsXml = xml->getChildByName("Knobs"); knobsXml && unpackBytes(knobsXml->getAllSubText(), knobs))
 			for(size_t i = 0; i < knobs.size() && i < 256; ++i)
 				_engine.mc().setAdc(static_cast<uint8_t>(i), knobs[i]);
+		// The slots go back once the G1 is up (after the Program Changes, which they override).
+		// A project saved before the keeper existed has none: the keeper reads what there is.
+		std::vector<uint8_t> slotBytes;
+		g1app::SlotKeeper::Slots slots;
+		if(const auto* slotsXml = xml->getChildByName("Slots"); m_keeper && slotsXml
+			&& unpackBytes(slotsXml->getAllSubText(), slotBytes) && g1app::SlotKeeper::unpack(slotBytes, slots))
+			m_keeper->restore(slots);
 		m_origin = "this project";
 		return true;
 	}

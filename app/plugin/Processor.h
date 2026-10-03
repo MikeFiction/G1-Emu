@@ -143,6 +143,7 @@ namespace g1plugin
 		std::mutex m_lifecycle;					// m_engine and m_runner are swapped under it
 		std::unique_ptr<g1app::Engine> m_engine;
 		std::unique_ptr<g1app::Runner> m_runner;
+		std::unique_ptr<g1app::SlotKeeper> m_keeper;	// what each slot holds; lives as long as m_engine
 		std::atomic<int> m_generation{0};
 		std::string m_origin;					// where this instance's flash came from
 

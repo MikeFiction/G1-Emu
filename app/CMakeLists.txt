@@ -19,11 +19,18 @@ message(STATUS "g1Host: ${G1_BACKEND} audio and MIDI backend")
 # g1Core: the engine and what every front end shares (ROM search, settings file, statistics).
 # No devices and no threads of its own: the plugin builds on it without the backends below.
 add_library(g1Core STATIC engine.cpp engine.h hostconfig.cpp hostconfig.h romfinder.cpp romfinder.h
-	audiobridge.h)
+	slotkeeper.cpp slotkeeper.h audiobridge.h)
 target_include_directories(g1Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # So a clone works with no setup: the repo's own Roms/ is one of the folders searched.
 target_compile_definitions(g1Core PRIVATE G1_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(g1Core PUBLIC g1Lib)
+
+# The SlotKeeper against an emulated G1 (issue #25). Needs a ROM, so without one it reports itself
+# skipped.
+add_executable(g1slotkeepertest slotkeepertest.cpp)
+target_link_libraries(g1slotkeepertest PRIVATE g1Core)
+add_test(NAME g1slotkeepertest COMMAND g1slotkeepertest)
+set_tests_properties(g1slotkeepertest PROPERTIES TIMEOUT 300 LABELS g1 SKIP_RETURN_CODE 77)
 
 add_library(g1Host STATIC emuhost.cpp emuhost.h miditransport.cpp miditransport.h)
 target_link_libraries(g1Host PUBLIC g1Core)

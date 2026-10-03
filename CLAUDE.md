@@ -84,9 +84,17 @@ clap-juce-extensions; `clap-validator` passes it. The design is
   the late frames, so timing stays locked.
 - **State:** `Engine::userState()` (runs of bytes differing from the factory flash, with a hash of
   the factory flash so another ROM is refused), gzip + base64 in XML, plus the 256 ADC values, the
-  panel's two preferences and the last Bank Select/Program Change per channel, replayed at boot
-  because the OS does not keep what each slot held. A state that cannot be applied is handed back
+  panel's two preferences, the last Bank Select/Program Change per channel (replayed at boot), and
+  **what each slot holds** (`<Slots>`, issue #25). A state that cannot be applied is handed back
   untouched. A new instance copies the standalone's `flash.bin` (read only).
+- **Slots** (`app/slotkeeper.*`): the flash does not hold a slot's patch (sent by an editor,
+  loaded from the panel or a Program Change, edited since), so the `SlotKeeper` asks the OS for
+  it over the PC Port like an editor (RequestPatch, 13 GetPatch) once a slot may have changed
+  (the editor's edits, the G1's own Parameter and NewPatchInSlot reports) and the port has been
+  quiet for 1 s, and hides its own traffic from the editor. It never speaks while an editor's
+  upload is half sent. On a restore it uploads the saved sections after the G1 boots, after the
+  Program Changes. `getStateInformation` saves the slots as last read (an edit less than ~1.5 s
+  old may be missing). `g1slotkeepertest` and `g1vst3check plugin.vst3 --slots` test it.
 - **Engine swaps** (a project's state arriving) happen on the message thread with processing
   suspended; the editor drops its panel first (`Editor::engineGoing`).
 - Known: a patch load runs slower than real time (host-port syncs), ~0.3 s of dropouts at the
@@ -136,6 +144,7 @@ the four outputs and the links between DSPs; it also has probes for the panel (s
 | `app/gui/`, `g1gui.sh` | `g1gui`: the window with the panel. |
 | `app/gui/Settings.*` | The settings window: ROM, audio driver and device, level, raw MIDI card. |
 | `app/plugin/` | The VST3 (`g1plugin`): `Processor`, `Editor` (the same `Panel`, through `PanelHost`), and `runner.*`, which paces the engine by the host's blocks. `g1runnertest` tests the runner without a DAW. |
+| `app/slotkeeper.*` | `SlotKeeper`: what each slot holds, read from the OS over the PC Port and uploaded back after a restore (#25). `g1slotkeepertest` tests it against an emulated G1. |
 | `app/romfinder.*`, `g1Lib/g1rom.h` | Where the ROM comes from, and whether a file is the right one. |
 | `app/audiobridge.h` | Rate conversion and the lock-free queues between the emulator and the card. |
 | `app/miditransport.*` | `MidiTransport`, the interface every way of carrying the G1's MIDI bytes implements, and `makeMidiTransport()`, the one place that picks which. `EmuHost` knows none of them by name. |

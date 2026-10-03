@@ -7,6 +7,20 @@ Older entries cite their commit by hand.
 
 ## 2026-10-03
 
+- **The plugin saves what each slot holds and brings it back with the project (Claude, requested
+  by Javier; #25).** Until now a project kept the banks, the knobs and the last Program Change:
+  a patch sent by an editor, loaded from the panel, or edited since was lost on reopening. The
+  new `SlotKeeper` (`app/slotkeeper.*`) reads each slot from the OS over the PC Port the way an
+  editor does, whenever the slot may have changed and the port is quiet, hiding its own traffic
+  from a connected editor, and saves the slots in the project (`<Slots>`); on reopening it uploads
+  them once the G1 has booted. Findings in `NOTES.md`, "Reading a slot back". Checked:
+  `G1_FETCHCHECK` in `g1patchtest` reads, re-uploads and re-reads the 97 patches of the
+  maintainer's banks, all accepted and identical; the new `g1slotkeepertest` (ctest) restores a
+  patch, reads it back with a fresh keeper, and follows an editor's upload into another slot,
+  with the factory flash and with a real `flash.bin`; `g1vst3check plugin.vst3 --slots` sends a
+  patch to a VST3 instance through its PC Port, saves the project and reopens it in a new
+  instance with no editor, which plays it at the same level (−25.8 dBFS); the usual
+  `g1vst3check` run and `ctest` pass.
 - **What the official OS updates hold, rack and Micro Modular (Claude, requested by Javier).**
   `NOTES.md`, "The official OS update": the rack's is the same OS 3.03 as the ROM's, linked `$20`
   higher in most places (~94% identical with addresses masked), so `g1Lib/g1knobs.h`, which reads

@@ -1,6 +1,6 @@
 // g1vst3check: loads the built G1-Emu.vst3 through JUCE's VST3 host, as a DAW would, and plays it.
 //
-//   g1vst3check path/to/G1-Emu.vst3
+//   g1vst3check path/to/G1-Emu.vst3 [--slots]
 //
 // Two instances at once in one process, each with its own Program Change and a note, rendered
 // offline block by block and interleaved; then the first one's state goes into a third instance,
@@ -8,6 +8,10 @@
 // closed when there is a display. While A and B play, each one's PC Port gets the editor's greeting
 // (IAm) through its virtual MIDI port, as Animatek NME sends it, and must answer on its own port and
 // not on the other's (Linux and macOS: on Windows JUCE makes no virtual ports). Needs a ROM where the plugin looks for one: without it, 77.
+//
+// --slots, alone (issue #25, where there are PC Ports): a patch sent to slot A through the PC
+// Port, as an editor sends it and not stored in any bank, must be in the project saved
+// afterwards; a new instance opened from that project, with no editor, must play it.
 
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -75,6 +79,10 @@ namespace
 			const uint8_t iAm[] = {0xf0, 0x33, 0x00, 0x06, 0x00, 0x03, 0x03, 0xf7};
 			m_outs[_port]->sendMessageNow(juce::MidiMessage(iAm, sizeof(iAm)));
 		}
+		void send(const juce::String& _port, const std::vector<uint8_t>& _sysex)
+		{
+			m_outs[_port]->sendMessageNow(juce::MidiMessage(_sysex.data(), static_cast<int>(_sysex.size())));
+		}
 		void handleIncomingMidiMessage(juce::MidiInput* _source, const juce::MidiMessage& _m) override
 		{
 			std::lock_guard<std::mutex> lock(m_mutex);
@@ -83,6 +91,14 @@ namespace
 			const auto* d = _m.getRawData();
 			if(_m.getRawDataSize() > 6 && d[0] == 0xf0 && d[1] == 0x33 && d[2] == 0x00 && d[4] == 0x01 && d[5] == 0x03)
 				++m_replies[m_names[_source]];
+			// An upload packet's ACK (cc $16, $36 or $7F), for the --slots editor.
+			if(_m.getRawDataSize() > 5 && d[0] == 0xf0 && d[1] == 0x33 && (d[2] >> 2) == 0x16 && (d[5] == 0x36 || d[5] == 0x7f))
+				++m_acks;
+		}
+		int acks()
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			return m_acks;
 		}
 		int replies(const juce::String& _port)
 		{
@@ -93,6 +109,7 @@ namespace
 		std::mutex m_mutex;
 		std::map<juce::MidiInput*, juce::String> m_names;
 		std::map<juce::String, int> m_replies;
+		int m_acks = 0;
 		std::map<juce::String, std::unique_ptr<juce::MidiOutput>> m_outs;
 		std::vector<std::unique_ptr<juce::MidiInput>> m_ins;
 	};
@@ -140,6 +157,134 @@ namespace
 	}
 
 	float db(const float _v) { return _v > 0 ? 20.0f * std::log10(_v) : -200.0f; }
+
+	// SimpleOSC (OscA into the 2-Output, it drones with no note) as NME uploads it to slot A: the
+	// sections back to back, in packets of 32 bytes, each 7-bit packed and framed.
+	std::vector<std::vector<uint8_t>> simpleOscUpload()
+	{
+		const std::vector<std::vector<uint8_t>> sections = {
+			{0x37, 0x00, 0x00, 0x00, 0x53, 0x69, 0x6d, 0x70, 0x6c, 0x65, 0x4f, 0x53, 0x43, 0x00},
+			{0x21, 0x01, 0xfc, 0x07, 0xf1, 0x00, 0x40, 0x7d, 0x02, 0xfe, 0x78},
+			{0x4a, 0x82, 0x0e, 0x04, 0x10, 0x30, 0x80, 0x81, 0x09}, {0x4a, 0x00},
+			{0x69, 0x80, 0x00, 0x00, 0x20, 0x00, 0x00},
+			{0x52, 0x80, 0x02, 0x00, 0x40, 0x82, 0x00, 0x01, 0x02, 0x08, 0x10}, {0x52, 0x00, 0x00},
+			{0x4d, 0x82, 0x02, 0x1e, 0x04, 0x08, 0x10, 0x00, 0x00, 0x00, 0x00, 0x02, 0x09, 0x90, 0x00}, {0x4d, 0x00},
+			{0x65, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, {0x62, 0xc0, 0x40, 0x60, 0x20, 0x40, 0x00, 0x00}, {0x60, 0x00},
+			{0x5b, 0x80}, {0x5b, 0x00},
+			{0x5a, 0x82, 0x01, 0x4f, 0x73, 0x63, 0x41, 0x00, 0x02, 0x32, 0x4f, 0x75, 0x74, 0x70, 0x75, 0x74, 0x00}, {0x5a, 0x00}};
+		std::vector<std::pair<std::vector<uint8_t>, int>> packets(1);
+		for(const auto& sec : sections)
+		{
+			for(const auto b : sec)
+			{
+				if(packets.back().first.size() == 32)
+					packets.emplace_back();
+				packets.back().first.push_back(b);
+			}
+			++packets.back().second;
+		}
+		std::vector<std::vector<uint8_t>> out;
+		for(size_t i = 0; i < packets.size(); ++i)
+		{
+			const int cc = 0x1c | (i == 0 ? 1 : 0) | (i + 1 == packets.size() ? 2 : 0);
+			std::vector<uint8_t> m = {0xf0, 0x33, static_cast<uint8_t>(cc << 2), 0x06, static_cast<uint8_t>(0x40 | packets[i].second)};
+			uint32_t buffer = 0;
+			int held = 0;
+			for(const auto b : packets[i].first)
+			{
+				buffer = (buffer << 8) | b;
+				held += 8;
+				while(held >= 7) { held -= 7; m.push_back(static_cast<uint8_t>((buffer >> held) & 0x7f)); }
+			}
+			if(held > 0)
+				m.push_back(static_cast<uint8_t>((buffer << (7 - held)) & 0x7f));
+			uint32_t sum = 0;
+			for(const auto b : m) sum += b;
+			m.push_back(static_cast<uint8_t>(sum & 0x7f));
+			m.push_back(0xf7);
+			out.push_back(m);
+		}
+		return out;
+	}
+
+	// Plays _seconds with no MIDI, offline, and returns the peak of each whole second.
+	std::vector<float> drone(juce::AudioPluginInstance& _p, const double _seconds, const std::function<void(int)>& _onBlock = {})
+	{
+		_p.setNonRealtime(true);
+		_p.prepareToPlay(g_rate, g_block);
+		std::vector<float> peaks(static_cast<size_t>(std::ceil(_seconds)), 0.0f);
+		const auto total = static_cast<int>(_seconds * g_rate);
+		for(int pos = 0; pos < total; pos += g_block)
+		{
+			if(_onBlock)
+				_onBlock(pos);
+			juce::AudioBuffer<float> buffer(std::max(_p.getTotalNumInputChannels(), _p.getTotalNumOutputChannels()), g_block);
+			buffer.clear();
+			juce::MidiBuffer midi;
+			_p.processBlock(buffer, midi);
+			auto& peak = peaks[static_cast<size_t>(pos / static_cast<int>(g_rate))];
+			for(int c = 0; c < _p.getTotalNumOutputChannels(); ++c)
+				peak = std::max(peak, buffer.getMagnitude(c, 0, g_block));
+		}
+		_p.releaseResources();
+		return peaks;
+	}
+
+	std::string peaksText(const std::vector<float>& _peaks)
+	{
+		std::string s;
+		for(const auto p : _peaks)
+			s += juce::String(db(p), 1).toStdString() + " ";
+		return s;
+	}
+
+	// Issue #25 (--slots), in a process of its own: within one process JUCE does not make the
+	// virtual ports of instances created after others have closed. A patch sent to slot A through
+	// the PC Port, as an editor sends it and stored in no bank, must be in the project saved
+	// afterwards; a new instance opened from that project, with no editor, must play it.
+	int checkSlots(juce::AudioPluginFormatManager& formats, const juce::String& path)
+	{
+		int failed = 0;
+
+		// A process of its own, so this first instance's PC Port is the first name.
+		Voice f;
+		f.plugin = load(formats, path);
+		const juce::String port = "G1-Emu PC Port";
+		Editor sender;
+		const bool open = port.isNotEmpty() && sender.open(port);
+		std::printf("issue #25: editor on \"%s\": %s\n", port.toRawUTF8(), open ? "open" : "NOT THERE");
+		const auto upload = simpleOscUpload();
+		// From 6 s, after the G1 has booted and the plugin has read its slots: each packet as soon
+		// as the last one's ACK is back, as NME sends them. The render is offline, so each block
+		// waits a moment for the MIDI to travel.
+		size_t sent = 0;
+		const auto peaksF = drone(*f.plugin, 11.0, [&](const int _pos)
+		{
+			if(!open || _pos < static_cast<int>(6.0 * g_rate) || sent == upload.size() || sender.acks() < static_cast<int>(sent))
+				return;
+			sender.send(port, upload[sent++]);
+			for(int i = 0; i < 50 && sender.acks() < static_cast<int>(sent); ++i)
+				juce::Thread::sleep(2);
+		});
+		std::printf("issue #25: %zu of %zu packets sent, %d ACKs\n", sent, upload.size(), sender.acks());
+		juce::MemoryBlock project;
+		f.plugin->getStateInformation(project);
+		f.plugin.reset();
+		Voice g;
+		g.plugin = load(formats, path);
+		g.plugin->setStateInformation(project.getData(), static_cast<int>(project.getSize()));
+		const auto peaksG = drone(*g.plugin, 6.0);
+		std::printf("issue #25: patch sent to slot A over the PC Port; peak per second %s\n", peaksText(peaksF).c_str());
+		std::printf("issue #25: project reopened in a new instance, no editor; peak per second %s\n", peaksText(peaksG).c_str());
+		const float playing = peaksF.back(), reopened = peaksG.back();
+		if(!open || sent != upload.size() || playing < 1e-3f || reopened < 1e-3f || std::abs(db(playing) - db(reopened)) > 1.0f)
+		{
+			std::printf("FAIL: the patch in slot A does not come back with the project\n");
+			failed = 1;
+		}
+		return failed;
+	}
+
 }
 
 int main(int _argc, char** _argv)
@@ -154,6 +299,12 @@ int main(int _argc, char** _argv)
 	formats.addFormat(new juce::VST3PluginFormat());
 	const juce::String path(_argv[1]);
 	int failed = 0;
+	if(_argc > 2 && juce::String(_argv[2]) == "--slots")
+	{
+		failed = checkSlots(formats, path);
+		std::printf("%s\n", failed ? "FAILED" : "all good");
+		return failed;
+	}
 
 	Voice a, b;
 	a.plugin = load(formats, path);

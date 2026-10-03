@@ -28,8 +28,8 @@ namespace g1app
 	}
 
 	Runner::Runner(Engine& _engine, const double _rate, const size_t _maxBlock, const float _gainDb,
-		MidiTransport* _pcPort, const int _pcIndex)
-		: m_engine(_engine), m_pcPort(_pcPort), m_pcIndex(_pcIndex), m_rate(_rate > 0 ? _rate : 48000.0), m_ahead(aheadFor(m_rate, _maxBlock)),
+		MidiTransport* _pcPort, const int _pcIndex, SlotKeeper* _keeper)
+		: m_engine(_engine), m_pcPort(_pcPort), m_pcIndex(_pcIndex), m_keeper(_keeper), m_rate(_rate > 0 ? _rate : 48000.0), m_ahead(aheadFor(m_rate, _maxBlock)),
 		  m_latency(m_ahead + guardFor(m_rate)),
 		  m_bridge(std::pow(10.0f, _gainDb / 20.0f))
 	{
@@ -131,8 +131,9 @@ namespace g1app
 		auto lastStats = clock::now();
 		uint64_t lastCycles = mc.ucCycles();
 		double busy = 0;
-		std::vector<uint8_t> out, pcOut;
+		std::vector<uint8_t> out, pcOut, toEditor, fromKeeper;
 		std::vector<std::vector<uint8_t>> pcIn;
+		auto nowMs = [&mc] { return mc.ucCycles() / (g1::g_ucClock / 1000); };
 
 		while(!m_quit.load(std::memory_order_acquire))
 		{
@@ -154,8 +155,18 @@ namespace g1app
 					auto& bytes = pcIn[static_cast<size_t>(m_pcIndex)];
 					m_pcIn += bytes.size();
 					mc.getPcPort().receive(bytes);
+					if(m_keeper)
+						m_keeper->editorSent(bytes, nowMs());
 					bytes.clear();
 				}
+			}
+			// The keeper's own requests, when the editor leaves it room.
+			if(m_keeper)
+			{
+				fromKeeper.clear();
+				m_keeper->tick(nowMs(), fromKeeper);
+				if(!fromKeeper.empty())
+					mc.getPcPort().receive(fromKeeper);
 			}
 			while(const auto* e = m_events.front())
 			{
@@ -193,6 +204,13 @@ namespace g1app
 				pcOut.clear();
 				mc.getPcPort().takeTx(pcOut);
 				m_pcOut += pcOut.size();
+				// The keeper sees all of it and keeps the answers to its own requests from the editor.
+				if(m_keeper)
+				{
+					toEditor.clear();
+					m_keeper->g1Sent(pcOut, nowMs(), toEditor);
+					pcOut.swap(toEditor);
+				}
 				lock.unlock();
 				if(m_pcPort && !pcOut.empty())
 					m_pcPort->send(m_pcIndex, pcOut);

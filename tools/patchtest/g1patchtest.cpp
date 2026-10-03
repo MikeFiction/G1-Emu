@@ -30,6 +30,7 @@
 
 #include "../../app/audiobridge.h"
 
+#include <algorithm>
 #include <map>
 #include <atomic>
 #include <thread>
@@ -311,6 +312,7 @@ int main(int argc, char** argv)
 	auto upload = [&](const std::vector<UploadPacketizer::Packet>& packets) -> int
 	{
 	int pid = -1;
+	std::vector<uint8_t> carry;
 	// How long to wait for each packet's reply. The OS takes much longer at some points of a
 	// big patch (it is loading code into the DSPs), so G1_ACKMS raises it.
 	const uint32_t ackMs = std::getenv("G1_ACKMS") ? static_cast<uint32_t>(std::atoi(std::getenv("G1_ACKMS"))) : 300;
@@ -349,10 +351,14 @@ int main(int argc, char** argv)
 			std::printf("  packet %zu took %llu ms\n", i + 1, static_cast<unsigned long long>(ms));
 		if(std::getenv("G1_VERBOSE"))
 			std::printf("  packet %zu: %s -> %s\n", i + 1, hex(msg, 12).c_str(), hex(reply, 16).c_str());
-		// Slot 0 ACK: F0 33 58 06 xx 36 pid ...
-		for(size_t k = 0; k + 6 < reply.size(); ++k)
-			if(reply[k] == 0xf0 && reply[k + 1] == 0x33 && (reply[k + 2] >> 2) == 0x16 && reply[k + 5] == 0x36)
-				pid = reply[k + 6];
+		// Slot 0 ACK: F0 33 58 06 xx 36 pid ... A reply can straddle two packets' reads, so the
+		// tail of the previous one is kept in front of this one.
+		carry.insert(carry.end(), reply.begin(), reply.end());
+		for(size_t k = 0; k + 6 < carry.size(); ++k)
+			if(carry[k] == 0xf0 && carry[k + 1] == 0x33 && (carry[k + 2] >> 2) == 0x16 && carry[k + 5] == 0x36)
+				pid = carry[k + 6];
+		if(carry.size() > 16)
+			carry.erase(carry.begin(), carry.end() - 16);
 		if(!hasAck(reply))
 			std::printf("  packet %zu/%zu: NO REPLY\n", i + 1, packets.size());
 	}
@@ -376,7 +382,7 @@ int main(int argc, char** argv)
 			mc.getPcPort().takeTx(drop);
 		}
 	}
-	const int pid = upload(packets);
+	int pid = upload(packets);
 	// G1_PCHIST=ms: where the CPU spends the next ms of emulated time, most visited PCs first
 	// (to see which loop the OS sits in after an upload it did not answer).
 	if(const char* ph = std::getenv("G1_PCHIST"))
@@ -459,6 +465,179 @@ int main(int argc, char** argv)
 					'A' + i.slot, i.section, i.module, i.type, i.param, i.moduleName.c_str(), i.paramName.c_str(), i.value, i.max);
 		}
 	}
+	// G1_FETCHCHECK=1: asks the OS for the patch back, section by section as NME does, and compares
+	// each reply (7-bit unpacked) with the sections NME uploaded (issue #25: can a fetched patch be
+	// uploaded again as it came?).
+	if(std::getenv("G1_FETCHCHECK"))
+	{
+		auto unpack7 = [](const std::vector<uint8_t>& _in)
+		{
+			std::vector<uint8_t> out;
+			uint32_t buf = 0;
+			int held = 0;
+			for(const auto c : _in)
+			{
+				buf = (buf << 7) | (c & 0x7f);
+				held += 7;
+				if(held >= 8)
+				{
+					held -= 8;
+					out.push_back(static_cast<uint8_t>((buf >> held) & 0xff));
+				}
+			}
+			return out;
+		};
+		const std::vector<std::vector<uint8_t>> requests = {
+			{0x20, 0x28}, {0x4b, 0x01}, {0x4b, 0x00}, {0x53, 0x01}, {0x53, 0x00}, {0x4c, 0x01}, {0x4c, 0x00},
+			{0x66}, {0x63}, {0x61}, {0x4e, 0x01}, {0x4e, 0x00}, {0x68}};
+		auto fetch = [&](const int _pid)
+		{
+			std::vector<std::vector<uint8_t>> fetched;
+			for(const auto& rq : requests)
+			{
+				std::vector<uint8_t> m = {0xf0, 0x33, 0x5c, 0x06, static_cast<uint8_t>(_pid)};
+				m.insert(m.end(), rq.begin(), rq.end());
+				mc.getPcPort().receive(withChecksum(m));
+				// Every message of the reply, until the packet that ends the section (or 2 s).
+				std::vector<uint8_t> pending, section;
+				bool done = false;
+				for(uint32_t t = 0; t < 2000; ++t)
+				{
+					run(mc, g_ms);
+					std::vector<uint8_t> more;
+					mc.getPcPort().takeTx(more);
+					pending.insert(pending.end(), more.begin(), more.end());
+					size_t k = 0;
+					for(;;)
+					{
+						const auto start = std::find(pending.begin() + static_cast<long>(k), pending.end(), uint8_t(0xf0));
+						const auto end = std::find(start, pending.end(), uint8_t(0xf7));
+						if(start == pending.end() || end == pending.end())
+							break;
+						const std::vector<uint8_t> msg(start, end + 1);
+						k = static_cast<size_t>(end - pending.begin()) + 1;
+						if(msg.size() < 6 || msg[1] != 0x33 || (msg[2] >> 2) < 0x1c)
+							continue;
+						const auto pkt = PatchPacketMessage::decode(msg[2] >> 2, msg.data() + 4, msg.size() - 5);
+						if(pkt.isFirst) section.clear();
+						section.insert(section.end(), pkt.patchData.begin(), pkt.patchData.end());
+						if(pkt.isLast)
+						{
+							fetched.push_back(unpack7(section));
+							section.clear();
+							if(!done)
+								t = std::max<uint32_t>(t, 1900);	// a second section may follow (CustomDump after NameDump)
+							done = true;
+						}
+					}
+					pending.erase(pending.begin(), pending.begin() + static_cast<long>(k));
+				}
+				if(!done)
+					std::printf("  FETCH: no complete reply to %s\n", hex(m, 8).c_str());
+				run(mc, 20 * g_ms);
+				std::vector<uint8_t> drop;
+				mc.getPcPort().takeTx(drop);
+			}
+			return fetched;
+		};
+		const auto fetched = fetch(pid);
+		const auto sent = serializer.serializeForUpload(*patch);
+		std::printf("FETCH: %zu replies for %zu requests; %zu sections were uploaded\n", fetched.size(), requests.size(), sent.size());
+		for(size_t i = 0; i < fetched.size(); ++i)
+		{
+			const auto& f = fetched[i];
+			std::printf("  got  type %3d %4zu bytes: %s\n", f.empty() ? -1 : f[0], f.size(), hex(f, 24).c_str());
+		}
+		for(size_t i = 0; i < sent.size(); ++i)
+		{
+			const auto& s = sent[i];
+			bool match = false;
+			for(const auto& f : fetched)
+				if(f.size() >= s.size() && std::equal(s.begin(), s.end(), f.begin()))
+					match = true;
+			std::printf("  sent type %3d %4zu bytes %s: %s\n", s.empty() ? -1 : s[0], s.size(), match ? "== a reply's start" : "NO MATCH", hex(s, 24).c_str());
+		}
+
+		// Round trip: the fetched sections in upload order (the header reply carries the header,
+		// 11 bytes, then PatchName2), uploaded again over the same slot and fetched once more.
+		if(fetched.size() == requests.size())
+		{
+			const auto& h = fetched[0];
+			std::vector<std::vector<uint8_t>> up;
+			std::vector<uint8_t> name = {55, 0, 0, 0};	// PatchName (55) from PatchName2 (39)
+			name.insert(name.end(), h.begin() + 12, h.end());
+			up.push_back(name);
+			up.emplace_back(h.begin(), h.begin() + 11);	// Header (33)
+			for(const size_t i : {size_t(1), size_t(2), size_t(12), size_t(3), size_t(4), size_t(5), size_t(6), size_t(7), size_t(8), size_t(9)})
+				up.push_back(fetched[i]);
+			up.push_back({91, 0x80});	// CustomDump poly, empty
+			up.push_back({91, 0x00});	// CustomDump common, empty
+			up.push_back(fetched[10]);
+			up.push_back(fetched[11]);
+			for(const auto& u : up)
+				std::printf("  up type %3d %3zu: %s\n", u[0], u.size(), hex(u, 20).c_str());
+			const int pid2 = upload(UploadPacketizer::cut(up));
+			run(mc, 300 * g_ms);
+			const auto again = fetch(pid2);
+			size_t same = 0;
+			for(size_t i = 0; i < again.size() && i < fetched.size(); ++i)
+			{
+				const bool eq = again[i] == fetched[i];
+				same += eq;
+				if(!eq)
+					std::printf("  ROUNDTRIP section %zu differs:\n    was %s\n    now %s\n", i, hex(fetched[i], 400).c_str(), hex(again[i], 400).c_str());
+			}
+			std::printf("ROUNDTRIP: pid %d -> %d, %zu of %zu sections identical\n", pid, pid2, same, fetched.size());
+			// The same patch, read twice? The last byte of a section is padding (or, in the header,
+			// a field the OS bumps on every upload), and the OS may list the cables in another order.
+			auto bitsOf = [](const std::vector<uint8_t>& _b)
+			{
+				std::string bits;
+				for(const auto c : _b)
+					for(int i = 7; i >= 0; --i)
+						bits += ((c >> i) & 1) ? '1' : '0';
+				return bits;
+			};
+			std::vector<size_t> semanticDiff;
+			for(size_t i = 0; i < again.size() && i < fetched.size(); ++i)
+			{
+				const auto& x = fetched[i];
+				const auto& y = again[i];
+				bool eq = x.size() == y.size();
+				if(eq && (i == 3 || i == 4) && x.size() >= 3)	// cables: header, then 30-bit records
+				{
+					const auto bx = bitsOf(x), by = bitsOf(y);
+					const auto n = static_cast<size_t>(std::stoi(bx.substr(9, 15), nullptr, 2));
+					std::vector<std::string> rx, ry;
+					for(size_t c = 0; c < n && 24 + 30 * (c + 1) <= bx.size(); ++c)
+					{
+						rx.push_back(bx.substr(24 + 30 * c, 30));
+						ry.push_back(by.substr(24 + 30 * c, 30));
+					}
+					std::sort(rx.begin(), rx.end());
+					std::sort(ry.begin(), ry.end());
+					eq = rx == ry && bx.substr(0, 24) == by.substr(0, 24);
+				}
+				else if(eq && i == 0 && x.size() > 11)	// header + name: the header's last 3 bits (unknown4) are the OS's
+				{
+					auto mx = x, my = y;
+					mx[10] &= 0xf8;
+					my[10] &= 0xf8;
+					eq = mx == my;
+				}
+				else if(eq && !x.empty())
+					eq = std::equal(x.begin(), x.end() - 1, y.begin());
+				if(!eq)
+					semanticDiff.push_back(i);
+			}
+			std::printf("SEMANTIC: %s", semanticDiff.empty() ? "same patch" : "differs in sections");
+			for(const auto i : semanticDiff)
+				std::printf(" %zu", i);
+			std::printf("\n");
+			pid = pid2;	// the note below goes to the patch now in the slot
+		}
+	}
+
 	// G1_RAMDUMP=file: the CPU's 1 MB of RAM once the patch and its knobs are in, to find the OS's
 	// own tables by diffing two runs that differ in one thing.
 	if(const char* rd = std::getenv("G1_RAMDUMP"))
