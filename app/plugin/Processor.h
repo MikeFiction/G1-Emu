@@ -144,6 +144,7 @@ namespace g1plugin
 		std::unique_ptr<g1app::Engine> m_engine;
 		std::unique_ptr<g1app::Runner> m_runner;
 		std::unique_ptr<g1app::SlotKeeper> m_keeper;	// what each slot holds; lives as long as m_engine
+		std::vector<uint8_t> m_os;				// HostOptions::os, if set: the OS to run instead of the ROM's
 		std::atomic<int> m_generation{0};
 		std::string m_origin;					// where this instance's flash came from
 

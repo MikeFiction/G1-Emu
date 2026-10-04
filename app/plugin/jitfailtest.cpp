@@ -72,7 +72,10 @@ int main(int _argc, char** _argv)
 		return 77;
 	}
 
-	g1app::Engine engine(rom);
+	std::string osNote;
+	g1app::Engine engine(rom, options.loadOs(osNote));
+	if(!osNote.empty())
+		std::printf("%s\n", osNote.c_str());
 	g1app::SlotKeeper keeper;
 	g1app::SlotKeeper::Slots slots;
 	slots[0].sections = g_simpleOsc;

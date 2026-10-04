@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace g1app
 {
@@ -26,6 +27,7 @@ namespace g1app
 		bool jackConnect = true;			// out_1/out_2 connect themselves to the sound card
 		std::string rawMidiCard = "G1";		// the raw MIDI card to take over (empty: none)
 		std::string rom;					// the ROM to use; empty: look for one (romfinder.h)
+		std::string os;						// an OS image to run instead of the ROM's factory OS (empty: none)
 		bool showDisclaimer = false;		// the notice at startup; the window can turn it back on
 		bool extrasOpen = false;			// the window's extras drawer (Random...) was left open
 		bool knobDisplays = false;			// a display above each knob with what it is assigned to
@@ -46,6 +48,10 @@ namespace g1app
 		// on what they use. Missing or unreadable, the defaults stand; load() says whether it
 		// was there, which is how the window knows it is a first run.
 		bool load(const std::string& _path);
+
+		// The OS image named by `os` (or G1_OS, which wins), read into _image. Empty when there is
+		// none or it cannot be read; _note says which was used, or why not, for the log.
+		std::vector<uint8_t> loadOs(std::string& _note) const;
 		bool save(const std::string& _path) const;
 	};
 

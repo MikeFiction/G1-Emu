@@ -27,15 +27,25 @@ namespace g1app
 		// output capacitor removes it. Whoever sends the audio out subtracts it.
 		static constexpr int32_t OutputDc = 0x155;
 
+		// The flash below this is the installed OS; the patch storage starts here.
+		static constexpr size_t OsBytes = 0x70000;
+
 		// _rom must be a rack ROM that g1::checkRom accepts (inspectRom in romfinder.h). The flash
 		// starts with the factory OS installed and nothing else, as after an update.
-		explicit Engine(const std::vector<uint8_t>& _rom);
+		// _os, if given, is the OS image to install instead of the ROM's factory OS (HostOptions::os:
+		// Clavia's 3.03b update, which the hardware runs). An image that cannot be one is ignored.
+		explicit Engine(const std::vector<uint8_t>& _rom, const std::vector<uint8_t>& _os = {});
+
+		// Whether the OS in use is the one given, not the ROM's.
+		bool customOs() const { return m_customOs; }
 		~Engine();
 
 		g1::Microcontroller& mc() { return *m_mc; }
 		const g1::Microcontroller& mc() const { return *m_mc; }
 
-		// The whole flash, OS included: the standalone's flash.bin. Before the first exec().
+		// The whole flash: the standalone's flash.bin. Its OS part is replaced with this engine's
+		// OS, so the OS always comes from the ROM or the OS image given, never from the file.
+		// Before the first exec().
 		bool loadFlash(const std::vector<uint8_t>& _image);
 
 		// The flash as a difference against the factory one (patches, synth settings), and back.
@@ -51,5 +61,6 @@ namespace g1app
 		std::unique_ptr<g1::Microcontroller> m_mc;
 		std::vector<uint8_t> m_factory;
 		uint32_t m_factoryHash = 0;
+		bool m_customOs = false;
 	};
 }

@@ -48,7 +48,11 @@ directions. That card is a USB MIDI gadget (`dummy_hcd` + `g_midi`, stock kernel
 `snd-virmidi`**, which hard-codes sixteen subdevices per device and floods the DAW's list
 (`G1_RAWMIDI`, `docs/bitwig-midi.md`). The
 flash (OS + stored patches) lives beside it as `flash.bin`; if missing, it is
-created with the factory OS from the ROM.
+created with the factory OS from the ROM. **That factory OS is not the one a real G1 runs**: `os =`
+in the settings file (or `G1_OS`) names an OS image to run instead, such as Clavia's 3.03b update,
+which loads the synth settings at power-on (Shift+Store's slots) where the factory OS does not
+(`NOTES.md`, "The official OS update"). The OS part of a loaded flash is always replaced by the
+one in use.
 
 Audio goes through JACK (pipewire-jack): client **G1-Emu** with `out_1..out_4` and `in_L`/`in_R`,
 like the back panel; `out_1`/`out_2` connect themselves to the sound card (`G1_JACK_CONNECT=0`

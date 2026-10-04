@@ -38,6 +38,23 @@ been checked. **Everything that reads the OS by address breaks on it** (`g1Lib/g
 base, type table, morph, active slot, panel split), so booting from the update (#16) needs those
 addresses per OS build.
 
+**The ROM's factory OS is not the OS a G1 runs (2026-10-04).** A G1 updated to 3.03 runs the
+update's OS from its flash; the emulator installed the factory OS kept in the boot ROM. They
+differ in more than addresses. Right after the flash filesystem is set up (`$125C12` in the update),
+the update's boot calls the routine that loads the stored synth settings (object `$138A`, written
+by Shift+Store: `$12875C`) and stores default ones if there are none; the factory OS has neither
+call, and its loop that loads each slot's patch at power-on is behind a flag that nothing sets.
+So Shift+Store did write its record (with each slot's bank and patch number), and the factory OS
+never read it back: after a restart every slot was "Empty patch". Checked on Javier's real G1:
+Shift+Store with 207 in slot A, power off and on, 207; load 201 (or edit 207) without
+Shift+Store, power off and on, 207 again. With the update's OS in the emulator's flash it does
+the same (Shift+Store with 108, restart, 108). `HostOptions::os` (`os =` in the settings file,
+or `G1_OS`) names an OS image to run instead of the ROM's (as it runs from RAM at `$100000`);
+`Engine` installs it, keeps it as the factory flash the plugin's state is a difference against,
+and puts it back over whatever OS a loaded flash file had. `g1Lib/g1knobs.h` tells the two
+apart by where the DSP host-port table is and adds `$20` for the update. Getting the image out of
+the updater is not described here; `g1patchtest` takes `G1_OS` too.
+
 **Micro Modular: the same code base with one DSP.** It keeps the eight-port HI08 table, but where
 the rack checks for the expansion and sets 4 or 8 DSPs (`$10BB12`), the Micro sets 1 (`$1050E4`)
 and boots only DSP 0. Its DSP program is the rack's DSP 0 program (codec input) carrying DSP 3's

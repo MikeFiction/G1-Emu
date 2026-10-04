@@ -173,7 +173,10 @@ int main()
 			++failures;
 	};
 
-	g1app::Engine engine(rom);
+	std::string osNote;
+	g1app::Engine engine(rom, options.loadOs(osNote));
+	if(!osNote.empty())
+		std::printf("%s\n", osNote.c_str());
 	// G1_FLASH=file: start from that flash (a standalone's flash.bin) instead of the factory's.
 	if(const char* fl = std::getenv("G1_FLASH"))
 	{

@@ -5,6 +5,21 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-04
+
+- **Run the OS a real G1 runs, not the ROM's factory one (Claude, reported by Javier).** On the
+  real G1, Shift+Store keeps each slot's patch and the synth comes back with them at power-on; in
+  the emulator every slot came back as "Empty patch". The emulator was running the factory OS kept
+  in the boot ROM, which never loads the stored synth settings at boot; Clavia's 3.03b update,
+  which the hardware runs from its flash, does. New `os =` setting (and `G1_OS`): an OS image
+  to run instead of the ROM's, used by the window, the console and the plugin, kept out of the
+  plugin's project state like the factory OS. `g1Lib/g1knobs.h` finds its tables on either OS
+  ($20 higher on the update). Checked: with the update's OS, Shift+Store with patch 108 in slot A
+  and a restart come back with 108, as Javier's G1 does with 207; SimpleOSC sounds the same; the
+  knob names of a bank patch read the same on both OSes; `ctest` passes on both (`G1_OS`). Details
+  in `NOTES.md`, "The official OS update". Getting the image is up to the user; without one,
+  nothing changes.
+
 ## 2026-10-03
 
 - **A JIT that cannot generate a block no longer takes the host down (Claude, requested by

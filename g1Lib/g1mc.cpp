@@ -112,6 +112,20 @@ namespace g1
 		}
 	}
 
+	bool Microcontroller::installOsInFlash(const std::vector<uint8_t>& _os)
+	{
+		// The OS lives below the patch storage, which starts at $70000 in the flash.
+		if(_os.size() < 0x10000 || (_os.size() & 3) || 0x20 + _os.size() > 0x70000)
+			return false;
+		auto& flash = m_flash.data();
+		std::fill(flash.begin(), flash.end(), 0xff);
+		const auto len = static_cast<uint32_t>(_os.size() - 4);	// the loader copies (len >> 2) + 1 long words
+		for(int i = 0; i < 4; ++i)
+			flash[8 + static_cast<size_t>(i)] = static_cast<uint8_t>(len >> (24 - 8 * i));
+		std::copy(_os.begin(), _os.end(), flash.begin() + 0x20);
+		return true;
+	}
+
 	void Microcontroller::installRomOsInFlash()
 	{
 		auto& flash = m_flash.data();

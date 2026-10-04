@@ -204,6 +204,8 @@ namespace g1plugin
 		std::vector<uint8_t> rom;
 		if(search.found() && g1app::inspectRom(search.path, rom).ok())
 		{
+			std::string osNote;
+			m_os = options.loadOs(osNote);
 			m_rom = std::move(rom);
 			m_romPath = search.path;
 			m_romProblem.clear();
@@ -228,6 +230,8 @@ namespace g1plugin
 		options.rom = _file.getFullPathName().toStdString();
 		options.save(g1app::defaultSettingsPath());
 
+		std::string osNote;
+		m_os = options.loadOs(osNote);
 		m_rom = std::move(rom);
 		m_romPath = options.rom;
 		m_romProblem.clear();
@@ -251,7 +255,7 @@ namespace g1plugin
 		m_keeper.reset();
 		if(m_rom.empty())
 			return;
-		auto engine = std::make_unique<g1app::Engine>(m_rom);
+		auto engine = std::make_unique<g1app::Engine>(m_rom, m_os);
 		m_keeper = std::make_unique<g1app::SlotKeeper>();
 		m_unstarted = false;
 		if(_state)

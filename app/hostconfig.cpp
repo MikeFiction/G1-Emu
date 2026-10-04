@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 
 namespace g1app
 {
@@ -51,6 +52,7 @@ namespace g1app
 			else if(key == "jackConnect")	jackConnect = value != "0";
 			else if(key == "rawMidiCard")	rawMidiCard = value;
 			else if(key == "rom")			rom = value;
+			else if(key == "os")			os = value;
 			else if(key == "showDisclaimer") showDisclaimer = value != "0";
 			else if(key == "extrasOpen")	extrasOpen = value != "0";
 			else if(key == "knobDisplays")	knobDisplays = value != "0";
@@ -60,6 +62,26 @@ namespace g1app
 			else if(key == "midiInDevice")    midiInDevice = value;
 		}
 		return true;
+	}
+
+	std::vector<uint8_t> HostOptions::loadOs(std::string& _note) const
+	{
+		std::string path = os;
+		if(const char* v = std::getenv("G1_OS"))
+			path = v;
+		_note.clear();
+		if(path.empty())
+			return {};
+		std::ifstream f(path, std::ios::binary);
+		std::vector<uint8_t> image((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+		// As it runs from RAM at $100000: a few hundred KB of long words, below the patch storage.
+		if(image.size() < 0x10000 || image.size() > 0x6ffe0 || (image.size() & 3))
+		{
+			_note = "OS image " + path + " not used: " + (image.empty() ? "cannot read it" : "not an OS image (" + std::to_string(image.size()) + " bytes)");
+			return {};
+		}
+		_note = "OS: " + path;
+		return image;
 	}
 
 	bool HostOptions::save(const std::string& _path) const
@@ -75,6 +97,7 @@ namespace g1app
 		  << "jackConnect = " << (jackConnect ? 1 : 0) << "\n"
 		  << "rawMidiCard = " << rawMidiCard << "\n"
 		  << "rom = " << rom << "\n"
+		  << "os = " << os << "\n"
 		  << "showDisclaimer = " << (showDisclaimer ? 1 : 0) << "\n"
 		  << "extrasOpen = " << (extrasOpen ? 1 : 0) << "\n"
 		  << "knobDisplays = " << (knobDisplays ? 1 : 0) << "\n"

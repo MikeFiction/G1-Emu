@@ -99,6 +99,10 @@ namespace g1
 
 		// Puts the ROM's factory OS in the flash, as an update would.
 		void installRomOsInFlash();
+		// Puts an OS image (as it runs from RAM at $100000, such as Clavia's 3.03b update) in the
+		// flash instead. False if it cannot be one: not a whole number of long words, or too big
+		// for the OS's part of the flash.
+		bool installOsInFlash(const std::vector<uint8_t>& _os);
 		Flash& getFlash() { return m_flash; }
 		Dsp& getDsp(uint32_t _i) { return *m_dsps[_i]; }
 		mc68k::Hdi08& getHostPort(uint32_t _i) { return m_hostPorts[_i]; }

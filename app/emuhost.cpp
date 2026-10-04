@@ -115,14 +115,18 @@ namespace g1app
 		_log += "ROM: " + search.path + "\n";
 
 		m_flashPath = _flashPath.empty() ? defaultFlashPath() : _flashPath;
-		m_engine = std::make_unique<Engine>(rom);
+		std::string osNote;
+		const auto os = m_options.loadOs(osNote);
+		if(!osNote.empty())
+			_log += osNote + "\n";
+		m_engine = std::make_unique<Engine>(rom, os);
 		auto& mc = m_engine->mc();
 
 		std::vector<uint8_t> flash;
 		if(loadFile(m_flashPath, flash) && m_engine->loadFlash(flash))
 			_log += "flash loaded from " + m_flashPath + "\n";
 		else
-			_log += "new flash with the factory OS (will be saved in " + m_flashPath + ")\n";
+			_log += std::string("new flash with ") + (m_engine->customOs() ? "the OS image" : "the factory OS") + " (will be saved in " + m_flashPath + ")\n";
 
 		m_midi = makeMidiTransport("G1-Emu", _log);
 		if(!m_midi)

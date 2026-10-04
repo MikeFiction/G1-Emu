@@ -35,12 +35,12 @@ namespace
 
 	struct Setup
 	{
-		std::vector<uint8_t> rom, flash;
+		std::vector<uint8_t> rom, flash, os;
 	};
 
 	std::unique_ptr<g1app::Engine> makeEngine(const Setup& _s)
 	{
-		auto e = std::make_unique<g1app::Engine>(_s.rom);
+		auto e = std::make_unique<g1app::Engine>(_s.rom, _s.os);
 		if(!_s.flash.empty())
 			e->loadFlash(_s.flash);
 		return e;
@@ -162,6 +162,10 @@ int main(int _argc, char** _argv)
 		options.rom = v;
 	const auto search = g1app::findRom({}, options.rom);
 	Setup setup;
+	std::string osNote;
+	setup.os = options.loadOs(osNote);
+	if(!osNote.empty())
+		std::printf("%s\n", osNote.c_str());
 	if(!search.found() || !g1app::inspectRom(search.path, setup.rom).ok())
 	{
 		std::printf("skipped: no ROM\n");

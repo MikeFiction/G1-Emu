@@ -206,7 +206,17 @@ int main(int argc, char** argv)
 	}
 	g1::Microcontroller mc(rom);
 	mc.setBenchEnabled(bench);
-	mc.installRomOsInFlash();
+	// G1_OS=image: run that OS (Clavia's 3.03b update) instead of the ROM's factory one.
+	bool osImage = false;
+	if(const char* osPath = std::getenv("G1_OS"))
+	{
+		std::ifstream of(osPath, std::ios::binary);
+		const std::vector<uint8_t> os((std::istreambuf_iterator<char>(of)), std::istreambuf_iterator<char>());
+		osImage = mc.installOsInFlash(os);
+		std::printf("OS image %s: %s\n", osPath, osImage ? "installed" : "NOT an OS image, the ROM's is used");
+	}
+	if(!osImage)
+		mc.installRomOsInFlash();
 
 	// Output: one sample per DSP 3 block (4 channels).
 	std::vector<std::array<int32_t, 4>> blocks;
@@ -243,7 +253,8 @@ int main(int argc, char** argv)
 		});
 
 	// Boot and handshake.
-	run(mc, 1500 * g_ms);
+	// G1_BOOTMS: longer for a first boot of an OS that formats its patch storage (INIT FLASH).
+	run(mc, static_cast<uint64_t>(std::getenv("G1_BOOTMS") ? std::atoi(std::getenv("G1_BOOTMS")) : (osImage ? 6000 : 1500)) * g_ms);
 	std::vector<uint8_t> boot;
 	mc.getPcPort().takeTx(boot);
 	const auto hello = transact(mc, {0xf0, 0x33, 0x00, 0x06, 0x00, 0x03, 0x03, 0xf7}, 1000);

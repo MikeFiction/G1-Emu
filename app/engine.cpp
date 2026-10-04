@@ -40,9 +40,11 @@ namespace g1app
 		}
 	}
 
-	Engine::Engine(const std::vector<uint8_t>& _rom) : m_mc(std::make_unique<g1::Microcontroller>(_rom))
+	Engine::Engine(const std::vector<uint8_t>& _rom, const std::vector<uint8_t>& _os) : m_mc(std::make_unique<g1::Microcontroller>(_rom))
 	{
-		m_mc->installRomOsInFlash();
+		m_customOs = !_os.empty() && m_mc->installOsInFlash(_os);
+		if(!m_customOs)
+			m_mc->installRomOsInFlash();
 		m_factory = m_mc->getFlash().data();
 		m_factoryHash = fnv1a(m_factory);
 	}
@@ -54,6 +56,8 @@ namespace g1app
 		if(_image.size() != g1::Flash::Size)
 			return false;
 		m_mc->getFlash().data() = _image;
+		// Below $70000 is the OS: this engine's, whatever the file had.
+		std::copy_n(m_factory.begin(), OsBytes, m_mc->getFlash().data().begin());
 		return true;
 	}
 

@@ -52,6 +52,15 @@ namespace g1
 
 		explicit KnobMap(Microcontroller& _mc) : m_mc(_mc) {}
 
+		// The addresses above are the ROM's factory OS. Clavia's 3.03b update has the same tables
+		// linked $20 higher (NOTES.md, "The official OS update"). Which one runs is told by where
+		// the DSP host-port table is ($200000, $200008, ...): $15BD68 or $15BD88.
+		uint32_t osShift()
+		{
+			const auto ports = [this](const uint32_t _a) { return read32(_a) == 0x200000 && read32(_a + 4) == 0x200008; };
+			return ports(0x15bd88) && !ports(0x15bd68) ? 0x20u : 0u;
+		}
+
 		// Panel knob 0-17.
 		KnobInfo read(uint32_t _knob)
 		{
@@ -59,15 +68,16 @@ namespace g1
 			if(_knob >= 18)
 				return k;
 			uint32_t knob = _knob;
-			k.slot = static_cast<uint8_t>(m_mc.read8(ActiveSlot) & 3);
-			if(m_mc.read8(PanelSplitOff) == 0)
+			const uint32_t os = osShift();
+			k.slot = static_cast<uint8_t>(m_mc.read8(ActiveSlot + os) & 3);
+			if(m_mc.read8(PanelSplitOff + os) == 0)
 			{
-				k.slot = static_cast<uint8_t>(m_mc.read8(SplitSlot + _knob) & 3);
-				knob = m_mc.read8(SplitKnob + _knob);
+				k.slot = static_cast<uint8_t>(m_mc.read8(SplitSlot + os + _knob) & 3);
+				knob = m_mc.read8(SplitKnob + os + _knob);
 				if(knob >= 18)
 					return k;
 			}
-			const uint32_t base = SlotBase + k.slot * SlotStride;
+			const uint32_t base = SlotBase + os + k.slot * SlotStride;
 			const uint32_t entry = base + KnobTable + knob * 4;
 			k.section = m_mc.read8(entry);
 			k.module = m_mc.read8(entry + 1);
@@ -78,8 +88,8 @@ namespace g1
 				// A morph group: four of them, named by the OS
 				if(k.param >= 4)
 					return k;
-				k.moduleName = readString(MorphName, 6);
-				k.paramName = readString(MorphParams + k.param * MorphStride, MorphStride);
+				k.moduleName = readString(MorphName + os, 6);
+				k.paramName = readString(MorphParams + os + k.param * MorphStride, MorphStride);
 				k.assigned = !k.paramName.empty();
 				return k;
 			}
@@ -89,7 +99,7 @@ namespace g1
 			if(!inRam(mod))
 				return k;
 			k.type = m_mc.read8(mod + ModuleType);
-			const uint32_t names = read32(TypeTable + k.type * TypeStride);
+			const uint32_t names = read32(TypeTable + os + k.type * TypeStride);
 			if(!inRam(names))
 				return k;
 			const uint32_t name = names + k.param * NameStride;
