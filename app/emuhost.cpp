@@ -1,4 +1,5 @@
 #include "emuhost.h"
+#include <ctime>
 
 #include "romfinder.h"
 
@@ -15,6 +16,7 @@ namespace g1app { class JackAudio {}; }
 #endif
 #endif
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -127,6 +129,17 @@ namespace g1app
 			_log += "flash loaded from " + m_flashPath + "\n";
 		else
 			_log += std::string("new flash with ") + (m_engine->customOs() ? "the OS image" : "the factory OS") + " (will be saved in " + m_flashPath + ")\n";
+		if(const char* up = std::getenv("G1_UPDATE"); up && std::string(up) == "1")
+		{
+			// The loader finds no OS (length $FFFFFFFF) and runs its Update utility, which waits for
+			// an update (Clavia's updater sends it to the PC Port). Only the length goes: the banks stay, and so does the OS until
+			// the updater replaces it.
+			auto& image = mc.getFlash().data();
+			std::fill(image.begin() + 8, image.begin() + 12, uint8_t(0xff));
+			m_updateMode = true;
+			_log += "UPDATE MODE: the G1 waits for an OS update. Run Clavia's updater, choose this G1's PC Port as\n"
+				"its MIDI output and input, and close G1-Emu when the display says the update is complete.\n";
+		}
 
 		m_midi = makeMidiTransport("G1-Emu", _log);
 		if(!m_midi)
@@ -241,6 +254,8 @@ namespace g1app
 			return;
 		m_quit = true;
 		m_thread.join();
+		if(m_updateMode)
+			keepReceivedOs();
 		saveFlash();
 		finishWav();
 #ifdef G1_BACKEND_JUCE
@@ -297,6 +312,37 @@ namespace g1app
 			std::snprintf(buf, sizeof(buf), "%+.0f dB", static_cast<double>(_gainDb));
 			m_stats.audio.replace(from + 1, at + 3 - from - 1, buf);
 		}
+	}
+
+	void EmuHost::keepReceivedOs()
+	{
+		const auto& flash = m_engine->mc().getFlash().data();
+		const uint32_t len = (uint32_t(flash[8]) << 24) | (uint32_t(flash[9]) << 16) | (uint32_t(flash[10]) << 8) | flash[11];
+		if(len == 0xffffffff || len < 0x10000 || len + 4 > Engine::OsBytes - 0x20 || ((len + 4) & 3))
+		{
+			std::fprintf(stderr, "update mode: no complete OS came in (length $%08x); nothing changes\n", len);
+			return;
+		}
+		// The loader copies (length >> 2) + 1 long words, one more than Clavia's updater means: it
+		// stores the image's size, so that last long word is erased flash. It is left out.
+		std::vector<uint8_t> os(flash.begin() + 0x20, flash.begin() + 0x20 + len + 4);
+		if(os.size() >= 4 && std::all_of(os.end() - 4, os.end(), [](const uint8_t _b) { return _b == 0xff; }))
+			os.resize(os.size() - 4);
+		char stamp[32];
+		const auto now = std::time(nullptr);
+		std::strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", std::localtime(&now));
+		const auto dir = std::filesystem::path(m_flashPath).parent_path() / "os";
+		std::filesystem::create_directories(dir);
+		const auto path = (dir / ("received-" + std::string(stamp) + ".bin")).string();
+		{
+			std::ofstream f(path, std::ios::binary);
+			f.write(reinterpret_cast<const char*>(os.data()), static_cast<std::streamsize>(os.size()));
+		}
+		HostOptions options;
+		options.load(defaultSettingsPath());
+		options.os = path;
+		options.save(defaultSettingsPath());
+		std::fprintf(stderr, "update mode: an OS of %zu bytes came in; kept as %s and set as os in the settings\n", os.size(), path.c_str());
 	}
 
 	void EmuHost::saveFlash()

@@ -121,6 +121,39 @@ want to hear about it.
 - The level is low because the OS itself caps the master volume at −36 dB; it is compensated with
   +36 dB (`G1_GAIN_DB`). More settings in [`CLAUDE.md`](CLAUDE.md).
 
+## Optional: the OS a real G1 runs
+
+The ROM carries a factory OS, and that is what G1-Emu runs unless told otherwise. **It works**:
+patches load, play and edit, and the plugin keeps its state in your projects. But it is not quite
+the OS an updated G1 runs from its flash, Clavia's 3.03b update, and they differ: the factory one
+does not read the stored synth settings at power-on, so **Shift+Store's slots do not come back**
+when G1-Emu starts again (every slot says `Empty patch`), where a real G1 starts with them. More
+differences may turn up.
+
+You can install the real one into G1-Emu the way you would into the hardware, with Clavia's own
+updater. It is optional, done once per machine, and needs:
+
+- **Clavia's free Windows updater for the Nord Modular, OS 3.03b** (`Nord Modular OS v3.03b
+  Update.exe`), which you find and download yourself. The Mac version of it is for Mac OS 8/9 and
+  runs on no current Mac: use the Windows one everywhere.
+- **On Linux or macOS, Wine** to run it (on macOS also CrossOver or Whisky). On Windows it runs as
+  it is, but G1-Emu's PC Port needs a loopback driver there for now (see Windows notes).
+
+Then:
+
+1. Start G1-Emu in update mode: `G1_UPDATE=1 ./g1gui.sh`. The display shows `Update utility`: the
+   G1 has no OS to run and waits for one. Your banks are not touched.
+2. Run the updater (`wine "Nord Modular OS v3.03b Update.exe"`) and choose **G1-Emu's PC Port** as
+   its MIDI output and input. Follow its steps. The G1's display counts the percentage received
+   and ends with `Update completed`. If the updater complains before the G1 is done, let the G1
+   finish: what counts is its display.
+3. Close G1-Emu. The OS that came in is kept in the data folder (`os/received-….bin`) and set as
+   `os =` in the settings, so the window, the console and the plugin all run it from then on.
+
+To go back to the factory OS, empty `os =` in the settings file. Two things to know: a DAW project
+saved with one OS does not apply its G1 state under the other (it is kept as it is, nothing is
+lost), and the received OS is Clavia's, like the ROM: keep it to yourself.
+
 ## The VST3 and CLAP plugin (beta)
 
 The same G1 as an instrument inside a DAW: **notes from the track, audio back to the track**, with

@@ -7,6 +7,15 @@ Older entries cite their commit by hand.
 
 ## 2026-10-04
 
+- **Install the real OS with Clavia's own updater: `G1_UPDATE=1` (Claude, requested by Javier).**
+  The standalone starts in the boot ROM's update mode (the OS length in the flash blanked, as on a
+  G1 with no OS: the banks stay) and, when it closes, keeps an OS that came in as
+  `os/received-<date>.bin` and sets it as `os =`. Checked by Javier on Linux with Wine: the 3.03b
+  updater sent the OS to the PC Port (`Update completed` on the G1's display), and the OS kept is
+  byte for byte the one taken from the same updater by other means; the banks were intact. The
+  loader copies one long word more than the updater's length, which is now left out. README:
+  "Optional: the OS a real G1 runs". Not reproduced since: two crashes of the window in the DSP JIT
+  right after that first update (the console ran the same state 11 times, the window 3, cleanly).
 - **A kept flash is no longer formatted at every start (Claude, reported by Javier).** The `os =`
   change made `Engine::loadFlash` put the whole OS area back from the factory flash, which also
   erased the OS's own "formatted" mark at +0 (`$0000000C`): every start showed INIT FLASH and
