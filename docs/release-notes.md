@@ -1,25 +1,56 @@
-# G1-Emu v0.1.0-alpha.11
+# G1-Emu v0.1.0-alpha.12
 
-**This pre-release brings G1-Emu into your DAW: a VST3 and CLAP instrument plugin**, on the same
-emulation as the standalone. The plugin is new and has only been played on Linux so far: on macOS
-and Windows it builds, but has not yet been tried in a DAW. Please try it and report what you find
-with the **Report issue** button in the window.
+**This pre-release makes G1-Emu behave more like the real synth, and safer in a DAW.** The plugin
+now keeps what each slot holds in your project, the internal clock runs at the right tempo, a JIT
+failure no longer takes the DAW down, and you can optionally install the OS a real G1 runs, with
+Clavia's own updater. Please try it and report what you find with the **Report issue** button.
+
+## In your DAW
+
+- **The plugin keeps each slot's patch in the project** (#25). Until now a project kept the banks,
+  the knobs and the last Program Change: a patch sent from an editor, loaded from the panel, or
+  edited since came back as `Empty patch`. The plugin now reads each slot from the G1 whenever it
+  changes and puts it back when the project opens, with no editor needed. An edit made less than
+  about 1.5 seconds before saving may not be in it yet. Projects saved with alpha.11 still open;
+  their slots are read again from what loads.
+- **A DSP JIT failure no longer crashes the DAW** (#17). If the DSP code generator runs out of
+  memory (more likely with several instances), the DSP empties its cache and goes on; if it keeps
+  failing, that DSP goes silent and the status bar shows it (`x` and the reason), instead of the
+  host crashing.
+
+## The emulation
+
+- **The internal master clock runs at the synth's tempo** (#22). With the clock set to internal,
+  MIDIGlobal's clock, and every sequencer, arpeggio or clock divider following it, ran **4 times
+  too fast**; MIDI clock was always right. Two faults in the emulated 68331's timer, both fixed:
+  MIDIGlobal now gives 24 pulses per beat at the synth's tempo. **Clocked patches now play slower
+  than in earlier builds: that is the right speed.**
+- **A kept flash is no longer formatted again at start.** (A fault introduced and fixed while this
+  release was made; no earlier release had it.)
+
+## Optional: the OS a real G1 runs
+
+The ROM carries a factory OS, and G1-Emu runs it unless told otherwise: everything works with it.
+But it is not the OS an updated G1 runs from its flash, Clavia's 3.03b update, and it does not read
+the stored synth settings at power-on: **Shift+Store's slots do not come back** when G1-Emu starts
+again, where a real G1 starts with them. You can now install the real one into G1-Emu the way you
+would into the hardware, with **Clavia's free Windows updater** (`Nord Modular OS v3.03b
+Update.exe`, which you find and download yourself; the Mac version is for Mac OS 8/9 and runs on no
+current Mac) and, on Linux or macOS, **Wine**:
+
+1. Start G1-Emu in update mode: `G1_UPDATE=1 ./G1-Emu` (Linux and macOS; on Windows set
+   `G1_UPDATE=1` in the environment first). The display shows `Update utility`; your banks are not
+   touched.
+2. Run the updater and choose **G1-Emu's PC Port** as its MIDI output and input. Follow its steps
+   until the G1's display says `Update completed` (if the updater complains first, let the G1
+   finish).
+3. Close G1-Emu. The OS is kept in the data folder and set as `os =` in the settings; the window,
+   the console and the plugin all run it from then on. Empty `os =` to go back.
+
+It is optional and done once per machine. A DAW project saved under one OS keeps, but does not
+apply, its G1 state under the other. The OS is Clavia's, like the ROM: keep it to yourself.
 
 ## The plugin (VST3 and CLAP)
-
-- **The G1 on a DAW track:** notes, controllers and Program Changes from the track; outputs 1/2
-  and 3/4 as two stereo buses, and In L/R as an optional input. Latency is reported to the DAW,
-  which compensates for it.
-- **Edit it from Animatek NME while it plays in the DAW (Linux and macOS).** Each instance opens
-  its own PC Port: **G1-Emu PC Port**, **G1-Emu 2 PC Port** for the second, and so on. Choose it
-  in NME as input and output. On Windows the plugin cannot open a MIDI port yet: edit with the
-  standalone, as in alpha.10.
-- **The 18 knobs are automatable parameters**, each named after what it moves in the current
-  patch (`Knob 3: OscA Freq coars`). Turning one on the panel moves the parameter too.
-- **Its patches live in the DAW project.** A new instance starts from a copy of the standalone's
-  banks; from then on what you store goes into the project, not into the standalone's files.
-- **Program Changes:** from the track, or through the plugin's 128 programs, which is how a VST3
-  host sends them (to channel 1).
 
 **Installing it:** copy `G1-Emu.vst3` and/or `G1-Emu.clap` from the archive to the plugin folder.
 
@@ -31,29 +62,18 @@ with the **Report issue** button in the window.
 
 On macOS the plugin is not signed: if the DAW refuses it, run
 `xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/G1-Emu.vst3` (and the same for the
-`.clap`), then rescan.
-
-## Also new since alpha.10
-
-- **The emulator no longer slows down with every patch load** (#6). After a number of patch
-  changes the load could climb to 100 % and stay there, with dropouts. Fixed in the emulation, so
-  in every build.
-- **Shift and several slots at once from the keyboard.** Shift on the computer's keyboard holds
-  the panel's Shift (lit while held); A, B, C and D hold the slot buttons, several together. A
-  right click latches any panel button down until the next right click.
-- **An extras drawer below the panel** (the chevron next to the icons): **Random** turns the 18
-  knobs to random positions, a double click puts the patch's values back; **Parameter displays**
-  shows above each knob the module and parameter it moves.
-- **Patreon, Report issue and Settings** as icons; **Report issue** opens a GitHub issue with
-  your build and setup filled in. Oct Shift is gone from the panel: the rack never used it.
+`.clap`), then rescan. Each instance opens its own PC Port for Animatek NME on Linux and macOS
+(**G1-Emu PC Port**, **G1-Emu 2 PC Port**...).
 
 ## Known issues
 
 - **macOS:** patch uploads from Animatek NME can time out (#3).
-- **Windows:** the plugin has no PC Port; a direct link between NME and the emulator, with no
-  MIDI port, is planned (#8).
-- **CLAP:** if you remove every G1-Emu instance and then add a new one, that new one may have no
-  PC Port until the DAW reloads the plugin; its Settings say so.
+- **Windows:** the plugin has no PC Port; a direct link between NME and the emulator, with no MIDI
+  port, is planned (#8).
+- **CLAP:** if you remove every G1-Emu instance and then add a new one, that new one may have no PC
+  Port until the DAW reloads the plugin; its Settings say so.
+- **After the OS update:** the window crashed twice in the DSP code generator right after one
+  update, and has not been seen again. If it happens to you, please report it.
 
 ## Windows quick start
 

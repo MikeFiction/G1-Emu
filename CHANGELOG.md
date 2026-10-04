@@ -7,6 +7,10 @@ Older entries cite their commit by hand.
 
 ## 2026-10-04
 
+- **`v0.1.0-alpha.12` release notes (Claude, requested by Javier).** `docs/release-notes.md`
+  presents #25 (slots in the DAW project), #17 (JIT failure), #22 (the internal clock's tempo,
+  with the warning that clocked patches now play slower), the optional real OS with Clavia's
+  updater and Wine, and the known issues. Documentation only.
 - **Install the real OS with Clavia's own updater: `G1_UPDATE=1` (Claude, requested by Javier).**
   The standalone starts in the boot ROM's update mode (the OS length in the flash blanked, as on a
   G1 with no OS: the banks stay) and, when it closes, keeps an OS that came in as
