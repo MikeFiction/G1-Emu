@@ -43,8 +43,9 @@ namespace g1app
 		g1::Microcontroller& mc() { return *m_mc; }
 		const g1::Microcontroller& mc() const { return *m_mc; }
 
-		// The whole flash: the standalone's flash.bin. Its OS part is replaced with this engine's
-		// OS, so the OS always comes from the ROM or the OS image given, never from the file.
+		// The whole flash: the standalone's flash.bin. Its OS (length and image) is replaced with
+		// this engine's, so the OS always comes from the ROM or the OS image given, never from the
+		// file; the rest, the OS's own marks included, is kept as it is.
 		// Before the first exec().
 		bool loadFlash(const std::vector<uint8_t>& _image);
 

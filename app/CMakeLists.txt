@@ -32,6 +32,12 @@ target_link_libraries(g1slotkeepertest PRIVATE g1Core)
 add_test(NAME g1slotkeepertest COMMAND g1slotkeepertest)
 set_tests_properties(g1slotkeepertest PROPERTIES TIMEOUT 300 LABELS g1 SKIP_RETURN_CODE 77)
 
+# A kept flash comes back without being formatted again (the OS's marks survive loadFlash).
+add_executable(g1flashkeeptest flashkeeptest.cpp)
+target_link_libraries(g1flashkeeptest PRIVATE g1Core)
+add_test(NAME g1flashkeeptest COMMAND g1flashkeeptest)
+set_tests_properties(g1flashkeeptest PROPERTIES TIMEOUT 300 LABELS g1 SKIP_RETURN_CODE 77)
+
 add_library(g1Host STATIC emuhost.cpp emuhost.h miditransport.cpp miditransport.h)
 target_link_libraries(g1Host PUBLIC g1Core)
 

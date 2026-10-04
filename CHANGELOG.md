@@ -7,6 +7,13 @@ Older entries cite their commit by hand.
 
 ## 2026-10-04
 
+- **A kept flash is no longer formatted at every start (Claude, reported by Javier).** The `os =`
+  change made `Engine::loadFlash` put the whole OS area back from the factory flash, which also
+  erased the OS's own "formatted" mark at +0 (`$0000000C`): every start showed INIT FLASH and
+  formatted the patch storage, banks included. Now only the OS's length and image are replaced.
+  Javier's banks were restored from the backup taken before the change. New `g1flashkeeptest`
+  (ctest): a flash kept after a first boot comes back with nothing erased and the mark in place,
+  on the ROM's OS and on the update's; `ctest` passes on both.
 - **Run the OS a real G1 runs, not the ROM's factory one (Claude, reported by Javier).** On the
   real G1, Shift+Store keeps each slot's patch and the synth comes back with them at power-on; in
   the emulator every slot came back as "Empty patch". The emulator was running the factory OS kept

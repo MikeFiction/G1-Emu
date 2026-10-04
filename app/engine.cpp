@@ -56,8 +56,14 @@ namespace g1app
 		if(_image.size() != g1::Flash::Size)
 			return false;
 		m_mc->getFlash().data() = _image;
-		// Below $70000 is the OS: this engine's, whatever the file had.
-		std::copy_n(m_factory.begin(), OsBytes, m_mc->getFlash().data().begin());
+		// The OS is this engine's, whatever the file had: its length (at +8) and its image (from
+		// +$20). Only those: the OS keeps its own marks in the first bytes ($0000000C at +0 says
+		// the patch storage is formatted), and without them it formats the flash, banks and all.
+		auto& flash = m_mc->getFlash().data();
+		std::copy_n(m_factory.begin() + 8, 4, flash.begin() + 8);
+		const size_t len = (static_cast<size_t>(m_factory[8]) << 24 | static_cast<size_t>(m_factory[9]) << 16
+			| static_cast<size_t>(m_factory[10]) << 8 | m_factory[11]) + 4;
+		std::copy_n(m_factory.begin() + 0x20, std::min(len, OsBytes - 0x20), flash.begin() + 0x20);
 		return true;
 	}
 
