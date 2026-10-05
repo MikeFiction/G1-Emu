@@ -37,6 +37,7 @@ namespace g1gui
 		void setPanelScale(const float _scale) override { m_host.options().panelScale = _scale; }	// saved when the window closes
 		juce::String settingsTooltip() const override { return "Audio driver, output level and raw MIDI"; }
 		void showSettings(juce::Component* _parent) override { SettingsView::show(m_host, _parent); }
+		g1app::SynthSettingsLink& synthSettings() override { return m_host.synthSettings(); }
 		void save() { m_host.options().save(g1app::EmuHost::defaultSettingsPath()); }
 		// The master volume as it was left: put back before the panel reads it, kept when it closes.
 		void restoreVolume()

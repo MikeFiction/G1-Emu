@@ -15,7 +15,7 @@ juce_add_plugin(g1plugin
 	FORMATS VST3)
 
 target_sources(g1plugin PRIVATE Processor.cpp Processor.h Editor.cpp Editor.h runner.cpp runner.h
-	../gui/Panel.cpp ../gui/Panel.h ../gui/LcdFont.h)
+	../gui/Panel.cpp ../gui/Panel.h ../gui/SynthSettingsView.cpp ../gui/SynthSettingsView.h ../gui/LcdFont.h)
 target_include_directories(g1plugin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ../gui)
 target_compile_definitions(g1plugin PUBLIC
 	G1_BUILD_VERSION="${g1_build_version}"

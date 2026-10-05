@@ -10,6 +10,7 @@
 
 #include "hostconfig.h"
 #include "g1Lib/g1knobs.h"
+#include "SynthSettingsView.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -17,6 +18,7 @@
 #include <functional>
 #include <utility>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace g1gui
@@ -46,6 +48,7 @@ namespace g1gui
 		virtual void setPanelScale(float _scale) = 0;
 		virtual juce::String settingsTooltip() const = 0;
 		virtual void showSettings(juce::Component* _parent) = 0;
+		virtual g1app::SynthSettingsLink& synthSettings() = 0;	// the OS's, for the extras' overlay
 	};
 
 	// The panel is drawn from the PNGs in skin/ (built in as G1Skin), laid out in the background's
@@ -182,6 +185,14 @@ namespace g1gui
 		bool m_eatClick = false;
 	};
 
+	// The extras drawer's tray, with what it holds as children. It slides inside a clip below the
+	// status bar, so it comes out from under it instead of appearing.
+	class ExtrasDrawer : public juce::Component
+	{
+	public:
+		void paint(juce::Graphics& _g) override;
+	};
+
 	class KnobLook : public juce::LookAndFeel_V4
 	{
 	public:
@@ -224,7 +235,9 @@ namespace g1gui
 		PanelButton& addButton(const juce::String& _name, MatrixBit _bit, PanelButton::Shape _shape = PanelButton::Shape::Wide);
 		LedView& addLed(MatrixBit _bit);
 		void reportIssue();
-		void setExtrasOpen(bool _open);
+		void setExtrasOpen(bool _open, bool _animate = false);
+		void slideDrawer(double _now);
+		void placeDrawer();
 		void randomizeKnobs();
 		void restoreKnobs();
 		void setKnobDisplays(bool _on);
@@ -265,9 +278,17 @@ namespace g1gui
 		// The extras drawer below the panel: what the hardware never had. Closed, the window is
 		// the panel alone.
 		bool m_extrasOpen = false;
+		juce::Component m_drawerClip;
+		ExtrasDrawer m_drawer;
+		float m_drawerShown = 0.0f;					// 0 closed, 1 open
+		float m_slideFrom = 0.0f;
+		double m_slideStart = -1.0;
+		std::optional<juce::VBlankAttachment> m_slide;	// while it slides
 		DoubleClickButton m_random{"Random"};
 		juce::ToggleButton m_displaysToggle{"Parameter Displays"};
 		juce::ToggleButton m_followToggle{"Knob Follows Patch"};
+		juce::TextButton m_synthButton{"Synth Settings"};
+		SynthSettingsView m_synthView;	// over everything while open
 		juce::Random m_rng;
 
 		// What each knob is assigned to, from the OS's tables (g1knobs.h), and the displays.

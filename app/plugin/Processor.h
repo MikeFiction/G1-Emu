@@ -104,6 +104,7 @@ namespace g1plugin
 		// not save a project where nothing else changed and lose it (message thread). They are also
 		// what a new instance starts with (plugin.conf, beside the standalone's settings): the
 		// switches are written at once, the size when the editor closes (savePreferences).
+		g1app::SynthSettingsLink& synthSettings() { return m_synthSettings; }
 		bool extrasOpen() const { return m_extrasOpen; }
 		void setExtrasOpen(bool _open) { if(std::exchange(m_extrasOpen, _open) != _open) { stateChanged(); savePreferences(); } }
 		bool knobDisplays() const { return m_knobDisplays; }
@@ -157,6 +158,7 @@ namespace g1plugin
 		std::unique_ptr<g1app::Engine> m_engine;
 		std::unique_ptr<g1app::Runner> m_runner;
 		std::unique_ptr<g1app::SlotKeeper> m_keeper;	// what each slot holds; lives as long as m_engine
+		g1app::SynthSettingsLink m_synthSettings;	// the OS's synth settings, for the panel's overlay
 		std::vector<uint8_t> m_os;				// HostOptions::os, if set: the OS to run instead of the ROM's
 		std::atomic<int> m_generation{0};
 		std::string m_origin;					// where this instance's flash came from

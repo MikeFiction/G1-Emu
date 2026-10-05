@@ -393,7 +393,8 @@ namespace g1app
 		std::ofstream pcLog(std::filesystem::path(m_flashPath).parent_path() / "pcport-in.bin", std::ios::binary | std::ios::app);
 
 		std::vector<std::vector<uint8_t>> incoming;
-		std::vector<uint8_t> out;
+		std::vector<uint8_t> out, toEditor, toG1;
+		constexpr uint64_t msCycles = g1::g_ucClock / 1000;	// the G1's own time, for the settings link
 
 		// G1_MIDI_LOG=1: every chunk in and out of both ports, with its first bytes. The G1's
 		// protocol is all SysEx, so "F0 33 ..." arriving and nothing going back says more in one
@@ -428,6 +429,7 @@ namespace g1app
 				pcLog.write(reinterpret_cast<const char*>(incoming[m_pcPort].data()), static_cast<std::streamsize>(incoming[m_pcPort].size()));
 				pcLog.flush();
 				mc.getPcPort().receive(incoming[m_pcPort]);
+				m_synthSettings.editorSent(incoming[m_pcPort], mc.ucCycles() / msCycles);
 				incoming[m_pcPort].clear();
 			}
 			if(!incoming[m_midiPort].empty())
@@ -445,9 +447,17 @@ namespace g1app
 			while(mc.ucCycles() < target && mc.ucCycles() < limit)
 				mc.exec();
 
-			// What goes out
+			// What goes out. The answers to the settings' own requests stay here.
 			out.clear();
 			mc.getPcPort().takeTx(out);
+			toEditor.clear();
+			m_synthSettings.g1Sent(out, mc.ucCycles() / msCycles, toEditor);
+			out.swap(toEditor);
+			toG1.clear();
+			if(!m_updateMode)	// Clavia's updater has the PC Port to itself
+				m_synthSettings.tick(mc.ucCycles() / msCycles, toG1);
+			if(!toG1.empty())
+				mc.getPcPort().receive(toG1);
 			m_pcOut += out.size();
 			logMidi("out", "PC Port", out);
 			m_midi->send(m_pcPort, out);

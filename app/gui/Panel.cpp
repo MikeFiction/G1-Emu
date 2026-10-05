@@ -29,6 +29,7 @@ namespace g1gui
 
 		const juce::Colour g_face(Panel::FaceColour), g_textLight(0xffe8e8f0);
 		constexpr int g_extrasHeight = 60;	// what the extras drawer adds below the panel
+		constexpr float g_sectionsTop = 94.0f;	// the background's purple sections begin this far down
 
 		// A rectangle in the background's pixels, in the panel's.
 		juce::Rectangle<float> skf(const float _x, const float _y, const float _w, const float _h)
@@ -697,7 +698,7 @@ namespace g1gui
 			}
 	}
 
-	Panel::Panel(PanelHost& _host) : m_host(_host), m_mc(_host.mc()), m_lcd(_host.mc().getLcd()), m_dial(_host.mc()), m_knobMap(_host.mc())
+	Panel::Panel(PanelHost& _host) : m_host(_host), m_mc(_host.mc()), m_lcd(_host.mc().getLcd()), m_dial(_host.mc()), m_synthView(_host.synthSettings()), m_knobMap(_host.mc())
 	{
 		addAndMakeVisible(m_lcd);
 		addAndMakeVisible(m_dial);
@@ -779,17 +780,20 @@ namespace g1gui
 
 		m_extras.onClick = [this]
 		{
-			setExtrasOpen(!m_extrasOpen);
+			setExtrasOpen(!m_extrasOpen, true);
 			m_host.setExtrasOpen(m_extrasOpen);
 		};
 		addAndMakeVisible(m_extras);
+		m_drawerClip.setInterceptsMouseClicks(false, true);
+		m_drawerClip.addAndMakeVisible(m_drawer);
+		addChildComponent(m_drawerClip);
 
 		// Random: each of the 18 knobs to a value of its own, as if turned by hand. What it
 		// changes is whatever the patch has assigned to them; knobs with nothing assigned do nothing.
 		m_random.setTooltip("Turn the 18 knobs to random positions (double click: back to the patch's values)");
 		m_random.onSingleClick = [this] { randomizeKnobs(); };
 		m_random.onDoubleClick = [this] { restoreKnobs(); };
-		addChildComponent(m_random);
+		m_drawer.addAndMakeVisible(m_random);
 
 		m_displaysToggle.setTooltip("Show above each knob the module and parameter it moves");
 		m_displaysToggle.setColour(juce::ToggleButton::textColourId, g_textLight);
@@ -798,7 +802,7 @@ namespace g1gui
 			setKnobDisplays(m_displaysToggle.getToggleState());
 			m_host.setKnobDisplays(m_displaysToggle.getToggleState());
 		};
-		addChildComponent(m_displaysToggle);
+		m_drawer.addAndMakeVisible(m_displaysToggle);
 		for(auto& d : m_knobDisplays)
 			addChildComponent(d);
 		setKnobDisplays(m_host.knobDisplays());
@@ -807,7 +811,13 @@ namespace g1gui
 		m_followToggle.setColour(juce::ToggleButton::textColourId, g_textLight);
 		m_followToggle.setToggleState(m_host.knobFollowsPatch(), juce::dontSendNotification);
 		m_followToggle.onClick = [this] { m_host.setKnobFollowsPatch(m_followToggle.getToggleState()); };
-		addChildComponent(m_followToggle);
+		m_drawer.addAndMakeVisible(m_followToggle);
+
+		m_synthButton.setTooltip("The slots' MIDI channels, the clock and the other settings of the whole G1");
+		m_synthButton.onClick = [this] { m_synthView.open(*this, FaceHeight, sk(0, g_sectionsTop, 3000, 1238 - g_sectionsTop)); };
+		m_drawer.addAndMakeVisible(m_synthButton);
+		m_synthView.onClose = [this] { grabKeyboardFocus(); };
+		addChildComponent(m_synthView);
 
 		setExtrasOpen(m_host.extrasOpen());
 
@@ -855,16 +865,16 @@ namespace g1gui
 		shadowAt(g_masterKnob);
 		for(const auto& c : g_knobs)
 			shadowAt(c);
+	}
 
-		if(m_extrasOpen)
-		{
-			const juce::Rectangle<float> drawer(12.0f, static_cast<float>(Height) + 5.0f, static_cast<float>(getWidth()) - 24.0f, static_cast<float>(g_extrasHeight) - 12.0f);
-			_g.setColour(g_face.brighter(0.15f));
-			_g.fillRoundedRectangle(drawer, 10.0f);
-			_g.setColour(g_textLight);
-			_g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-			_g.drawText("EXTRAS", drawer.toNearestInt().withWidth(110), juce::Justification::centred, false);
-		}
+	void ExtrasDrawer::paint(juce::Graphics& _g)
+	{
+		const auto tray = getLocalBounds().toFloat().reduced(12.0f, 0.0f).withTrimmedTop(5.0f).withTrimmedBottom(7.0f);
+		_g.setColour(g_face.brighter(0.15f));
+		_g.fillRoundedRectangle(tray, 10.0f);
+		_g.setColour(g_textLight);
+		_g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+		_g.drawText("EXTRAS", tray.toNearestInt().withWidth(110), juce::Justification::centred, false);
 	}
 
 	void Panel::resized()
@@ -918,20 +928,68 @@ namespace g1gui
 		m_patreon.setBounds(getWidth() - 14 - 26 - 64, bar + 3, 26, 24);
 		m_report.setBounds(getWidth() - 14 - 26 - 32, bar + 3, 26, 24);
 		m_settings.setBounds(getWidth() - 14 - 26, bar + 3, 26, 24);
-		m_random.setBounds(140, Height + 15, 100, 28);
-		m_displaysToggle.setBounds(260, Height + 15, 180, 28);
-		m_followToggle.setBounds(450, Height + 15, 200, 28);
+		m_drawerClip.setBounds(0, Height, getWidth(), g_extrasHeight);
+		m_drawer.setSize(getWidth(), g_extrasHeight);
+		m_random.setBounds(140, 15, 100, 28);
+		m_displaysToggle.setBounds(260, 15, 180, 28);
+		m_followToggle.setBounds(450, 15, 200, 28);
+		m_synthButton.setBounds(660, 15, 130, 28);
+		if(m_synthView.isVisible())
+			m_synthView.setBounds(getLocalBounds());
+		placeDrawer();
 	}
 
-	void Panel::setExtrasOpen(const bool _open)
+	// The window grows at once and the drawer slides into the room (or out of it, and then the
+	// window shrinks): resizing the window itself frame by frame would stutter in some hosts.
+	void Panel::setExtrasOpen(const bool _open, const bool _animate)
 	{
 		m_extrasOpen = _open;
 		m_extras.setIcon(_open ? IconButton::Icon::ExtrasClose : IconButton::Icon::ExtrasOpen);
 		m_extras.setTooltip(_open ? "Hide the extras" : "Extras: Random and more");
-		m_random.setVisible(_open);
-		m_displaysToggle.setVisible(_open);
-		m_followToggle.setVisible(_open);
-		setSize(Width, _open ? Height + g_extrasHeight : Height);	// the window follows its content
+		if(_open)
+		{
+			m_drawerClip.setVisible(true);
+			setSize(Width, Height + g_extrasHeight);	// the window follows its content
+		}
+		if(_animate && isShowing())
+		{
+			m_slideFrom = m_drawerShown;
+			m_slideStart = -1.0;
+			m_slide.emplace(this, [this](const double _now) { slideDrawer(_now); });
+			return;
+		}
+		m_slide.reset();
+		m_drawerShown = _open ? 1.0f : 0.0f;
+		placeDrawer();
+		if(!_open)
+		{
+			m_drawerClip.setVisible(false);
+			setSize(Width, Height);
+		}
+	}
+
+	void Panel::slideDrawer(const double _now)
+	{
+		constexpr double duration = 0.075;	// seconds for the whole way
+		if(m_slideStart < 0)
+			m_slideStart = _now;
+		const float target = m_extrasOpen ? 1.0f : 0.0f;
+		const float t = std::min(1.0f, static_cast<float>((_now - m_slideStart) / (duration * std::abs(target - m_slideFrom) + 1e-6)));
+		const float e = 1.0f - std::pow(1.0f - t, 3.0f);	// eases out: quick, then settles
+		m_drawerShown = m_slideFrom + (target - m_slideFrom) * e;
+		placeDrawer();
+		// Done: the window shrinks if it closed. Not from inside the attachment's own callback.
+		if(t >= 1.0f)
+			juce::MessageManager::callAsync([p = juce::Component::SafePointer<Panel>(this)]
+			{
+				if(p != nullptr && p->m_slide)
+					p->setExtrasOpen(p->m_extrasOpen);
+			});
+	}
+
+	void Panel::placeDrawer()
+	{
+		m_drawer.setTopLeftPosition(0, juce::roundToInt(-(1.0f - m_drawerShown) * static_cast<float>(g_extrasHeight)));
 	}
 
 	void Panel::setKnobDisplays(const bool _on)

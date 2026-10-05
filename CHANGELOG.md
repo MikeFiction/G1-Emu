@@ -7,6 +7,16 @@ Older entries cite their commit by hand.
 
 ## 2026-10-05
 
+- **Synth Settings from the panel, a test version (Claude, requested by Mike Fiction).** A button in
+  the extras opens an overlay over the synth with the slots' MIDI channels and the global settings
+  (clock, global sync, master tune, knob mode, pedal, program change, local, velocity scale, name),
+  as dropdowns. It reads and writes them through the PC Port with the same message NME's Synth
+  Settings dialog sends (`app/synthsettings.h`), between the editor's messages, in the window and
+  the plugin. **It is there to test the settings, not the final look or version:** the artwork is
+  still to come. Checked with `g1synthsettingstest` (the OS takes what is written and reads it back
+  the same) and in the window.
+- **The extras drawer slides open and closed (Claude, requested by Mike Fiction)** instead of
+  appearing at once. Checked in the window.
 - **The panel drawn from PNG artwork (Claude, artwork by Mike Fiction).** `app/gui/skin/` holds a
   3000 x 1238 background with the faceplate, every label, the knobs' red rings and the displays'
   frames, and sprites for the knob caps and their shadows, the dial, the wide, tall and tilted

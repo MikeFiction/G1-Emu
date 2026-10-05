@@ -14,6 +14,7 @@
 
 #include "engine.h"
 #include "hostconfig.h"
+#include "synthsettings.h"
 
 #include <atomic>
 #include <fstream>
@@ -67,6 +68,8 @@ namespace g1app
 
 		// The G1. The panel (getLcd, ledRow, setButton, setAdc) can be used from another thread.
 		g1::Microcontroller& mc() { return m_engine->mc(); }
+		// The OS's synth settings (MIDI channels, clock...), through the PC Port between the editor's messages.
+		SynthSettingsLink& synthSettings() { return m_synthSettings; }
 
 		Stats stats();
 
@@ -91,6 +94,7 @@ namespace g1app
 		std::unique_ptr<JackAudio> m_jack;
 #endif
 		int m_pcPort = -1, m_midiPort = -1;
+		SynthSettingsLink m_synthSettings;
 		bool m_rawMidiBound = false;
 		std::string m_romProblem;
 		Options m_options;

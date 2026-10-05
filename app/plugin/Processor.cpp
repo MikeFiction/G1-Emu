@@ -300,6 +300,7 @@ namespace g1plugin
 			return;
 		auto engine = std::make_unique<g1app::Engine>(m_rom, m_os);
 		m_keeper = std::make_unique<g1app::SlotKeeper>();
+		m_synthSettings.reset();
 		m_unstarted = false;
 		if(_state)
 			applyState(*engine, *_state);
@@ -349,7 +350,7 @@ namespace g1plugin
 		if(!m_engine || !m_prepared)
 			return;
 		m_runner = std::make_unique<g1app::Runner>(*m_engine, m_rate, static_cast<size_t>(m_maxBlock), m_gainDb,
-			m_pcPort && m_pcPort->virtualPorts() ? m_pcPort.get() : nullptr, m_pcIndex, m_keeper.get());
+			m_pcPort && m_pcPort->virtualPorts() ? m_pcPort.get() : nullptr, m_pcIndex, m_keeper.get(), &m_synthSettings);
 		setLatencySamples(static_cast<int>(m_runner->latency()));
 		m_unstarted = false;
 		if(std::exchange(m_engineFresh, false))

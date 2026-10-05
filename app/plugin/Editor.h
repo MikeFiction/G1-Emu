@@ -46,6 +46,7 @@ namespace g1plugin
 		void fitTo(double _aspect);
 		juce::String settingsTooltip() const override { return "ROM, latency, and where this instance's patches came from"; }
 		void showSettings(juce::Component* _parent) override;
+		g1app::SynthSettingsLink& synthSettings() override;
 
 		Processor& m_processor;
 		g1app::Engine* m_engine = nullptr;

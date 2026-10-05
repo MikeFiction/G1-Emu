@@ -29,8 +29,8 @@ namespace g1app
 	}
 
 	Runner::Runner(Engine& _engine, const double _rate, const size_t _maxBlock, const float _gainDb,
-		MidiTransport* _pcPort, const int _pcIndex, SlotKeeper* _keeper)
-		: m_engine(_engine), m_pcPort(_pcPort), m_pcIndex(_pcIndex), m_keeper(_keeper), m_rate(_rate > 0 ? _rate : 48000.0), m_ahead(aheadFor(m_rate, _maxBlock)),
+		MidiTransport* _pcPort, const int _pcIndex, SlotKeeper* _keeper, SynthSettingsLink* _settings)
+		: m_engine(_engine), m_pcPort(_pcPort), m_pcIndex(_pcIndex), m_keeper(_keeper), m_settings(_settings), m_rate(_rate > 0 ? _rate : 48000.0), m_ahead(aheadFor(m_rate, _maxBlock)),
 		  m_latency(m_ahead + guardFor(m_rate)),
 		  m_bridge(std::pow(10.0f, _gainDb / 20.0f))
 	{
@@ -132,7 +132,7 @@ namespace g1app
 		auto lastStats = clock::now();
 		uint64_t lastCycles = mc.ucCycles();
 		double busy = 0;
-		std::vector<uint8_t> out, pcOut, toEditor, fromKeeper;
+		std::vector<uint8_t> out, pcOut, toEditor, fromKeeper, fromSettings;
 		std::vector<std::vector<uint8_t>> pcIn;
 		auto nowMs = [&mc] { return mc.ucCycles() / (g1::g_ucClock / 1000); };
 
@@ -158,16 +158,34 @@ namespace g1app
 					mc.getPcPort().receive(bytes);
 					if(m_keeper)
 						m_keeper->editorSent(bytes, nowMs());
+					if(m_settings)
+						m_settings->editorSent(bytes, nowMs());
 					bytes.clear();
 				}
 			}
-			// The keeper's own requests, when the editor leaves it room.
+			// The keeper's and the settings' own requests, when the editor leaves them room. Each
+			// takes the other's for an editor's, so they never talk over each other.
 			if(m_keeper)
 			{
 				fromKeeper.clear();
 				m_keeper->tick(nowMs(), fromKeeper);
 				if(!fromKeeper.empty())
+				{
 					mc.getPcPort().receive(fromKeeper);
+					if(m_settings)
+						m_settings->editorSent(fromKeeper, nowMs());
+				}
+			}
+			if(m_settings)
+			{
+				fromSettings.clear();
+				m_settings->tick(nowMs(), fromSettings);
+				if(!fromSettings.empty())
+				{
+					mc.getPcPort().receive(fromSettings);
+					if(m_keeper)
+						m_keeper->editorSent(fromSettings, nowMs());
+				}
 			}
 			while(const auto* e = m_events.front())
 			{
@@ -205,7 +223,14 @@ namespace g1app
 				pcOut.clear();
 				mc.getPcPort().takeTx(pcOut);
 				m_pcOut += pcOut.size();
-				// The keeper sees all of it and keeps the answers to its own requests from the editor.
+				// The settings and then the keeper see all of it, and keep the answers to their own
+				// requests from the editor.
+				if(m_settings)
+				{
+					toEditor.clear();
+					m_settings->g1Sent(pcOut, nowMs(), toEditor);
+					pcOut.swap(toEditor);
+				}
 				if(m_keeper)
 				{
 					toEditor.clear();
