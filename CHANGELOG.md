@@ -5,6 +5,21 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-05
+
+- **The direct link for Animatek NME, beside the PC Port (#8; Claude, requested by Javier).** The
+  standalone listens on a local TCP socket (127.0.0.1, the first free port from 47310, so instance
+  n is at 47310 + n) and carries the PC Port's raw bytes both ways, with no MIDI port, driver or
+  loopMIDI in between. The MIDI PC Port stays as it was: the original editor and other tools keep
+  using it. An editor that connects first reads one line, `G1-Emu 1 <name>\n`; one editor at a
+  time. `directLink = 0` in the settings (or `G1_DIRECT_LINK=0`) turns it off. `app/directlink.*`,
+  in `g1Core` so the plugin can use it next; plain sockets, no JUCE, no thread of its own (polled
+  from the loop that moves the PC Port). Checked: `g1directlinktest` (two instances take
+  consecutive ports, hello, bytes both ways, a second editor turned away, the link freed when the
+  editor leaves), and end to end against the emulated G1 with `g1run`: NME's IAm over the link is
+  answered with the G1's IAm (OS 3.03), twice in a row with a restart in between (the port is not
+  lost to TIME_WAIT). Not in the VST3/CLAP yet, and NME's side is next.
+
 ## 2026-10-04
 
 - **`v0.1.0-alpha.12` release notes (Claude, requested by Javier).** `docs/release-notes.md`

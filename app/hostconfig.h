@@ -25,6 +25,7 @@ namespace g1app
 		std::string audio = "jack";			// "jack", "alsa", "no", or the name of an ALSA device
 		float gainDb = 36.0f;				// undoes the -36 dB cap the OS puts on the master volume
 		bool jackConnect = true;			// out_1/out_2 connect themselves to the sound card
+		bool directLink = true;				// the PC Port over a local socket for Animatek NME (directlink.h)
 		std::string rawMidiCard = "G1";		// the raw MIDI card to take over (empty: none)
 		std::string rom;					// the ROM to use; empty: look for one (romfinder.h)
 		std::string os;						// an OS image to run instead of the ROM's factory OS (empty: none)

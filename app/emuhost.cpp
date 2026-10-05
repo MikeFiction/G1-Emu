@@ -90,6 +90,8 @@ namespace g1app
 			m_options.gainDb = static_cast<float>(std::atof(v));
 		if(const char* v = std::getenv("G1_JACK_CONNECT"))
 			m_options.jackConnect = std::string(v) != "0";
+		if(const char* v = std::getenv("G1_DIRECT_LINK"))
+			m_options.directLink = std::string(v) != "0";
 		if(const char* v = std::getenv("G1_RAWMIDI"))
 			m_options.rawMidiCard = std::string(v) == "0" ? "" : v;
 		if(const char* v = std::getenv("G1_PCPORT_OUT"))
@@ -148,6 +150,22 @@ namespace g1app
 		m_midiPort = m_midi->addPort("MIDI", {m_options.midiOutDevice, m_options.midiInDevice});
 		m_stats.midi = m_midi->describe();
 		_log += "MIDI ports: " + m_stats.midi + "\n";
+
+		// The direct link for Animatek NME, beside the PC Port (issue #8). The first instance is
+		// "G1-Emu", the next ones carry their number, like their MIDI ports.
+		if(m_options.directLink)
+		{
+			std::string linkError;
+			if(m_link.start("G1-Emu", linkError))
+			{
+				const int n = m_link.port() - DirectLink::kBasePort;
+				if(n > 0)
+					m_link.setName("G1-Emu " + std::to_string(n + 1));
+				_log += m_link.describe() + "\n";
+			}
+			else
+				_log += "direct link: " + linkError + "\n";
+		}
 		m_rawMidiBound = bindRawMidi(_log);
 
 		// Audio
@@ -254,6 +272,7 @@ namespace g1app
 			return;
 		m_quit = true;
 		m_thread.join();
+		m_link.stop();   // the editor sees the link close, as when the emulator is gone
 		if(m_updateMode)
 			keepReceivedOs();
 		saveFlash();
@@ -394,6 +413,7 @@ namespace g1app
 
 		std::vector<std::vector<uint8_t>> incoming;
 		std::vector<uint8_t> out;
+		std::vector<uint8_t> linkIn;
 
 		// G1_MIDI_LOG=1: every chunk in and out of both ports, with its first bytes. The G1's
 		// protocol is all SysEx, so "F0 33 ..." arriving and nothing going back says more in one
@@ -430,6 +450,15 @@ namespace g1app
 				mc.getPcPort().receive(incoming[m_pcPort]);
 				incoming[m_pcPort].clear();
 			}
+			// The editor on the direct link talks to the same PC Port.
+			linkIn.clear();
+			m_link.poll(linkIn);
+			if(!linkIn.empty())
+			{
+				m_pcIn += linkIn.size();
+				logMidi("in ", "Link", linkIn);
+				mc.getPcPort().receive(linkIn);
+			}
 			if(!incoming[m_midiPort].empty())
 			{
 				m_midiIn += incoming[m_midiPort].size();
@@ -451,6 +480,7 @@ namespace g1app
 			m_pcOut += out.size();
 			logMidi("out", "PC Port", out);
 			m_midi->send(m_pcPort, out);
+			m_link.send(out);   // and hears the same replies
 			out.clear();
 			mc.getSci().read(out);
 			m_midiOut += out.size();

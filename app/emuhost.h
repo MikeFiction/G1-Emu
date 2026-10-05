@@ -1,4 +1,5 @@
 #pragma once
+#include "directlink.h"
 
 // EmuHost: the emulated G1 running, with everything around it: the flash on disk, the ALSA
 // MIDI ports (PC Port and MIDI), the audio (JACK or ALSA) and real-time pacing, on a thread
@@ -91,6 +92,7 @@ namespace g1app
 		std::unique_ptr<JackAudio> m_jack;
 #endif
 		int m_pcPort = -1, m_midiPort = -1;
+		DirectLink m_link;	// the PC Port for Animatek NME over a local socket, beside the MIDI one
 		bool m_rawMidiBound = false;
 		std::string m_romProblem;
 		Options m_options;

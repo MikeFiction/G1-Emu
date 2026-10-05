@@ -50,6 +50,7 @@ namespace g1app
 			if(key == "audio")				audio = value;
 			else if(key == "gainDb")		gainDb = static_cast<float>(std::atof(value.c_str()));
 			else if(key == "jackConnect")	jackConnect = value != "0";
+			else if(key == "directLink")	directLink = value != "0";
 			else if(key == "rawMidiCard")	rawMidiCard = value;
 			else if(key == "rom")			rom = value;
 			else if(key == "os")			os = value;
@@ -95,6 +96,7 @@ namespace g1app
 		  << "audio = " << audio << "\n"
 		  << "gainDb = " << gainDb << "\n"
 		  << "jackConnect = " << (jackConnect ? 1 : 0) << "\n"
+		  << "directLink = " << (directLink ? 1 : 0) << "\n"
 		  << "rawMidiCard = " << rawMidiCard << "\n"
 		  << "rom = " << rom << "\n"
 		  << "os = " << os << "\n"
