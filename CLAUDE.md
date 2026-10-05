@@ -65,7 +65,9 @@ template is Gearmulator's Nord Lead 2X emulation (`source/nord/n2x`).
 ## The VST3 (issue #7, beta)
 
 `g1plugin` builds `G1-Emu.vst3` on `g1Core` alone: no ALSA/JACK backend, no file written except
-`rom =` in the settings file when the user picks a ROM by hand. Its one MIDI port is the PC Port:
+`rom =` in the settings file when the user picks a ROM by hand, and `plugin.conf` beside it: how a
+new instance's window starts (size and the extras' switches), as the last editor was left; a
+project's own state still has the last word. Its one MIDI port is the PC Port:
 `JuceMidi` (`app/jucemidi.h`) creates `G1-Emu PC Port` (`G1-Emu 2 PC Port`... per live instance) in
 the processor, which keeps it across engine swaps, and the runner's worker polls it and sends the
 G1's replies (`G1_PLUGIN_PC_PORT=0` leaves it out; on Windows JUCE makes no virtual port; in CLAP,

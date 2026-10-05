@@ -7,68 +7,46 @@ Older entries cite their commit by hand.
 
 ## 2026-10-05
 
-- **Knob Follows Patch (Claude, requested by Mike Fiction).** A new option in the extras drawer:
-  each knob shows where its parameter's value in the patch puts it (`KnobMap::positionFor`) instead
-  of where it was last turned, as on the hardware a loaded patch leaves the knobs where they were;
-  turning one starts from there, so the parameter does not jump. Knobs with nothing assigned, and
-  morph groups (whose value the OS tables do not give), show their position. Kept as
-  `knobFollowsPatch` in the settings file and in the plugin's state. The dial turns twice as far a
-  detent (two thirds of a ridge, two steps a tick). Checked in the window with MoogBass05 loaded
-  from NME: Attack 0 fully left, Sustain 127 fully right, Frequency 53 and Decay 70 either side of
-  the top, unassigned knobs where they were. Shift moved 4 background pixels right, centred under
-  its label as Mike Fiction placed it in Photoshop. The parameter displays write in the big
-  display's dots (`LcdFont.h`, 2 lines of 11 characters of 5 x 7) instead of the system's monospaced
-  font (Lucida Console on Windows, bold, 9 points, squeezed to 60% at most); checked in the window
-  with MoogBass05 loaded.
+- **The panel drawn from PNG artwork (Claude, artwork by Mike Fiction).** `app/gui/skin/` holds a
+  3000 x 1238 background with the faceplate, every label, the knobs' red rings and the displays'
+  frames, and sprites for the knob caps and their shadows, the dial, the wide, tall and tilted
+  buttons, the LEDs and the parameter displays, built into the window and the plugin (`g1Skin`).
+  `Panel` lays them out in the background's pixels, each sprite at its exact place (the knobs
+  measured ring by ring), and only a button's body takes the mouse. The big display's glass, painted
+  by the code, follows the art; what is around the skin takes its dark purple (`Panel::FaceColour`).
+  Checked against the artist's reference images pixel by pixel and in the window.
 - **The window and the plugin's editor are resizable (Claude, requested by Mike Fiction).**
-  `PanelView` shows the panel, still laid out at 1200 pixels, scaled to any size from 50% to 250% in
-  its proportions, which change with the extras drawer; a size that does not keep them leaves a
-  margin instead of cutting the panel. The standalone remembers the size as `panelScale` in the
-  settings file, the plugin in the project's state. The window's resizer (`ClientConstrainer`) keeps
-  the proportions of the client area, since JUCE hands it the native frame too; it gets the new
-  proportions before the window follows the extras drawer (otherwise it put the window back to the
-  old ones, with margins around the panel). The sprite cache keeps only the last three sizes.
-  Checked on Windows: g1gui at 0.58, 1.0, 1.2, 1.5 and 1.8 by resizing it from outside (sharp at
-  every size, nothing cut), the size back on the next start; the VST3 builds but was not opened in a
-  DAW. Both start at 1.25 (1500 pixels wide, half the skin's background) until the user resizes
-  them.
-- **Brighter skin (Claude, artwork by Mike Fiction).** A lighter background and parameter display;
-  the display's glass, which the code paints over the background's, matches the new one, and a
-  knob's display with nothing assigned is no longer darkened. What is around the skin (the status
-  bar, the extras drawer, the margins, the plugin's editor) takes its dark purple, `#35263d`
-  (`Panel::FaceColour`), instead of the old panel's `#2b2346`.
-- **The knobs sit on their rings (Claude, reported by Mike Fiction).** The caps were drawn 8% too
-  large and up to 2.5 background pixels off; they are now 1:1 with their pivot on each ring's
-  centre, measured ring by ring, with `knob_shadow.png` under them. Every sprite keeps its exact
-  place inside its component's whole pixels instead of snapping to them. The tilted Assign/Morph
-  button is Mike Fiction's corrected one, whose two frames did not line up: each is centred on the
-  button body in a 148-pixel cell. Checked by fitting the knob, its shadow and the button against
-  the reference image pixel by pixel, and in the window side by side with it.
-- **Larger parameter displays that replace the knobs' LEDs (Claude, artwork by Mike Fiction).** The
-  displays are 170 x 57, centred on their knob over its LED, which is hidden while they are shown; a
-  knob with nothing assigned shows `small_lcd_dark.png` instead. Text at 9 points instead of 8.
-  Assign/Morph is Mike Fiction's re-angled button, repacked the same way. Checked in the window with
-  an empty patch (all dark, LEDs hidden); text on an assigned knob not seen yet.
-- **A dial that is seen to turn (Claude, reported by Mike Fiction).** Neither dial sheet could show
-  it: the 128-frame one held only two pictures, alternating, and a detent (4 frames) always landed
-  on the same one; Mike Fiction's 16-frame strip is 16 times the same picture (no pixel differs by
-  more than 3). The dial is now turned in code: `makeDialLoop` draws Mike Fiction's knob rotated
-  through one of its 64 ridges in 12 steps, after which it looks as it started, and a detent turns
-  it a third of a ridge, a step every 1/60 s. Checked outside the window: a detent changes the rim
-  by 8.4 levels on average, a whole ridge by 2.0 (resampling only, so the loop does not jump). Not
-  turned in the window, which would turn the G1's own encoder. Also: Assign/Morph moved 2 background
-  pixels right and down, as far from "Assign" as from "Morph" (7.5 pixels each), and the parameter
-  displays 3 up.
-- **The panel drawn from PNG artwork (Claude, requested by Mike Fiction).** `app/gui/skin/` holds a
-  3000 x 1238 background with the faceplate, every label, the knobs' red rings and the display's
-  frame, and sprites for the knob caps (128 frames), the dial (128), the wide, tall and tilted
-  buttons (up and down), the LEDs (off and on) and the knobs' small parameter displays (inside each
-  group, left of the knob's LED), built into the window and the plugin as `g1Skin`
-  (`juce_add_binary_data`). `Panel` lays them out in the background's pixels at 0.4 (1200 x 495,
-  then the status bar); each frame is scaled once to the screen's pixels, in halves, and kept.
-  Buttons take the mouse on the button only, not on the frame's shadow. Checked on Windows: g1gui
-  and the VST3 build, the window captured and compared with the artist's reference image (knobs,
-  LEDs, buttons, dial and display where it has them).
+  `PanelView` scales the panel, still laid out at 1200 pixels, from 50% to 250% in its proportions,
+  which change with the extras drawer; they start at 1500 pixels wide. The standalone keeps its size
+  in the settings file, the plugin in the project. Checked on Windows at several sizes and across
+  restarts.
+- **The plugin remembers its window (Claude, reported by Mike Fiction).** A change to the editor's
+  size or the extras' switches now marks the project as changed (`setDirty`), so hosts save it, and
+  a new instance starts as the last editor was left (`plugin.conf`, beside the settings file; a
+  project's own state still wins; listed in `CLAUDE.md`). `g1vst3check --window` checks both;
+  confirmed by Mike Fiction in Cubase, Bitwig and Reaper.
+- **What the knobs move (Claude, requested by Mike Fiction).** The parameter displays (extras:
+  "Parameter Displays") take the knobs' LEDs' place, write in the big display's dot font and go dark
+  on a knob with nothing assigned. **Knob Follows Patch** (extras) shows each knob where the patch's
+  value puts it, and turning it starts there. A knob's tooltip says what it moves and its value, so
+  the displays can stay off. Checked with patches loaded from NME.
+- **The dial turns, with a thumb indent (Claude, artwork by Mike Fiction).** The dial's sheets could
+  not show it turning (their frames were alike); it is now turned in code, the ridges a step at a
+  time within one ridge so their light stays put, and Mike Fiction's painted thumb indent, cut out
+  of the knob, slides round its face. 48 detents a turn; it starts with the indent at eight o'clock.
+  Checked by putting the pieces back together (the painted knob) and in the window.
+- **The panel's buttons (Claude, requested by Mike Fiction).** A button held without the mouse
+  (right click, or a key) pulses with Mike Fiction's red picture of it, all held buttons together;
+  the navigator's keys repeat when held instead, and they and Panel Split no longer latch. The
+  navigator, Shift, Assign/Morph, Panel Split and Find are centred on the art's labels. Tooltips sit
+  on a dark glass that blurs the panel behind. Seen in the window.
+- **The standalone's window (Claude, requested by Mike Fiction).** Its title bar follows Windows'
+  dark mode (`NativeTitleBarTheme`), it has the plugin's resize grip in its corner, and it remembers
+  the master volume (`masterVolume` in the settings file). Checked in the window.
+- **What the panel's keys do on the rack (Claude, reported by Mike Fiction).** `NOTES.md` records
+  that Shift + Find (Panic) works in the emulator, and that holding several slot buttons does not
+  layer them for MIDI on the rack: slots are layered by giving them the same MIDI channel.
+  Documentation only.
 
 ## 2026-10-04
 

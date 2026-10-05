@@ -23,9 +23,11 @@
 
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 
 namespace g1plugin
 {
@@ -98,16 +100,23 @@ namespace g1plugin
 		// The ROM picked by hand: remembered in the settings file, like the standalone does.
 		void useRom(const juce::File& _file);
 
+		// The panel's preferences, kept in the project. A change is told to the host, or most would
+		// not save a project where nothing else changed and lose it (message thread). They are also
+		// what a new instance starts with (plugin.conf, beside the standalone's settings): the
+		// switches are written at once, the size when the editor closes (savePreferences).
 		bool extrasOpen() const { return m_extrasOpen; }
-		void setExtrasOpen(bool _open) { m_extrasOpen = _open; }
+		void setExtrasOpen(bool _open) { if(std::exchange(m_extrasOpen, _open) != _open) { stateChanged(); savePreferences(); } }
 		bool knobDisplays() const { return m_knobDisplays; }
-		void setKnobDisplays(bool _on) { m_knobDisplays = _on; }
+		void setKnobDisplays(bool _on) { if(std::exchange(m_knobDisplays, _on) != _on) { stateChanged(); savePreferences(); } }
 		bool knobFollowsPatch() const { return m_knobFollowsPatch; }
-		void setKnobFollowsPatch(bool _on) { m_knobFollowsPatch = _on; }
+		void setKnobFollowsPatch(bool _on) { if(std::exchange(m_knobFollowsPatch, _on) != _on) { stateChanged(); savePreferences(); } }
 		float panelScale() const { return m_panelScale; }
-		void setPanelScale(float _scale) { m_panelScale = _scale; }
+		void setPanelScale(float _scale) { if(std::abs(std::exchange(m_panelScale, _scale) - _scale) > 0.002f) stateChanged(); }
+		void savePreferences() const;
 
 	private:
+		void stateChanged() { updateHostDisplay(juce::AudioProcessorListener::ChangeDetails().withNonParameterStateChanged(true)); }
+		void loadPreferences();
 		void handleAsyncUpdate() override;
 
 		// The 18 knobs both ways: the host's automation turns them (processBlock), and what turns

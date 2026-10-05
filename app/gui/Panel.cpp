@@ -12,7 +12,6 @@ namespace g1gui
 	namespace
 	{
 		constexpr const auto& g_knobAdc = g1::KnobMap::KnobAdc;
-		constexpr uint8_t g_volumeAdc = 0x30;
 
 		// Buttons (matrix row.bit), identified by pressing them one by one with g1patchtest.
 		constexpr MatrixBit g_btnA{0, 2}, g_btnB{0, 3}, g_btnC{0, 4}, g_btnD{0, 5};
@@ -28,7 +27,7 @@ namespace g1gui
 		constexpr std::array<MatrixBit, 4> g_modeLeds = {MatrixBit{3, 3}, MatrixBit{3, 4}, MatrixBit{3, 5}, MatrixBit{3, 6}};
 		constexpr MatrixBit g_panelSplitLed{3, 2};
 
-		const juce::Colour g_face(Panel::FaceColour), g_groupLine(0xffe0a040), g_textLight(0xffe8e8f0);
+		const juce::Colour g_face(Panel::FaceColour), g_textLight(0xffe8e8f0);
 		constexpr int g_extrasHeight = 60;	// what the extras drawer adds below the panel
 
 		// A rectangle in the background's pixels, in the panel's.
@@ -136,20 +135,28 @@ namespace g1gui
 	namespace
 	{
 		// The dial's ridges are all alike, so a picture of it does not show it turning: it is
-		// turned here, through one ridge (64 a turn) in DialSteps frames, after which it looks as
-		// it started. So little turning leaves the light on it where it was.
-		constexpr int DialSteps = 12;
+		// turned here, through one ridge in DialSteps frames, after which it looks as it started.
+		// So little turning leaves the light on it where it was. The picture (skin/dial.png, the
+		// first frame) is DialFrame pixels square with the knob's centre in its middle; DialRidges
+		// must be its count, and the ridges evenly spaced, or the loop jumps where they are not.
+		// The thumb indent shows the whole turn (DialView::paint): Mike Fiction's painted one, cut
+		// out of the knob (skin/dial_indent.png, its centre at IndentX/Y in it) and slid round the
+		// face without turning, so the light on it stays where it is.
+		constexpr int DialSteps = 12, DialFrame = 236, DialRidges = 64;
+		constexpr float IndentRadius = 58.5f;					// from the knob's centre, straight up as painted
+		constexpr float IndentSize = 48, IndentX = 24, IndentY = 23.5f;
 
 		juce::Image makeDialLoop()
 		{
-			const auto knob = juce::ImageCache::getFromMemory(G1Skin::dial_png, G1Skin::dial_pngSize).getClippedImage({0, 0, 232, 230});
-			juce::Image sheet(juce::Image::ARGB, 232, 230 * DialSteps, true);
+			const auto knob = juce::ImageCache::getFromMemory(G1Skin::dial_png, G1Skin::dial_pngSize).getClippedImage({0, 0, DialFrame, DialFrame});
+			juce::Image sheet(juce::Image::ARGB, DialFrame, DialFrame * DialSteps, true);
 			juce::Graphics g(sheet);
 			g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
+			constexpr float centre = DialFrame / 2.0f;
 			for(int i = 0; i < DialSteps; ++i)
 			{
-				const float angle = juce::MathConstants<float>::twoPi / 64.0f * static_cast<float>(i) / static_cast<float>(DialSteps);
-				g.drawImageTransformed(knob, juce::AffineTransform::rotation(angle, 115.0f, 115.0f).translated(0.0f, static_cast<float>(230 * i)));
+				const float angle = juce::MathConstants<float>::twoPi / static_cast<float>(DialRidges) * static_cast<float>(i) / static_cast<float>(DialSteps);
+				g.drawImageTransformed(knob, juce::AffineTransform::rotation(angle, centre, centre).translated(0.0f, static_cast<float>(DialFrame * i)));
 			}
 			return sheet;
 		}
@@ -159,11 +166,14 @@ namespace g1gui
 	{
 		Sprite background{G1Skin::background_png, G1Skin::background_pngSize, 3000, 1238, 1};
 		Sprite knob{G1Skin::knob_png, G1Skin::knob_pngSize, 113, 113, 128};			// 0: fully left
-		Sprite dial{makeDialLoop(), 232, 230, DialSteps};								// one ridge's turn, a loop
+		Sprite dial{makeDialLoop(), DialFrame, DialFrame, DialSteps};					// one ridge's turn, a loop
+		Sprite dialIndent{G1Skin::dial_indent_png, G1Skin::dial_indent_pngSize, 48, 48, 1};
 		Sprite dialShadow{G1Skin::dial_shadow_png, G1Skin::dial_shadow_pngSize, 289, 289, 1};
 		Sprite buttonWide{G1Skin::button_wide_png, G1Skin::button_wide_pngSize, 180, 90, 2};	// up, down
+		Sprite buttonWideHeld{G1Skin::button_wide_held_png, G1Skin::button_wide_held_pngSize, 180, 90, 1};	// latched or held by a key
 		Sprite buttonTall{G1Skin::button_tall_png, G1Skin::button_tall_pngSize, 90, 180, 2};
 		Sprite buttonTilted{G1Skin::button_tilted_png, G1Skin::button_tilted_pngSize, 148, 148, 2};	// centred on the button
+		Sprite buttonTiltedHeld{G1Skin::button_tilted_held_png, G1Skin::button_tilted_held_pngSize, 148, 148, 1};
 		Sprite knobShadow{G1Skin::knob_shadow_png, G1Skin::knob_shadow_pngSize, 100, 101, 1};		// its disk's centre at 33, 33
 		Sprite led{G1Skin::led_png, G1Skin::led_pngSize, 70, 70, 2};					// off, on
 		Sprite smallLcd{G1Skin::small_lcd_png, G1Skin::small_lcd_pngSize, 170, 57, 1};				// a knob's parameter display
@@ -203,7 +213,7 @@ namespace g1gui
 		constexpr float g_knobLcdW = 170, g_knobLcdH = 57, g_knobLcdBottom[] = {208, 450, 681};
 		constexpr float g_assignX = 2388, g_assignY = 453.5f;	// the tilted button's centre: as far from "Assign" as from "Morph"
 		constexpr float g_modeX[] = {1798.5f, 1918.5f, 2037.5f, 2157.5f};	// the LEDs' centres; the buttons below
-		constexpr float g_dialX = 2619, g_dialY = 580, g_dialSize = 238;
+		constexpr float g_dialX = 2619, g_dialY = 580, g_dialSize = 233.8f;	// the knob (234 of 236) as large as before
 	}
 
 	const char* disclaimerText()
@@ -226,7 +236,7 @@ namespace g1gui
 		// The glass painted over the background's, whose blurred dots would not match these.
 		const auto area = getLocalBounds().toFloat();
 		const bool on = m_lcd.displayOn();
-		_g.setColour(on ? juce::Colour(0xff69932f) : juce::Colour(0xff4a6a20));	// the background's glass
+		_g.setColour(on ? juce::Colour(0xff6aa52d) : juce::Colour(0xff4b7620));	// the background's glass
 		_g.fillRect(area);
 		_g.setGradientFill(juce::ColourGradient(juce::Colours::black.withAlpha(0.35f), 0, 0, juce::Colours::transparentBlack, 0, 5.0f, false));
 		_g.fillRect(area);
@@ -239,7 +249,7 @@ namespace g1gui
 		const float dot = std::min(cellW / 6.0f, cellH / 9.0f);
 		const auto cg = m_lcd.cgram();
 		const auto& font = lcdFont();
-		const auto ink = juce::Colour(0xff141d06), ghost = juce::Colour(0xff60892b);
+		const auto ink = juce::Colour(0xff141d06), ghost = juce::Colour(0xff619b29);
 
 		for(int r = 0; r < rows; ++r)
 		{
@@ -283,24 +293,98 @@ namespace g1gui
 		onStateChange = [this] { update(); };
 	}
 
+	namespace
+	{
+		// When the held buttons' pulse started: one for all of them, so they glow together, and
+		// restarted (lit) whenever another one is held.
+		juce::uint32 g_pulseStart = 0;
+	}
+
 	void PanelButton::update()
 	{
+		if(held() && !m_wasHeld)
+			g_pulseStart = juce::Time::getMillisecondCounter();
+		m_wasHeld = held();
 		const bool down = isDown() || held();
 		if(down != m_down)
 		{
 			m_down = down;
-			m_mc.setButton(static_cast<uint32_t>(m_bit.row), static_cast<uint32_t>(m_bit.bit), down);
+			m_repeatUp = false;
+			setBit(down);
+			m_pressedAt = juce::Time::getMillisecondCounter();
 		}
+		// The timer repeats a navigator key held with the mouse, and pulses a button held without it.
+		if(repeating() || held())
+		{
+			if(!isTimerRunning())
+				startTimer(15);
+		}
+		else
+			stopTimer();
 		repaint();
 	}
 
+	void PanelButton::setBit(const bool _down)
+	{
+		m_mc.setButton(static_cast<uint32_t>(m_bit.row), static_cast<uint32_t>(m_bit.bit), _down);
+	}
+
+	namespace
+	{
+		// The repeat: after half a second held, let go for 40 ms and press for 80, about 8 presses
+		// a second. Half a second, as a computer keyboard waits: a third caught slow clicks, which
+		// moved two steps. The let-go must last long enough for the OS's scan of the panel to see
+		// it: if presses get lost, lengthen g_repeatUpMs.
+		constexpr juce::uint32 g_repeatDelayMs = 500, g_repeatUpMs = 40, g_repeatPeriodMs = 120;
+		// A held button's glow: from dark to lit and back, once in this long.
+		constexpr double g_pulsePeriodMs = 1200.0;
+	}
+
+	void PanelButton::setAutoRepeat(const bool _on)
+	{
+		m_autoRepeat = _on;
+		setLatchable(!_on);
+		if(isEnabled() && _on)
+			setTooltip(getName() + " (hold: repeats)");
+	}
+
+	void PanelButton::setLatchable(const bool _on)
+	{
+		m_latchable = _on;
+		if(isEnabled() && !m_autoRepeat)
+			setTooltip(getName() + (_on ? " (right click: hold it down)" : ""));
+	}
+
+	void PanelButton::timerCallback()
+	{
+		if(!repeating() && !held())
+		{
+			stopTimer();
+			return;
+		}
+		if(held())
+			repaint();	// the pulse
+		if(!repeating())
+			return;
+		const auto since = juce::Time::getMillisecondCounter() - m_pressedAt;
+		if(since < g_repeatDelayMs)
+			return;
+		const bool up = (since - g_repeatDelayMs) % g_repeatPeriodMs < g_repeatUpMs;
+		if(up != m_repeatUp)
+		{
+			m_repeatUp = up;
+			setBit(!up);
+		}
+	}
+
 	// A right click (Ctrl+click on a Mac) latches the button instead of pressing it, so several
-	// can be down at once: hold A, click B, and the G1 sees both.
+	// can be down at once: hold A, click B, and the G1 sees both. Not a key held for nothing (the
+	// navigator's, which repeat, and Panel Split): latched it would only stick.
 	void PanelButton::mouseDown(const juce::MouseEvent& _e)
 	{
 		if(!_e.mods.isPopupMenu())
 			return juce::Button::mouseDown(_e);
-		if(isEnabled())
+		if(isEnabled() && m_latchable)
 		{
 			m_latched = !m_latched;
 			update();
@@ -324,14 +408,23 @@ namespace g1gui
 		const auto& sprite = buttonSprite(m_shape);
 		const auto r = spriteArea(*this);
 		const int frame = _down || held() ? 1 : 0;
-		if(!isEnabled())
-			_g.setOpacity(0.5f);
+		// Held without the mouse (latched, or by a key): its own picture where the skin has one,
+		// the body alone with no shadow, fading in and out over the down one, so it shows that the
+		// G1 sees it down.
+		const float opacity = isEnabled() ? 1.0f : 0.5f;
+		_g.setOpacity(opacity);
 		sprite.draw(_g, frame, r);
+		const Sprite* heldPicture = m_shape == Shape::Wide ? &skin().buttonWideHeld : m_shape == Shape::Tilted ? &skin().buttonTiltedHeld : nullptr;
+		if(held() && heldPicture)
+		{
+			const double t = static_cast<double>(juce::Time::getMillisecondCounter() - g_pulseStart) / g_pulsePeriodMs;
+			const float glow = 0.5f + 0.5f * static_cast<float>(std::cos(t * juce::MathConstants<double>::twoPi));	// lit when it starts
+			_g.setOpacity(opacity * glow);
+			heldPicture->draw(_g, 0, r);
+			_g.setOpacity(opacity);
+		}
 		if(_over && isEnabled())
 			sprite.draw(_g, frame, r, juce::Colours::white.withAlpha(0.07f));
-		// Held without the mouse: lit, so it shows that the G1 sees it down.
-		if(held())
-			sprite.draw(_g, frame, r, g_groupLine.withAlpha(0.4f));
 	}
 
 	// The button itself, not its shadow nor the transparent rest of the frame: the frames of
@@ -418,39 +511,47 @@ namespace g1gui
 		}
 	}
 
-	// One detent every 8 pixels of drag, or one per wheel click. The dial turns two thirds of a
-	// ridge a detent, shown two steps a tick: alike ridges jumping would not be seen to move.
+	namespace
+	{
+		constexpr float g_detentDegrees = 7.5f;		// 48 detents a turn
+		// The most the picture turns in a tick (1/60 s): under half a ridge, or the ridges would
+		// seem to turn backwards, as a film's wagon wheels do.
+		constexpr float g_maxDegreesPerTick = 2.5f;
+	}
+
+	// One detent every 8 pixels of drag, or one per wheel click; the dial turns with it, a few
+	// degrees a tick, until it is where the detents put it.
 	void DialView::turn(const int _detents)
 	{
 		if(!_detents)
 			return;
 		m_mc.turnDial(_detents);
-		m_target += _detents * DialSteps * 2 / 3;
+		m_targetAngle += static_cast<float>(_detents) * g_detentDegrees;
 		if(!isTimerRunning())
 			startTimerHz(60);
 	}
 
 	void DialView::timerCallback()
 	{
-		if(m_frame == m_target)
+		const float left = m_targetAngle - m_angle;
+		if(std::abs(left) < 0.01f)
 		{
+			m_angle = m_targetAngle;
 			stopTimer();
+			repaint();
 			return;
 		}
-		// Turned fast, the picture never falls more than a ridge behind: a ridge on looks the same.
-		while(std::abs(m_target - m_frame) > DialSteps)
-			m_frame += m_frame < m_target ? DialSteps : -DialSteps;
-		const int step = std::min(2, std::abs(m_target - m_frame));
-		m_frame += m_frame < m_target ? step : -step;
+		// Turned fast, it catches up within a tenth of a second rather than lagging behind.
+		const float step = std::min(std::abs(left), std::max(g_maxDegreesPerTick, std::abs(left) / 6.0f));
+		m_angle += left > 0 ? step : -step;
 		repaint();
 	}
 
-	// The knob is round and its frame 2 pixels wider than high: the height says its size.
+	// The knob is round: only it takes the mouse, not the corners of its frame.
 	bool DialView::hitTest(const int _x, const int _y)
 	{
 		const auto area = spriteArea(*this);
-		const auto centre = area.withWidth(area.getHeight()).getCentre();
-		return centre.getDistanceFrom({static_cast<float>(_x), static_cast<float>(_y)}) < area.getHeight() * 0.5f;
+		return area.getCentre().getDistanceFrom({static_cast<float>(_x), static_cast<float>(_y)}) < area.getHeight() * 0.5f;
 	}
 
 	void DialView::mouseDrag(const juce::MouseEvent& _e)
@@ -468,9 +569,21 @@ namespace g1gui
 		turn(_w.deltaY > 0 ? 1 : (_w.deltaY < 0 ? -1 : 0));
 	}
 
+	// The knob at its angle: the ridges from the loop (where they are within a ridge), and the
+	// thumb indent on its face, which goes round with the whole turn. The light stays top left.
 	void DialView::paint(juce::Graphics& _g)
 	{
-		skin().dial.draw(_g, (m_frame % DialSteps + DialSteps) % DialSteps, spriteArea(*this));
+		const auto area = spriteArea(*this);
+		const float pitch = 360.0f / static_cast<float>(DialRidges);
+		const float phase = std::fmod(std::fmod(m_angle, pitch) + pitch, pitch) / pitch;	// 0..1 of a ridge
+		skin().dial.draw(_g, juce::roundToInt(phase * static_cast<float>(DialSteps)) % DialSteps, area);
+
+		// The indent at the angle turned, from straight up where it was painted.
+		const float scale = area.getWidth() / static_cast<float>(DialFrame);
+		const float a = juce::degreesToRadians(m_angle);
+		const auto centre = area.getCentre();
+		const juce::Point<float> c(centre.x + std::sin(a) * IndentRadius * scale, centre.y - std::cos(a) * IndentRadius * scale);
+		skin().dialIndent.draw(_g, 0, {c.x - IndentX * scale, c.y - IndentY * scale, IndentSize * scale, IndentSize * scale});
 	}
 
 	// The cap with its pointer; the red ring and its ticks are the background's.
@@ -482,6 +595,63 @@ namespace g1gui
 	}
 
 	// ________________________________________________________________________
+
+	namespace
+	{
+		constexpr float g_tipFontHeight = 12.0f, g_tipCorner = 5.0f, g_tipBlur = 6.0f;
+		constexpr int g_tipPadX = 8, g_tipPadY = 5;
+
+		juce::TextLayout tipLayout(const juce::String& _tip)
+		{
+			juce::AttributedString s;
+			s.setJustification(juce::Justification::centredLeft);
+			s.append(_tip, juce::Font(juce::FontOptions(g_tipFontHeight)), juce::Colours::white);
+			juce::TextLayout layout;
+			layout.createLayoutWithBalancedLineLengths(s, 400.0f);
+			return layout;
+		}
+	}
+
+	// As JUCE's own: beside the pointer, towards the middle of the panel.
+	juce::Rectangle<int> TooltipLook::getTooltipBounds(const juce::String& _tip, const juce::Point<int> _pos, const juce::Rectangle<int> _parentArea)
+	{
+		const auto layout = tipLayout(_tip);
+		const int w = static_cast<int>(std::ceil(layout.getWidth())) + 2 * g_tipPadX;
+		const int h = static_cast<int>(std::ceil(layout.getHeight())) + 2 * g_tipPadY;
+		return juce::Rectangle<int>(_pos.x > _parentArea.getCentreX() ? _pos.x - (w + 12) : _pos.x + 24,
+			_pos.y > _parentArea.getCentreY() ? _pos.y - (h + 6) : _pos.y + 6, w, h).constrainedWithin(_parentArea);
+	}
+
+	void TooltipLook::drawTooltip(juce::Graphics& _g, const juce::String& _tip, const int _w, const int _h)
+	{
+		if(m_snapshotting)
+			return;
+		const juce::Rectangle<float> area(0.0f, 0.0f, static_cast<float>(_w), static_cast<float>(_h));
+		juce::Path glass;
+		glass.addRoundedRectangle(area, g_tipCorner);
+
+		// What is behind it, blurred: the panel drawn without the tooltip, in the screen's pixels.
+		if(auto* panel = m_window.getParentComponent())
+		{
+			const float scale = _g.getInternalContext().getPhysicalPixelScaleFactor();
+			juce::Image behind;
+			{
+				const juce::ScopedValueSetter<bool> hidden(m_snapshotting, true);
+				behind = panel->createComponentSnapshot(m_window.getBoundsInParent(), true, scale);
+			}
+			const float radius = g_tipBlur * scale;
+			juce::ImageConvolutionKernel blur(2 * static_cast<int>(std::ceil(radius)) + 1);
+			blur.createGaussianBlur(radius);
+			const auto sharp = behind.createCopy();
+			blur.applyToImage(behind, sharp, behind.getBounds());
+			juce::Graphics::ScopedSaveState state(_g);
+			_g.reduceClipRegion(glass);
+			_g.drawImage(behind, area);
+		}
+		_g.setColour(juce::Colours::black.withAlpha(0.4f));
+		_g.fillPath(glass);
+		tipLayout(_tip).draw(_g, area.reduced(static_cast<float>(g_tipPadX), static_cast<float>(g_tipPadY)));
+	}
 
 	void KnobDisplay::set(const g1::KnobInfo& _info)
 	{
@@ -531,6 +701,8 @@ namespace g1gui
 	{
 		addAndMakeVisible(m_lcd);
 		addAndMakeVisible(m_dial);
+		m_tooltips.setOpaque(false);	// rounded, over the panel blurred
+		m_tooltips.setLookAndFeel(&m_tooltipLook);
 
 		// Each knob starts where the G1's ADC says it is: the G1 is already running (and in the
 		// plugin, the editor comes and goes), so writing a position here would be turning it.
@@ -546,7 +718,7 @@ namespace g1gui
 			_s.onValueChange = [this, &_s, _adc] { m_mc.setAdc(_adc, static_cast<uint8_t>(_s.getValue())); };
 			addAndMakeVisible(_s);
 		};
-		setupKnob(m_volume, g_volumeAdc, "Master Volume");
+		setupKnob(m_volume, VolumeAdc, "Master Volume");
 		for(size_t i = 0; i < m_knobs.size(); ++i)
 		{
 			setupKnob(m_knobs[i], g_knobAdc[i], "Knob " + juce::String(static_cast<int>(i + 1)));
@@ -556,6 +728,8 @@ namespace g1gui
 		m_midiLed = &addLed({});
 		m_panelSplitLed = &addLed(g_panelSplitLed);
 		m_panelSplit = &addButton("Panel Split", g_btnPanelSplit);
+		m_panelSplit->setLatchable(false);	// a toggle: held, it does nothing more
+		m_panelSplit->setTooltip("Panel Split");
 		m_find = &addButton("Find", g_btnFind);
 
 		const char* modes[] = {"Store", "System", "Edit", "Patch/Load"};
@@ -578,6 +752,11 @@ namespace g1gui
 		m_nav[1] = &addButton("Left", g_btnLeft);
 		m_nav[2] = &addButton("Right", g_btnRight);
 		m_nav[3] = &addButton("Down", g_btnDown, PanelButton::Shape::Tall);
+		for(auto* nav : m_nav)
+		{
+			nav->setAutoRepeat(true);
+			nav->setTooltip("Nav: " + nav->getName());
+		}
 
 		m_status.setFont(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 12.5f, juce::Font::plain));
 		m_status.setColour(juce::Label::textColourId, juce::Colours::white);
@@ -641,6 +820,7 @@ namespace g1gui
 
 	Panel::~Panel()
 	{
+		m_tooltips.setLookAndFeel(nullptr);
 		m_volume.setLookAndFeel(nullptr);
 		for(auto& k : m_knobs)
 			k.setLookAndFeel(nullptr);
@@ -698,10 +878,10 @@ namespace g1gui
 
 		// Left column
 		place(m_volume, knobAt(g_masterKnob));
-		place(*m_panelSplitLed, ledAt(142, 403));
-		place(*m_panelSplit, wideAt(122, 424));
-		place(*m_find, wideAt(122, 531));
-		place(*m_midiLed, ledAt(142, 675));
+		place(*m_panelSplitLed, ledAt(142, 401));
+		place(*m_panelSplit, wideAt(123, 424));	// centred (177) under "Find" and Master Volume
+		place(*m_find, wideAt(123, 531));
+		place(*m_midiLed, ledAt(142, 673));
 
 		// Knobs: 1-3 and 4-6 in the first group, 7-12 in the second, 13-15 and 16-18 in the others
 		for(size_t i = 0; i < m_knobs.size(); ++i)
@@ -720,13 +900,16 @@ namespace g1gui
 			place(*m_slotLeds[i], ledAt(g_modeX[i], 705.5f));
 			place(*m_slotButtons[i], wideAt(g_modeX[i] - 13.5f, 727));
 		}
-		place(*m_nav[0], tallAt(2587, 186));
+		// Up and down as far apart as the slot buttons (their pitch less the 114 of a button:
+		// 5.67), the gap on the middle of left and right (281 + 61 / 2).
+		constexpr float navGap = 119.67f - 114.0f, navMiddle = 281.0f + 61.0f / 2.0f;
+		place(*m_nav[0], tallAt(2587, navMiddle - navGap / 2.0f - 117.0f));
 		place(*m_nav[1], wideAt(2465, 281));
 		place(*m_nav[2], wideAt(2655, 281));
-		place(*m_nav[3], tallAt(2587, 311));
+		place(*m_nav[3], tallAt(2587, navMiddle + navGap / 2.0f));
 		place(*m_assign, skf(g_assignX - 74, g_assignY - 74, 148, 148));
 		place(*m_shift, wideAt(2323, 614));
-		place(m_dial, skf(g_dialX - g_dialSize / 2, g_dialY - g_dialSize / 2, g_dialSize * 232 / 230, g_dialSize));	// the frame's 2 extra pixels are on the right
+		place(m_dial, skf(g_dialX - g_dialSize / 2, g_dialY - g_dialSize / 2, g_dialSize, g_dialSize));
 
 		// The status bar below the face, with Extras, Patreon, Report issue and Settings at its right
 		const int bar = FaceHeight + 3;
@@ -866,9 +1049,23 @@ namespace g1gui
 		// nothing assigned, or on a morph group (no value to read), shows its position.
 		const bool follow = m_followToggle.getToggleState();
 		std::array<g1::KnobInfo, 18> info{};
-		if(follow || m_knobDisplays[0].isVisible())
-			for(uint32_t k = 0; k < 18; ++k)
-				info[k] = m_knobMap.read(k);
+		for(uint32_t k = 0; k < 18; ++k)
+			info[k] = m_knobMap.read(k);
+		// Each knob's tooltip says what it moves, as its display does: with the displays off,
+		// hovering a knob still tells. JUCE reads it again while it shows, so it follows the patch.
+		for(size_t i = 0; i < m_knobs.size(); ++i)
+		{
+			const auto& k = info[i];
+			juce::String tip = "Knob " + juce::String(static_cast<int>(i + 1)) + ": ";
+			if(!k.assigned)
+				tip << "nothing assigned";
+			else if(k.section == 2)
+				tip << juce::String(k.moduleName) << ", " << juce::String(k.paramName);
+			else
+				tip << juce::String(k.moduleName) << ", " << juce::String(k.paramName) << " = " << static_cast<int>(k.value);
+			if(m_knobs[i].getTooltip() != tip)
+				m_knobs[i].setTooltip(tip);
+		}
 		for(size_t i = 0; i < m_knobs.size(); ++i)
 		{
 			if(m_knobs[i].isMouseButtonDown())

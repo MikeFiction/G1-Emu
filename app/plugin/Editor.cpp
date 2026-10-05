@@ -32,6 +32,7 @@ namespace g1plugin
 	{
 		stopTimer();
 		m_panel.reset();
+		m_processor.savePreferences();	// the size it was left at, for the next new instance
 	}
 
 	void Editor::engineGoing()

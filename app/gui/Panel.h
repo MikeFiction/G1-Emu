@@ -77,7 +77,7 @@ namespace g1gui
 	// held without it: from the computer's keyboard (Shift, A-D), or latched with a right click
 	// (another right click lets it go). A held button is drawn down and lit. Its bounds are the
 	// whole sprite, shadow included; only the button itself takes the mouse.
-	class PanelButton : public juce::Button
+	class PanelButton : public juce::Button, private juce::Timer
 	{
 	public:
 		enum class Shape { Wide, Tall, Tilted };	// the navigator's up/down are tall, Assign/Morph tilted
@@ -85,17 +85,29 @@ namespace g1gui
 		void paintButton(juce::Graphics& _g, bool _over, bool _down) override;
 		bool hitTest(int _x, int _y) override;
 		void setKeyHeld(bool _held) { if(_held != m_keyHeld) { m_keyHeld = _held; update(); } }
+		// Held with the mouse, it presses again and again after a moment, as a key that repeats:
+		// the G1 takes a held key as one press (the navigator's). Such a key does not latch.
+		void setAutoRepeat(bool _on);
+		// A key whose being held does nothing (Panel Split toggles when pressed): no latching.
+		void setLatchable(bool _on);
 		void mouseDown(const juce::MouseEvent& _e) override;
 		void mouseDrag(const juce::MouseEvent& _e) override;
 		void mouseUp(const juce::MouseEvent& _e) override;
 	private:
 		void update();
+		void timerCallback() override;
+		void setBit(bool _down);
 		bool held() const { return m_keyHeld || m_latched; }
+		bool repeating() const { return m_autoRepeat && m_down && isDown(); }
 		g1::Microcontroller& m_mc;
 		MatrixBit m_bit;
 		Shape m_shape;
 		bool m_down = false;
 		bool m_keyHeld = false, m_latched = false;
+		bool m_autoRepeat = false, m_repeatUp = false;	// m_repeatUp: let go for a moment between presses
+		bool m_wasHeld = false;
+		bool m_latchable = true;
+		juce::uint32 m_pressedAt = 0;
 	};
 
 	// The dial: the rotary encoder to the right of the display. Dragging it up and down or
@@ -103,7 +115,7 @@ namespace g1gui
 	class DialView : public juce::Component, public juce::SettableTooltipClient, private juce::Timer
 	{
 	public:
-		explicit DialView(g1::Microcontroller& _mc) : m_mc(_mc) { setTooltip("Dial"); }
+		explicit DialView(g1::Microcontroller& _mc) : m_mc(_mc) { setTooltip("Data Wheel"); }
 		void paint(juce::Graphics& _g) override;
 		bool hitTest(int _x, int _y) override;
 		void mouseDown(const juce::MouseEvent& _e) override { m_lastY = _e.y; }
@@ -114,7 +126,10 @@ namespace g1gui
 		void timerCallback() override;
 		g1::Microcontroller& m_mc;
 		int m_lastY = 0;
-		int m_frame = 0, m_target = 0;	// steps turned, shown and asked for: the picture follows a step a tick
+		// Degrees turned, clockwise from the indent straight up, shown and asked for: the picture
+		// follows. It starts with the indent at about eight o'clock, where Mike Fiction likes it.
+		static constexpr float StartAngle = 255.0f;
+		float m_angle = StartAngle, m_targetAngle = StartAngle;
 	};
 
 	// A small square button with an icon instead of text, for what is not on the hardware
@@ -173,12 +188,26 @@ namespace g1gui
 		void drawRotarySlider(juce::Graphics&, int, int, int, int, float, float, float, juce::Slider&) override;
 	};
 
+	// The panel's tooltips: on a dark glass that blurs what is behind it.
+	// _window is the tooltip window it draws, a child of the panel: what is behind it is the panel.
+	class TooltipLook : public juce::LookAndFeel_V4
+	{
+	public:
+		explicit TooltipLook(juce::Component& _window) : m_window(_window) {}
+		juce::Rectangle<int> getTooltipBounds(const juce::String& _tip, juce::Point<int> _pos, juce::Rectangle<int> _parentArea) override;
+		void drawTooltip(juce::Graphics& _g, const juce::String& _tip, int _w, int _h) override;
+	private:
+		juce::Component& m_window;
+		bool m_snapshotting = false;	// while the panel behind is drawn for the blur, the tooltip is not
+	};
+
 	class Panel : public juce::Component, private juce::Timer
 	{
 	public:
 		static constexpr float SkinScale = 0.4f;	// of the background's pixels: 3000 x 1238 shown as 1200 x 495
 		static constexpr int Width = 1200, FaceHeight = 495, Height = FaceHeight + 36;	// the status bar below the face
 		static constexpr juce::uint32 FaceColour = 0xff35263d;	// the skin's dark purple, for what is around it
+		static constexpr uint8_t VolumeAdc = 0x30;				// the master volume's knob
 
 		explicit Panel(PanelHost& _host);
 		~Panel() override;
@@ -237,7 +266,7 @@ namespace g1gui
 		// the panel alone.
 		bool m_extrasOpen = false;
 		DoubleClickButton m_random{"Random"};
-		juce::ToggleButton m_displaysToggle{"Parameter displays"};
+		juce::ToggleButton m_displaysToggle{"Parameter Displays"};
 		juce::ToggleButton m_followToggle{"Knob Follows Patch"};
 		juce::Random m_rng;
 
@@ -249,6 +278,7 @@ namespace g1gui
 		std::array<g1::KnobInfo, 18> m_snapshot{};
 		bool m_haveSnapshot = false;
 		juce::TooltipWindow m_tooltips{this, 500};
+		TooltipLook m_tooltipLook{m_tooltips};
 		double m_peakHold = 0;
 		uint64_t m_lastMidiIn = 0;
 		int m_midiHold = 0;

@@ -12,6 +12,33 @@
 
 namespace g1gui
 {
+	NativeTitleBarTheme::NativeTitleBarTheme(juce::Component& _window) : m_window(_window)
+	{
+		juce::Desktop::getInstance().addDarkModeSettingListener(this);
+		apply();
+	}
+
+	NativeTitleBarTheme::~NativeTitleBarTheme()
+	{
+		juce::Desktop::getInstance().removeDarkModeSettingListener(this);
+	}
+
+	void NativeTitleBarTheme::apply()
+	{
+#if JUCE_WINDOWS
+		// DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE = 20, &BOOL, sizeof(BOOL)),
+		// looked up at run time so the build needs no import library for it.
+		using SetAttribute = long(__stdcall*)(void*, unsigned long, const void*, unsigned long);
+		static juce::DynamicLibrary dwm("dwmapi.dll");
+		static const auto set = reinterpret_cast<SetAttribute>(dwm.getFunction("DwmSetWindowAttribute"));
+		auto* peer = m_window.getPeer();
+		if(!set || !peer)
+			return;
+		const int dark = juce::Desktop::getInstance().isDarkModeActive() ? 1 : 0;
+		set(peer->getNativeHandle(), 20, &dark, sizeof(dark));
+#endif
+	}
+
 	namespace
 	{
 		constexpr int g_labelW = 150, g_rowH = 28, g_gap = 10, g_margin = 18;
@@ -39,11 +66,14 @@ namespace g1gui
 				setContentOwned(new SettingsView(_host), true);
 				setResizable(false, false);
 				centreWithSize(getWidth(), getHeight());
+				m_titleBar = std::make_unique<NativeTitleBarTheme>(*this);	// before it shows, or it flashes light
 				setVisible(true);
 			}
 			void closeButtonPressed() override { s_open.reset(); }
 
 			static std::unique_ptr<SettingsWindow> s_open;
+		private:
+			std::unique_ptr<NativeTitleBarTheme> m_titleBar;	// light or dark, as Windows is
 		};
 
 		std::unique_ptr<SettingsWindow> SettingsWindow::s_open;

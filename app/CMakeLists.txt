@@ -116,8 +116,8 @@ if(G1_HAVE_JUCE)
 	endif()
 	# The panel's look (app/gui/skin), built into the window and the plugin: no files to ship.
 	juce_add_binary_data(g1Skin NAMESPACE G1Skin HEADER_NAME G1Skin.h SOURCES
-		gui/skin/background.png gui/skin/knob.png gui/skin/dial.png gui/skin/dial_shadow.png
-		gui/skin/button_wide.png gui/skin/button_tall.png gui/skin/button_tilted.png gui/skin/led.png gui/skin/small_lcd.png gui/skin/small_lcd_dark.png gui/skin/knob_shadow.png)
+		gui/skin/background.png gui/skin/knob.png gui/skin/dial.png gui/skin/dial_indent.png gui/skin/dial_shadow.png
+		gui/skin/button_wide.png gui/skin/button_wide_held.png gui/skin/button_tall.png gui/skin/button_tilted.png gui/skin/button_tilted_held.png gui/skin/led.png gui/skin/small_lcd.png gui/skin/small_lcd_dark.png gui/skin/knob_shadow.png)
 	add_subdirectory(gui)
 	add_subdirectory(plugin)
 endif()

@@ -38,6 +38,13 @@ namespace g1gui
 		juce::String settingsTooltip() const override { return "Audio driver, output level and raw MIDI"; }
 		void showSettings(juce::Component* _parent) override { SettingsView::show(m_host, _parent); }
 		void save() { m_host.options().save(g1app::EmuHost::defaultSettingsPath()); }
+		// The master volume as it was left: put back before the panel reads it, kept when it closes.
+		void restoreVolume()
+		{
+			if(const int v = m_host.options().masterVolume; v >= 0 && v <= 255)
+				m_host.mc().setAdc(Panel::VolumeAdc, static_cast<uint8_t>(v));
+		}
+		void keepVolume() { m_host.options().masterVolume = m_host.mc().adc(Panel::VolumeAdc); }
 	private:
 		g1app::EmuHost& m_host;
 	};
@@ -69,25 +76,40 @@ namespace g1gui
 		MainWindow(g1app::EmuHost& _host) : DocumentWindow("G1-Emu", juce::Colours::black, DocumentWindow::closeButton | DocumentWindow::minimiseButton), m_panelHost(_host)
 		{
 			setUsingNativeTitleBar(true);
+			m_panelHost.restoreVolume();
 			// Any size, in the panel's proportions, which change with the extras drawer.
 			auto* view = new PanelView(m_panelHost);
 			setContentOwned(view, true);
 			setResizable(true, false);
+			// The corner's grip, as the plugin has it: JUCE hides its own on a native title bar.
+			m_grip = std::make_unique<juce::ResizableCornerComponent>(this, &m_constrainer);
+			m_grip->setAlwaysOnTop(true);
+			juce::Component::addAndMakeVisible(*m_grip);
 			view->applyLimits(m_constrainer);
 			view->onAspectChanged = [this, view] { view->applyLimits(m_constrainer); };
 			setConstrainer(&m_constrainer);
 			centreWithSize(getWidth(), getHeight());
+			m_titleBar = std::make_unique<NativeTitleBarTheme>(*this);	// before it shows, or it flashes light
 			setVisible(true);
 		}
 		~MainWindow() override
 		{
 			setConstrainer(nullptr);
-			m_panelHost.save();	// the size it was left at
+			m_panelHost.keepVolume();
+			m_panelHost.save();	// the size and the volume it was left at
 		}
 		void closeButtonPressed() override { juce::JUCEApplication::getInstance()->systemRequestedQuit(); }
+		void resized() override
+		{
+			DocumentWindow::resized();
+			if(m_grip)
+				m_grip->setBounds(getWidth() - 18, getHeight() - 18, 18, 18);
+		}
 	private:
 		WindowHost m_panelHost;
 		ClientConstrainer m_constrainer{*this};
+		std::unique_ptr<NativeTitleBarTheme> m_titleBar;	// light or dark, as Windows is
+		std::unique_ptr<juce::ResizableCornerComponent> m_grip;
 	};
 
 	class App : public juce::JUCEApplication

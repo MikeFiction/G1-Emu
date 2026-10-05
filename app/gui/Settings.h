@@ -20,6 +20,20 @@
 
 namespace g1gui
 {
+	// A window's native title bar in the system's light or dark, following it when it changes.
+	// Windows draws it light unless the window asks for dark (Windows 10 2004 and later); elsewhere
+	// the system does this by itself and this does nothing. Made once the window is on the desktop
+	// and before it is shown, or the bar shows light for a moment first.
+	class NativeTitleBarTheme : private juce::DarkModeSettingListener
+	{
+	public:
+		explicit NativeTitleBarTheme(juce::Component& _window);
+		~NativeTitleBarTheme() override;
+	private:
+		void darkModeSettingChanged() override { apply(); }
+		void apply();
+		juce::Component& m_window;
+	};
 
 	class SettingsView : public juce::Component, private juce::Timer
 	{

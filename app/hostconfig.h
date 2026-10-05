@@ -32,6 +32,7 @@ namespace g1app
 		bool extrasOpen = false;			// the window's extras drawer (Random...) was left open
 		bool knobDisplays = false;			// a display above each knob with what it is assigned to
 		bool knobFollowsPatch = false;		// the knobs show the patch's values, not where they were turned
+		int masterVolume = -1;				// the window's master volume knob as it was left (0-255; -1: not yet)
 		float panelScale = 1.25f;			// the window's size: 1 is the panel's 1200 pixels wide; 1.25 is half the skin's
 
 		// Manual MIDI device pairing (JUCE backend only): the name of an existing system MIDI

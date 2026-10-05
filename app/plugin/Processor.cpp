@@ -5,6 +5,8 @@
 #include "romfinder.h"
 
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <set>
 #include <utility>
 
@@ -150,9 +152,50 @@ namespace g1plugin
 			m_knobParams[static_cast<size_t>(k)] = param.get();
 			addParameter(param.release());
 		}
+		loadPreferences();
 		openPcPort();
 		findRom();
 		startTimerHz(20);
+	}
+
+	namespace
+	{
+		std::string preferencesPath()
+		{
+			return (std::filesystem::path(g1app::defaultSettingsPath()).parent_path() / "plugin.conf").string();
+		}
+	}
+
+	// What the last editor was left like: a new instance starts there, and a project's state, when
+	// one comes, has the last word. Plain "key = value", like the settings file.
+	void Processor::loadPreferences()
+	{
+		std::ifstream f(preferencesPath());
+		std::string line;
+		while(std::getline(f, line))
+		{
+			const auto eq = line.find('=');
+			if(eq == std::string::npos || line[0] == '#')
+				continue;
+			const auto key = juce::String(line.substr(0, eq)).trim();
+			const auto value = juce::String(line.substr(eq + 1)).trim();
+			if(key == "extrasOpen")				m_extrasOpen = value != "0";
+			else if(key == "knobDisplays")		m_knobDisplays = value != "0";
+			else if(key == "knobFollowsPatch")	m_knobFollowsPatch = value != "0";
+			else if(key == "panelScale")		m_panelScale = juce::jlimit(g1gui::PanelView::MinScale, g1gui::PanelView::MaxScale, value.getFloatValue());
+		}
+	}
+
+	void Processor::savePreferences() const
+	{
+		std::error_code ec;
+		std::filesystem::create_directories(std::filesystem::path(preferencesPath()).parent_path(), ec);
+		std::ofstream f(preferencesPath(), std::ios::trunc);
+		f << "# G1-Emu plugin: how a new instance's window starts (a project keeps its own).\n"
+		  << "extrasOpen = " << (m_extrasOpen ? 1 : 0) << "\n"
+		  << "knobDisplays = " << (m_knobDisplays ? 1 : 0) << "\n"
+		  << "knobFollowsPatch = " << (m_knobFollowsPatch ? 1 : 0) << "\n"
+		  << "panelScale = " << m_panelScale << "\n";
 	}
 
 	Processor::~Processor()
