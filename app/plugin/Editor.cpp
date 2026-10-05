@@ -23,7 +23,7 @@ namespace g1plugin
 		addChildComponent(m_openFolder);
 		addChildComponent(m_pickRom);
 
-		setSize(1200, 440);
+		setResizable(true, true);
 		rebuild();
 		startTimerHz(5);
 	}
@@ -63,30 +63,44 @@ namespace g1plugin
 				juce::dontSendNotification);
 			// Until the host starts the audio there is nothing to show, and nothing to poll for
 			// but the generation: the timer keeps running.
-			setSize(1200, 440);
+			const float s = std::clamp(panelScale(), g1gui::PanelView::MinScale, g1gui::PanelView::MaxScale);
+			fitTo(static_cast<double>(g1gui::Panel::Width) / g1gui::Panel::Height);
+			setSize(juce::roundToInt(g1gui::Panel::Width * s), juce::roundToInt(g1gui::Panel::Height * s));
 			resized();
 			return;
 		}
-		m_panel = std::make_unique<g1gui::Panel>(static_cast<g1gui::PanelHost&>(*this));
+		m_panel = std::make_unique<g1gui::PanelView>(static_cast<g1gui::PanelHost&>(*this));
+		m_panel->onAspectChanged = [this] { fitTo(m_panel->aspectRatio()); };
+		fitTo(m_panel->aspectRatio());
 		addAndMakeVisible(*m_panel);
 		setSize(m_panel->getWidth(), m_panel->getHeight());
 	}
 
 	void Editor::paint(juce::Graphics& _g)
 	{
-		_g.fillAll(juce::Colour(0xff2b2346));
+		_g.fillAll(juce::Colour(g1gui::Panel::FaceColour));
 	}
 
 	void Editor::resized()
 	{
 		if(m_panel)
-			m_panel->setTopLeftPosition(0, 0);
+			m_panel->setBounds(getLocalBounds());	// the host's size or the corner's: the panel scales to it
 		auto area = getLocalBounds().reduced(24);
 		auto buttons = area.removeFromBottom(32);
 		m_pickRom.setBounds(buttons.removeFromRight(200));
 		buttons.removeFromRight(12);
 		m_openFolder.setBounds(buttons.removeFromRight(200));
 		m_message.setBounds(area);
+	}
+
+	// Resizable in the panel's proportions, from PanelView's smallest scale to its largest.
+	void Editor::fitTo(const double _aspect)
+	{
+		auto* c = getConstrainer();
+		const auto w = [](const float _s) { return juce::roundToInt(static_cast<float>(g1gui::Panel::Width) * _s); };
+		c->setFixedAspectRatio(_aspect);
+		c->setSizeLimits(w(g1gui::PanelView::MinScale), juce::roundToInt(w(g1gui::PanelView::MinScale) / _aspect),
+			w(g1gui::PanelView::MaxScale), juce::roundToInt(w(g1gui::PanelView::MaxScale) / _aspect));
 	}
 
 	// The panel changes its own height when the extras drawer opens: the editor follows.
@@ -114,6 +128,10 @@ namespace g1plugin
 	void Editor::setExtrasOpen(const bool _open) { m_processor.setExtrasOpen(_open); }
 	bool Editor::knobDisplays() const { return m_processor.knobDisplays(); }
 	void Editor::setKnobDisplays(const bool _on) { m_processor.setKnobDisplays(_on); }
+	bool Editor::knobFollowsPatch() const { return m_processor.knobFollowsPatch(); }
+	void Editor::setKnobFollowsPatch(const bool _on) { m_processor.setKnobFollowsPatch(_on); }
+	float Editor::panelScale() const { return m_processor.panelScale(); }
+	void Editor::setPanelScale(const float _scale) { m_processor.setPanelScale(_scale); }
 
 	void Editor::showSettings(juce::Component* _parent)
 	{

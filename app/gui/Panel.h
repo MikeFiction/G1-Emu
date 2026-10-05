@@ -40,10 +40,19 @@ namespace g1gui
 		virtual void setExtrasOpen(bool _open) = 0;
 		virtual bool knobDisplays() const = 0;
 		virtual void setKnobDisplays(bool _on) = 0;
+		virtual bool knobFollowsPatch() const = 0;		// a knob shows its parameter's value, not where it was turned
+		virtual void setKnobFollowsPatch(bool _on) = 0;
+		virtual float panelScale() const = 0;			// the window's size, as PanelView keeps it
+		virtual void setPanelScale(float _scale) = 0;
 		virtual juce::String settingsTooltip() const = 0;
 		virtual void showSettings(juce::Component* _parent) = 0;
 	};
 
+	// The panel is drawn from the PNGs in skin/ (built in as G1Skin), laid out in the background's
+	// own pixels (3000 x 1238) and shown at SkinScale of them.
+	struct Skin;
+
+	// The display's glass: the red frame around it is the background's.
 	class LcdView : public juce::Component
 	{
 	public:
@@ -56,6 +65,7 @@ namespace g1gui
 	class LedView : public juce::Component
 	{
 	public:
+		LedView() { setInterceptsMouseClicks(false, false); }
 		void setOn(bool _on) { if(_on != m_on) { m_on = _on; repaint(); } }
 		void paint(juce::Graphics& _g) override;
 	private:
@@ -65,12 +75,15 @@ namespace g1gui
 	// A panel button: while pressed, its matrix bit is 1. Without a known bit it is drawn
 	// greyed out and does nothing. A mouse presses one button at a time, so a button can also be
 	// held without it: from the computer's keyboard (Shift, A-D), or latched with a right click
-	// (another right click lets it go). A held button is drawn down and lit.
+	// (another right click lets it go). A held button is drawn down and lit. Its bounds are the
+	// whole sprite, shadow included; only the button itself takes the mouse.
 	class PanelButton : public juce::Button
 	{
 	public:
-		PanelButton(const juce::String& _name, g1::Microcontroller& _mc, MatrixBit _bit);
+		enum class Shape { Wide, Tall, Tilted };	// the navigator's up/down are tall, Assign/Morph tilted
+		PanelButton(const juce::String& _name, g1::Microcontroller& _mc, MatrixBit _bit, Shape _shape = Shape::Wide);
 		void paintButton(juce::Graphics& _g, bool _over, bool _down) override;
+		bool hitTest(int _x, int _y) override;
 		void setKeyHeld(bool _held) { if(_held != m_keyHeld) { m_keyHeld = _held; update(); } }
 		void mouseDown(const juce::MouseEvent& _e) override;
 		void mouseDrag(const juce::MouseEvent& _e) override;
@@ -80,25 +93,28 @@ namespace g1gui
 		bool held() const { return m_keyHeld || m_latched; }
 		g1::Microcontroller& m_mc;
 		MatrixBit m_bit;
+		Shape m_shape;
 		bool m_down = false;
 		bool m_keyHeld = false, m_latched = false;
 	};
 
 	// The dial: the rotary encoder to the right of the display. Dragging it up and down or
 	// using the wheel turns it, and the emulator hands the OS its quadrature edges.
-	class DialView : public juce::Component, public juce::SettableTooltipClient
+	class DialView : public juce::Component, public juce::SettableTooltipClient, private juce::Timer
 	{
 	public:
 		explicit DialView(g1::Microcontroller& _mc) : m_mc(_mc) { setTooltip("Dial"); }
 		void paint(juce::Graphics& _g) override;
+		bool hitTest(int _x, int _y) override;
 		void mouseDown(const juce::MouseEvent& _e) override { m_lastY = _e.y; }
 		void mouseDrag(const juce::MouseEvent& _e) override;
 		void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails& _w) override;
 	private:
 		void turn(int _detents);
+		void timerCallback() override;
 		g1::Microcontroller& m_mc;
 		int m_lastY = 0;
-		float m_angle = 0;
+		int m_frame = 0, m_target = 0;	// steps turned, shown and asked for: the picture follows a step a tick
 	};
 
 	// A small square button with an icon instead of text, for what is not on the hardware
@@ -160,6 +176,10 @@ namespace g1gui
 	class Panel : public juce::Component, private juce::Timer
 	{
 	public:
+		static constexpr float SkinScale = 0.4f;	// of the background's pixels: 3000 x 1238 shown as 1200 x 495
+		static constexpr int Width = 1200, FaceHeight = 495, Height = FaceHeight + 36;	// the status bar below the face
+		static constexpr juce::uint32 FaceColour = 0xff35263d;	// the skin's dark purple, for what is around it
+
 		explicit Panel(PanelHost& _host);
 		~Panel() override;
 		void paint(juce::Graphics& _g) override;
@@ -172,7 +192,7 @@ namespace g1gui
 	private:
 		void timerCallback() override;
 		void updateHeldKeys();
-		PanelButton& addButton(const juce::String& _name, MatrixBit _bit);
+		PanelButton& addButton(const juce::String& _name, MatrixBit _bit, PanelButton::Shape _shape = PanelButton::Shape::Wide);
 		LedView& addLed(MatrixBit _bit);
 		void reportIssue();
 		void setExtrasOpen(bool _open);
@@ -180,6 +200,7 @@ namespace g1gui
 		void restoreKnobs();
 		void setKnobDisplays(bool _on);
 
+		juce::SharedResourcePointer<Skin> m_skin;	// keeps the images while a panel is open
 		PanelHost& m_host;
 		g1::Microcontroller& m_mc;
 		KnobLook m_knobLook;
@@ -217,6 +238,7 @@ namespace g1gui
 		bool m_extrasOpen = false;
 		DoubleClickButton m_random{"Random"};
 		juce::ToggleButton m_displaysToggle{"Parameter displays"};
+		juce::ToggleButton m_followToggle{"Knob Follows Patch"};
 		juce::Random m_rng;
 
 		// What each knob is assigned to, from the OS's tables (g1knobs.h), and the displays.
@@ -230,5 +252,31 @@ namespace g1gui
 		double m_peakHold = 0;
 		uint64_t m_lastMidiIn = 0;
 		int m_midiHold = 0;
+	};
+
+	// The panel at any size: it is laid out at Panel::Width and shown scaled to this view's width,
+	// which keeps the panel's proportions (the window's resizer has to: aspectRatio). The scale is
+	// the host's to keep. When the panel changes its own height (the extras drawer), the view
+	// follows at the same scale and calls onAspectChanged.
+	class PanelView : public juce::Component
+	{
+	public:
+		static constexpr float MinScale = 0.5f, MaxScale = 2.5f;
+
+		explicit PanelView(PanelHost& _host);
+		double aspectRatio() const { return static_cast<double>(m_panel.getWidth()) / static_cast<double>(m_panel.getHeight()); }
+		// The resizer's limits for these proportions, from MinScale to MaxScale.
+		void applyLimits(juce::ComponentBoundsConstrainer& _c) const;
+		std::function<void()> onAspectChanged;
+
+		void resized() override;
+		void paint(juce::Graphics& _g) override;
+		void childBoundsChanged(juce::Component* _child) override;
+
+	private:
+		float scale() const { return static_cast<float>(getWidth()) / static_cast<float>(m_panel.getWidth()); }
+		PanelHost& m_host;
+		Panel m_panel;
+		int m_panelHeight = 0;	// the panel's own, to tell the drawer opening from a new scale
 	};
 }

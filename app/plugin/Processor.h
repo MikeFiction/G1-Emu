@@ -102,6 +102,10 @@ namespace g1plugin
 		void setExtrasOpen(bool _open) { m_extrasOpen = _open; }
 		bool knobDisplays() const { return m_knobDisplays; }
 		void setKnobDisplays(bool _on) { m_knobDisplays = _on; }
+		bool knobFollowsPatch() const { return m_knobFollowsPatch; }
+		void setKnobFollowsPatch(bool _on) { m_knobFollowsPatch = _on; }
+		float panelScale() const { return m_panelScale; }
+		void setPanelScale(float _scale) { m_panelScale = _scale; }
 
 	private:
 		void handleAsyncUpdate() override;
@@ -162,7 +166,8 @@ namespace g1plugin
 		float m_gainDb = 36.0f;					// undoes the -36 dB cap the OS puts on the master volume
 		juce::AudioBuffer<float> m_inputs;		// the inputs, copied before the outputs overwrite them
 
-		bool m_extrasOpen = false, m_knobDisplays = false;
+		bool m_extrasOpen = false, m_knobDisplays = false, m_knobFollowsPatch = false;
+		float m_panelScale = 1.25f;				// the editor's size: 1 is the panel's 1200 pixels wide; 1.25 is half the skin's
 
 		// The last Bank Select (CC 0 and 32) and Program Change the track sent on each channel.
 		// The OS does not keep which patch each slot had, so a G1 booting from a saved project

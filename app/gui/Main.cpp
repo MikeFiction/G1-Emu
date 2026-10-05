@@ -31,11 +31,36 @@ namespace g1gui
 		void setExtrasOpen(const bool _open) override { m_host.options().extrasOpen = _open; save(); }
 		bool knobDisplays() const override { return m_host.options().knobDisplays; }
 		void setKnobDisplays(const bool _on) override { m_host.options().knobDisplays = _on; save(); }
+		bool knobFollowsPatch() const override { return m_host.options().knobFollowsPatch; }
+		void setKnobFollowsPatch(const bool _on) override { m_host.options().knobFollowsPatch = _on; save(); }
+		float panelScale() const override { return m_host.options().panelScale; }
+		void setPanelScale(const float _scale) override { m_host.options().panelScale = _scale; }	// saved when the window closes
 		juce::String settingsTooltip() const override { return "Audio driver, output level and raw MIDI"; }
 		void showSettings(juce::Component* _parent) override { SettingsView::show(m_host, _parent); }
-	private:
 		void save() { m_host.options().save(g1app::EmuHost::defaultSettingsPath()); }
+	private:
 		g1app::EmuHost& m_host;
+	};
+
+	// JUCE hands a desktop window's constrainer its bounds with the native frame around them; the
+	// panel's proportions and the size limits are the client area's.
+	class ClientConstrainer : public juce::ComponentBoundsConstrainer
+	{
+	public:
+		explicit ClientConstrainer(juce::Component& _window) : m_window(_window) {}
+		void checkBounds(juce::Rectangle<int>& _bounds, const juce::Rectangle<int>& _previous, const juce::Rectangle<int>& _limits,
+			const bool _top, const bool _left, const bool _bottom, const bool _right) override
+		{
+			juce::BorderSize<int> frame;
+			if(auto* peer = m_window.getPeer())
+				if(const auto size = peer->getFrameSizeIfPresent())
+					frame = *size;
+			auto client = frame.subtractedFrom(_bounds);
+			ComponentBoundsConstrainer::checkBounds(client, frame.subtractedFrom(_previous), frame.subtractedFrom(_limits), _top, _left, _bottom, _right);
+			_bounds = frame.addedTo(client);
+		}
+	private:
+		juce::Component& m_window;
 	};
 
 	class MainWindow : public juce::DocumentWindow
@@ -44,14 +69,25 @@ namespace g1gui
 		MainWindow(g1app::EmuHost& _host) : DocumentWindow("G1-Emu", juce::Colours::black, DocumentWindow::closeButton | DocumentWindow::minimiseButton), m_panelHost(_host)
 		{
 			setUsingNativeTitleBar(true);
-			setContentOwned(new Panel(m_panelHost), true);
-			setResizable(false, false);
+			// Any size, in the panel's proportions, which change with the extras drawer.
+			auto* view = new PanelView(m_panelHost);
+			setContentOwned(view, true);
+			setResizable(true, false);
+			view->applyLimits(m_constrainer);
+			view->onAspectChanged = [this, view] { view->applyLimits(m_constrainer); };
+			setConstrainer(&m_constrainer);
 			centreWithSize(getWidth(), getHeight());
 			setVisible(true);
+		}
+		~MainWindow() override
+		{
+			setConstrainer(nullptr);
+			m_panelHost.save();	// the size it was left at
 		}
 		void closeButtonPressed() override { juce::JUCEApplication::getInstance()->systemRequestedQuit(); }
 	private:
 		WindowHost m_panelHost;
+		ClientConstrainer m_constrainer{*this};
 	};
 
 	class App : public juce::JUCEApplication

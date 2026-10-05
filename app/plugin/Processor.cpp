@@ -480,6 +480,8 @@ namespace g1plugin
 		xml.setAttribute("version", g_stateVersion);
 		xml.setAttribute("extrasOpen", m_extrasOpen);
 		xml.setAttribute("knobDisplays", m_knobDisplays);
+		xml.setAttribute("panelScale", static_cast<double>(m_panelScale));
+		xml.setAttribute("knobFollowsPatch", m_knobFollowsPatch);
 		xml.setAttribute("programs", juce::String(programsToString()));
 		// The knobs, as far as the host has turned them: their positions, 1..254.
 		juce::StringArray knobs;
@@ -507,6 +509,8 @@ namespace g1plugin
 		xml.setAttribute("version", g_stateVersion);
 		xml.setAttribute("extrasOpen", m_extrasOpen);
 		xml.setAttribute("knobDisplays", m_knobDisplays);
+		xml.setAttribute("panelScale", static_cast<double>(m_panelScale));
+		xml.setAttribute("knobFollowsPatch", m_knobFollowsPatch);
 		xml.setAttribute("programs", juce::String(programsToString()));
 		xml.createNewChildElement("Flash")->addTextElement(packBytes(flash));
 		xml.createNewChildElement("Knobs")->addTextElement(packBytes(knobs));
@@ -529,6 +533,8 @@ namespace g1plugin
 		}
 		m_extrasOpen = xml->getBoolAttribute("extrasOpen", m_extrasOpen);
 		m_knobDisplays = xml->getBoolAttribute("knobDisplays", m_knobDisplays);
+		m_panelScale = static_cast<float>(xml->getDoubleAttribute("panelScale", m_panelScale));
+		m_knobFollowsPatch = xml->getBoolAttribute("knobFollowsPatch", m_knobFollowsPatch);
 		programsFromString(xml->getStringAttribute("programs"));
 
 		std::vector<uint8_t> flash;
@@ -628,6 +634,8 @@ namespace g1plugin
 				{
 					m_extrasOpen = xml->getBoolAttribute("extrasOpen", m_extrasOpen);
 					m_knobDisplays = xml->getBoolAttribute("knobDisplays", m_knobDisplays);
+					m_panelScale = static_cast<float>(xml->getDoubleAttribute("panelScale", m_panelScale));
+					m_knobFollowsPatch = xml->getBoolAttribute("knobFollowsPatch", m_knobFollowsPatch);
 				}
 			}
 			else
