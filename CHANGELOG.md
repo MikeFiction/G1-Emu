@@ -7,6 +7,15 @@ Older entries cite their commit by hand.
 
 ## 2026-10-05
 
+- **A Restart button, in the window and the plugin (Claude, requested by Mike Fiction).** A power
+  icon at the right end of the extras, after Synth Settings (now at the right too), switches the
+  emulated G1 off and on after asking in a card over the panel in the Synth Settings' look
+  (`app/gui/Overlay.*`, which both now share), so a G1 that hangs comes back without closing
+  G1-Emu. In the window the flash is saved and a new G1 boots from it with the knobs where they
+  were; the MIDI ports and the sound card stay open, so the editor keeps its connection, and a
+  restart after an OS update boots the OS that came in (`EmuHost::restart`). In the plugin its
+  state as it is goes back in as a project's would, so the new G1 boots with the same banks, slots,
+  knobs and programs (`Processor::restart`). Checked: it builds, and `g1vst3check` passes.
 - **Synth Settings from the panel, a test version (Claude, requested by Mike Fiction).** A button in
   the extras opens an overlay over the synth with the slots' MIDI channels and the global settings
   (clock, global sync, master tune, knob mode, pedal, program change, local, velocity scale, name),

@@ -47,6 +47,13 @@ namespace g1plugin
 		juce::String settingsTooltip() const override { return "ROM, latency, and where this instance's patches came from"; }
 		void showSettings(juce::Component* _parent) override;
 		g1app::SynthSettingsLink& synthSettings() override;
+		bool canRestart() const override { return true; }
+		void restart() override;
+		juce::String restartNote() const override
+		{
+			return "As switching it off and on, then loading this project again: the banks, the slots and "
+				"the knobs come back as they are now. The PC Port stays open.";
+		}
 
 		Processor& m_processor;
 		g1app::Engine* m_engine = nullptr;

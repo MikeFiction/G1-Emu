@@ -17,6 +17,7 @@ namespace g1app { class JackAudio {}; }
 #endif
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -115,31 +116,11 @@ namespace g1app
 		}
 		m_options.rom = search.path;
 		_log += "ROM: " + search.path + "\n";
+		m_rom = std::move(rom);
 
 		m_flashPath = _flashPath.empty() ? defaultFlashPath() : _flashPath;
-		std::string osNote;
-		const auto os = m_options.loadOs(osNote);
-		if(!osNote.empty())
-			_log += osNote + "\n";
-		m_engine = std::make_unique<Engine>(rom, os);
-		auto& mc = m_engine->mc();
-
-		std::vector<uint8_t> flash;
-		if(loadFile(m_flashPath, flash) && m_engine->loadFlash(flash))
-			_log += "flash loaded from " + m_flashPath + "\n";
-		else
-			_log += std::string("new flash with ") + (m_engine->customOs() ? "the OS image" : "the factory OS") + " (will be saved in " + m_flashPath + ")\n";
-		if(const char* up = std::getenv("G1_UPDATE"); up && std::string(up) == "1")
-		{
-			// The loader finds no OS (length $FFFFFFFF) and runs its Update utility, which waits for
-			// an update (Clavia's updater sends it to the PC Port). Only the length goes: the banks stay, and so does the OS until
-			// the updater replaces it.
-			auto& image = mc.getFlash().data();
-			std::fill(image.begin() + 8, image.begin() + 12, uint8_t(0xff));
-			m_updateMode = true;
-			_log += "UPDATE MODE: the G1 waits for an OS update. Run Clavia's updater, choose this G1's PC Port as\n"
-				"its MIDI output and input, and close G1-Emu when the display says the update is complete.\n";
-		}
+		const char* up = std::getenv("G1_UPDATE");
+		boot(up && std::string(up) == "1", _log);
 
 		m_midi = makeMidiTransport("G1-Emu", _log);
 		if(!m_midi)
@@ -170,18 +151,13 @@ namespace g1app
 				std::snprintf(buf, sizeof(buf), "no sound: %s", m_juceAudio->error().c_str());
 				m_juceAudio.reset();
 			}
-			if(m_juceAudio)
-				mc.getDsp(0).setInputProvider([this](int32_t& _l, int32_t& _r) { m_juceAudio->pullInput(_l, _r); });
 #else
 #ifdef G1_HAVE_JACK
 			if(m_options.audio == "jack")
 			{
 				m_jack = std::make_unique<JackAudio>("G1-Emu", gain, m_options.jackConnect);
 				if(m_jack->valid())
-				{
 					std::snprintf(buf, sizeof(buf), "JACK G1-Emu at %u Hz, %+.0f dB (out_1..4, in_L/R)", m_jack->rate(), static_cast<double>(gainDb));
-					mc.getDsp(0).setInputProvider([this](int32_t& _l, int32_t& _r) { m_jack->pullInput(_l, _r); });
-				}
 				else
 					m_jack.reset();
 			}
@@ -214,6 +190,88 @@ namespace g1app
 			m_wavMaxFrames = static_cast<uint64_t>(std::atof(rec) * 96000.0);
 		}
 
+		wireEngine();
+		m_quit = false;
+		m_thread = std::thread([this] { run(); });
+		return true;
+	}
+
+	// The G1 itself, from the ROM kept and the flash on disk. _update starts it in the boot ROM's
+	// update mode.
+	void EmuHost::boot(const bool _update, std::string& _log)
+	{
+		std::string osNote;
+		const auto os = m_options.loadOs(osNote);
+		if(!osNote.empty())
+			_log += osNote + "\n";
+		m_engine = std::make_unique<Engine>(m_rom, os);
+
+		std::vector<uint8_t> flash;
+		if(loadFile(m_flashPath, flash) && m_engine->loadFlash(flash))
+			_log += "flash loaded from " + m_flashPath + "\n";
+		else
+			_log += std::string("new flash with ") + (m_engine->customOs() ? "the OS image" : "the factory OS") + " (will be saved in " + m_flashPath + ")\n";
+		m_updateMode = _update;
+		if(_update)
+		{
+			// The loader finds no OS (length $FFFFFFFF) and runs its Update utility, which waits for
+			// an update (Clavia's updater sends it to the PC Port). Only the length goes: the banks stay, and so does the OS until
+			// the updater replaces it.
+			auto& image = m_engine->mc().getFlash().data();
+			std::fill(image.begin() + 8, image.begin() + 12, uint8_t(0xff));
+			_log += "UPDATE MODE: the G1 waits for an OS update. Run Clavia's updater, choose this G1's PC Port as\n"
+				"its MIDI output and input, and close G1-Emu when the display says the update is complete.\n";
+		}
+	}
+
+	// Switching it off and on: the flash is saved and a new G1 boots from it, with the knobs where
+	// they were. The MIDI ports and the sound card stay open, so an editor keeps its connection.
+	// Never in update mode: a restart after an update is the first boot of the OS that came in.
+	bool EmuHost::restart(std::string& _log)
+	{
+		if(!running())
+			return false;
+		m_quit = true;
+		m_thread.join();
+		if(m_updateMode)
+			keepReceivedOs();
+		saveFlash();
+
+		std::array<uint8_t, 256> adc{};
+		for(size_t i = 0; i < adc.size(); ++i)
+			adc[i] = m_engine->mc().adc(static_cast<uint8_t>(i));
+		m_engine.reset();
+		boot(false, _log);
+		for(size_t i = 0; i < adc.size(); ++i)
+			m_engine->mc().setAdc(static_cast<uint8_t>(i), adc[i]);
+
+		m_synthSettings.reset();
+		{
+			std::lock_guard<std::mutex> lock(m_statsMutex);
+			m_stats.dspProblem.clear();
+		}
+		std::fill(m_lastFrames.begin(), m_lastFrames.end(), 0);
+		m_lastReportTime = 0;
+		m_lastReportCycles = 0;
+
+		wireEngine();
+		m_quit = false;
+		m_thread = std::thread([this] { run(); });
+		return true;
+	}
+
+	// What connects a new G1 to the sound card: the input to DSP 0, the four outputs from DSP 3.
+	void EmuHost::wireEngine()
+	{
+		auto& mc = m_engine->mc();
+#ifdef G1_BACKEND_JUCE
+		if(m_juceAudio)
+			mc.getDsp(0).setInputProvider([this](int32_t& _l, int32_t& _r) { m_juceAudio->pullInput(_l, _r); });
+#elif defined(G1_HAVE_JACK)
+		if(m_jack)
+			mc.getDsp(0).setInputProvider([this](int32_t& _l, int32_t& _r) { m_jack->pullInput(_l, _r); });
+#endif
+
 		// One sample per DSP 3 block (96 kHz): the four outputs.
 		mc.getDsp(3).setBlockCallback([this](const int32_t _o1, const int32_t _o2, const int32_t _o3, const int32_t _o4)
 		{
@@ -242,10 +300,6 @@ namespace g1app
 				++m_wavFrames;
 			}
 		});
-
-		m_quit = false;
-		m_thread = std::thread([this] { run(); });
-		return true;
 	}
 
 	void EmuHost::stop()
@@ -342,6 +396,7 @@ namespace g1app
 		options.load(defaultSettingsPath());
 		options.os = path;
 		options.save(defaultSettingsPath());
+		m_options.os = path;	// a restart boots it, and the window's next save keeps it
 		std::fprintf(stderr, "update mode: an OS of %zu bytes came in; kept as %s and set as os in the settings\n", os.size(), path.c_str());
 	}
 

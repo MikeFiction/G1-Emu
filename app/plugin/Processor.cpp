@@ -636,6 +636,13 @@ namespace g1plugin
 		_dest = snapshotState();
 	}
 
+	void Processor::restart()
+	{
+		juce::MemoryBlock state;
+		getStateInformation(state);
+		setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+	}
+
 	void Processor::setStateInformation(const void* _data, const int _size)
 	{
 		juce::MemoryBlock state(_data, static_cast<size_t>(std::max(_size, 0)));

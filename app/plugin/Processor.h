@@ -100,6 +100,11 @@ namespace g1plugin
 		// The ROM picked by hand: remembered in the settings file, like the standalone does.
 		void useRom(const juce::File& _file);
 
+		// Switches the G1 off and on (the panel's Restart): its state as it is now goes back in as a
+		// project's would, so a new G1 boots with the same banks, slots, knobs and programs.
+		// Message thread; the editor's panel goes with the old G1.
+		void restart();
+
 		// The panel's preferences, kept in the project. A change is told to the host, or most would
 		// not save a project where nothing else changed and lose it (message thread). They are also
 		// what a new instance starts with (plugin.conf, beside the standalone's settings): the

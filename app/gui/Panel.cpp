@@ -499,6 +499,18 @@ namespace g1gui
 			p.addRectangle(23.99f, 0.0f, 0.01f, 24.0f);
 			break;
 		}
+		case Icon::Restart:
+		{
+			// The power symbol: a ring open at the top, and the line through the gap.
+			juce::Path line;
+			line.addCentredArc(12.0f, 13.0f, 9.0f, 9.0f, 0.0f, juce::degreesToRadians(35.0f), juce::degreesToRadians(325.0f), true);
+			line.startNewSubPath(12.0f, 1.5f);
+			line.lineTo(12.0f, 11.0f);
+			juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded).createStrokedPath(p, line);
+			p.addRectangle(0.0f, 0.0f, 0.01f, 24.0f);	// the 24 x 24 frame, as the chevron's
+			p.addRectangle(23.99f, 0.0f, 0.01f, 24.0f);
+			break;
+		}
 		}
 		const auto icon = r.reduced(5.0f);
 		_g.setColour(juce::Colour(0xffe8e8f0).withAlpha(isEnabled() ? 1.0f : 0.4f));
@@ -816,6 +828,19 @@ namespace g1gui
 		m_synthButton.setTooltip("The slots' MIDI channels, the clock and the other settings of the whole G1");
 		m_synthButton.onClick = [this] { m_synthView.open(*this, FaceHeight, sk(0, g_sectionsTop, 3000, 1238 - g_sectionsTop)); };
 		m_drawer.addAndMakeVisible(m_synthButton);
+
+		// The power switch, where the host can work it: a G1 that hangs comes back without
+		// closing G1-Emu. Asked first, since what is in the slots and not stored is lost.
+		m_restart.setTooltip("Restart the G1");
+		m_restart.onClick = [this]
+		{
+			m_confirm.open(*this, FaceHeight, sk(0, g_sectionsTop, 3000, 1238 - g_sectionsTop), "Restart the G1?",
+				m_host.restartNote(), "Restart", [this] { m_host.restart(); });
+		};
+		if(m_host.canRestart())
+			m_drawer.addAndMakeVisible(m_restart);
+		m_confirm.onClose = [this] { grabKeyboardFocus(); };
+		addChildComponent(m_confirm);
 		m_synthView.onClose = [this] { grabKeyboardFocus(); };
 		addChildComponent(m_synthView);
 
@@ -933,7 +958,10 @@ namespace g1gui
 		m_random.setBounds(140, 15, 100, 28);
 		m_displaysToggle.setBounds(260, 15, 180, 28);
 		m_followToggle.setBounds(450, 15, 200, 28);
-		m_synthButton.setBounds(660, 15, 130, 28);
+		// At the right: Synth Settings, and Restart (where there is one) at the very end.
+		const int right = getWidth() - 12 - 10;	// the tray's edge, less the margin above and below them
+		m_restart.setBounds(right - 28, 15, 28, 28);
+		m_synthButton.setBounds((m_restart.isVisible() ? right - 38 : right) - 130, 15, 130, 28);
 		if(m_synthView.isVisible())
 			m_synthView.setBounds(getLocalBounds());
 		placeDrawer();

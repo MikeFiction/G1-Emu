@@ -1,19 +1,19 @@
 #include "SynthSettingsView.h"
 
+#include "Overlay.h"
+
 namespace g1gui
 {
 	namespace
 	{
-		// The settings window's look.
-		const juce::Colour g_body(0xff1c1c20), g_rule(0xff35353c), g_noteText(0xffc8ccd0);
-		constexpr int g_cardW = 780, g_cardH = 400, g_margin = 24, g_colW = 252;	// the last column ends at the margin
+		// The settings window's look: the colours and sizes are the overlay's (Overlay.h).
+		const juce::Colour g_noteText = overlay::NoteText;
+		constexpr int g_cardW = 780, g_cardH = 400, g_margin = overlay::Margin, g_colW = 252;	// the last column ends at the margin
 		constexpr int g_labelW = 100, g_controlW = 120, g_rowH = 22, g_rowStep = 30;
 		constexpr int g_headY = 56, g_firstRowY = 84, g_footerY = 346;
 		constexpr int g_lowerHeadY = 242;		// the second row of headings, under the longest column
-		constexpr float g_textSize = 13.0f, g_headingSize = 15.0f;
+		constexpr float g_textSize = overlay::TextSize;
 		constexpr int g_cardNudge = 0;			// down (or up, negative) from the top of the synth's sections
-		constexpr float g_faceDim = 0.5f, g_bodyAlpha = 0.7f;	// the synth darkened around the card, which lets it through
-		constexpr float g_backdropScale = 0.25f;	// the panel is photographed small and blurred: cheap, and soft
 
 		// Ids are value + offset, as a ComboBox wants them above 0.
 		constexpr int g_channelOff = 16, g_tuneOffset = 128;
@@ -125,15 +125,7 @@ namespace g1gui
 	void SynthSettingsView::open(juce::Component& _behind, const int _faceHeight, const juce::Rectangle<int> _space)
 	{
 		m_link.read();
-		if(!_behind.getLocalBounds().isEmpty())
-		{
-			auto image = _behind.createComponentSnapshot(_behind.getLocalBounds(), true, g_backdropScale);
-			juce::ImageConvolutionKernel blur(7);
-			blur.createGaussianBlur(2.5f);
-			const auto sharp = image.createCopy();
-			blur.applyToImage(image, sharp, image.getBounds());
-			m_backdrop = image;
-		}
+		m_backdrop = overlay::backdrop(_behind);
 		m_faceHeight = _faceHeight;
 		m_space = _space;
 		setBounds(_behind.getLocalBounds());
@@ -162,32 +154,14 @@ namespace g1gui
 
 	void SynthSettingsView::paint(juce::Graphics& _g)
 	{
-		// Only what is behind the card is blurred, and shows through its body; the synth around it
-		// is darkened, and the rest of the panel stays as it is.
 		const auto c = card();
-		juce::Path shape;
-		shape.addRoundedRectangle(c.toFloat(), 10.0f);
-		if(m_backdrop.isValid())
-		{
-			juce::Graphics::ScopedSaveState state(_g);
-			_g.reduceClipRegion(shape);
-			_g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
-			_g.drawImage(m_backdrop, getLocalBounds().toFloat());
-		}
-		_g.setColour(juce::Colours::black.withAlpha(g_faceDim));
-		_g.fillRect(getLocalBounds().withHeight(m_faceHeight));
-		_g.setColour(g_body.withAlpha(g_bodyAlpha));
-		_g.fillPath(shape);
-		_g.setColour(g_rule);
-		_g.drawRoundedRectangle(c.toFloat().reduced(0.5f), 10.0f, 1.0f);
-
-		const float left = static_cast<float>(c.getX() + g_margin), right = static_cast<float>(c.getRight() - g_margin);
-		_g.drawLine(left, static_cast<float>(c.getY() + 44), right, static_cast<float>(c.getY() + 44));
-		_g.drawLine(left, static_cast<float>(c.getY() + g_footerY), right, static_cast<float>(c.getY() + g_footerY));
+		overlay::paintCard(_g, getLocalBounds(), m_backdrop, m_faceHeight, c, "SYNTH SETTINGS");
+		_g.setColour(overlay::Rule);
+		_g.drawLine(static_cast<float>(c.getX() + g_margin), static_cast<float>(c.getY() + g_footerY),
+			static_cast<float>(c.getRight() - g_margin), static_cast<float>(c.getY() + g_footerY));
 
 		_g.setColour(juce::Colours::white);
-		_g.setFont(juce::FontOptions(g_headingSize, juce::Font::bold));
-		_g.drawText("SYNTH SETTINGS", c.getX() + g_margin, c.getY() + 12, 300, 22, juce::Justification::centredLeft);
+		_g.setFont(juce::FontOptions(overlay::HeadingSize, juce::Font::bold));
 		// Each heading centred over its column's labels and boxes.
 		auto heading = [&](const int _col, const int _y, const juce::String& _text)
 		{

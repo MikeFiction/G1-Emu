@@ -66,6 +66,11 @@ namespace g1app
 		void stop();
 		bool running() const { return m_thread.joinable(); }
 
+		// Switches the G1 off and on, as its power switch would: the flash is saved and a new G1
+		// boots from it, with the knobs where they were. MIDI ports and audio stay open. Whatever
+		// holds on to mc() must let it go first: the G1 it returned is gone.
+		bool restart(std::string& _log);
+
 		// The G1. The panel (getLcd, ledRow, setButton, setAdc) can be used from another thread.
 		g1::Microcontroller& mc() { return m_engine->mc(); }
 		// The OS's synth settings (MIDI channels, clock...), through the PC Port between the editor's messages.
@@ -81,6 +86,8 @@ namespace g1app
 
 	private:
 		void run();
+		void boot(bool _update, std::string& _log);
+		void wireEngine();
 		bool bindRawMidi(std::string& _log);
 		void saveFlash();
 		void finishWav();
@@ -97,6 +104,7 @@ namespace g1app
 		SynthSettingsLink m_synthSettings;
 		bool m_rawMidiBound = false;
 		std::string m_romProblem;
+		std::vector<uint8_t> m_rom;		// kept for a restart
 		Options m_options;
 		std::string m_flashPath;
 		// G1_UPDATE=1: the G1 starts in its boot ROM's update mode (the OS length in the flash

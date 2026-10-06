@@ -11,6 +11,7 @@
 #include "hostconfig.h"
 #include "g1Lib/g1knobs.h"
 #include "SynthSettingsView.h"
+#include "Overlay.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -49,6 +50,12 @@ namespace g1gui
 		virtual juce::String settingsTooltip() const = 0;
 		virtual void showSettings(juce::Component* _parent) = 0;
 		virtual g1app::SynthSettingsLink& synthSettings() = 0;	// the OS's, for the extras' overlay
+		// Switching the G1 off and on, where the host can: the panel shows its Restart button only
+		// then. The host deletes this panel and makes a new one, so it must do it later, not inside
+		// the call.
+		virtual bool canRestart() const { return false; }
+		virtual void restart() {}
+		virtual juce::String restartNote() const { return {}; }	// what a restart keeps and loses, for the question
 	};
 
 	// The panel is drawn from the PNGs in skin/ (built in as G1Skin), laid out in the background's
@@ -140,7 +147,7 @@ namespace g1gui
 	class IconButton : public juce::Button
 	{
 	public:
-		enum class Icon { Settings, Report, Patreon, ExtrasOpen, ExtrasClose };
+		enum class Icon { Settings, Report, Patreon, ExtrasOpen, ExtrasClose, Restart };
 		IconButton(const juce::String& _name, Icon _icon) : juce::Button(_name), m_icon(_icon) {}
 		void setIcon(Icon _icon) { m_icon = _icon; repaint(); }
 		void paintButton(juce::Graphics& _g, bool _over, bool _down) override;
@@ -288,7 +295,9 @@ namespace g1gui
 		juce::ToggleButton m_displaysToggle{"Parameter Displays"};
 		juce::ToggleButton m_followToggle{"Knob Follows Patch"};
 		juce::TextButton m_synthButton{"Synth Settings"};
+		IconButton m_restart{"Restart", IconButton::Icon::Restart};	// where the host can (canRestart)
 		SynthSettingsView m_synthView;	// over everything while open
+		ConfirmView m_confirm;			// the same, for a question (Restart)
 		juce::Random m_rng;
 
 		// What each knob is assigned to, from the OS's tables (g1knobs.h), and the displays.

@@ -135,6 +135,12 @@ namespace g1plugin
 	float Editor::panelScale() const { return m_processor.panelScale(); }
 	void Editor::setPanelScale(const float _scale) { m_processor.setPanelScale(_scale); }
 
+	// Later, on the message thread: the restart deletes the panel that asked.
+	void Editor::restart()
+	{
+		juce::MessageManager::callAsync([e = juce::Component::SafePointer<Editor>(this)] { if(e) e->m_processor.restart(); });
+	}
+
 	void Editor::showSettings(juce::Component* _parent)
 	{
 		juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "G1-Emu",
