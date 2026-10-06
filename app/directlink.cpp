@@ -128,6 +128,27 @@ namespace g1app
 		if(invalid(m_listen))
 			return;
 
+		// The current editor first: if it has gone (an editor that only knocked to see who is
+		// there closes at once), that has to be known before deciding about anyone waiting, or the
+		// editor that comes right after it is turned away as a second one.
+		if(!invalid(m_client))
+		{
+			uint8_t buf[4096];
+			for(;;)
+			{
+				const auto n = ::recv(static_cast<Socket>(m_client), reinterpret_cast<char*>(buf), sizeof(buf), 0);
+				if(n > 0)
+				{
+					_in.insert(_in.end(), buf, buf + n);
+					continue;
+				}
+				if(n < 0 && wouldBlock())
+					break;
+				closeClient();   // the editor closed the link, or it broke
+				break;
+			}
+		}
+
 		// Someone knocking: the first editor stays, anyone after it is turned away.
 		for(;;)
 		{
@@ -145,24 +166,6 @@ namespace g1app
 			m_client = static_cast<long long>(c);
 			const auto hello = "G1-Emu " + std::to_string(kProtocolVersion) + " " + m_name + "\n";
 			send(std::vector<uint8_t>(hello.begin(), hello.end()));
-		}
-
-		if(invalid(m_client))
-			return;
-
-		uint8_t buf[4096];
-		for(;;)
-		{
-			const auto n = ::recv(static_cast<Socket>(m_client), reinterpret_cast<char*>(buf), sizeof(buf), 0);
-			if(n > 0)
-			{
-				_in.insert(_in.end(), buf, buf + n);
-				continue;
-			}
-			if(n < 0 && wouldBlock())
-				return;
-			closeClient();   // the editor closed the link, or it broke
-			return;
 		}
 	}
 

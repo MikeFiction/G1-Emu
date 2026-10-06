@@ -5,6 +5,15 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-06
+
+- **Direct link: an editor that knocks and leaves no longer locks out the next one (#8; Claude).**
+  The link read its editor only after looking for new connections, so an editor that checked who
+  was there and closed at once (what NME does to list the instances) was still counted when the
+  real one arrived, and the real one was turned away. The current editor is read first now.
+  Found end to end with NME's client against `g1run`; `g1directlinktest` gains the knock-then-
+  connect case. Checked: the test, and NME's IAm answered over the link right after a discovery.
+
 ## 2026-10-05
 
 - **The direct link for Animatek NME, beside the PC Port (#8; Claude, requested by Javier).** The

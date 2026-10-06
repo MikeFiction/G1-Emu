@@ -69,10 +69,27 @@ int main()
 	CHECK(first.port() >= DirectLink::kBasePort);
 	CHECK(second.port() > first.port());   // the second instance took the next free port
 
+	// An editor looking for instances knocks, reads the hello and leaves; the real editor comes
+	// right behind it and must not be taken for a second one (the race NME's discovery hit).
+	std::vector<uint8_t> in;
+	{
+		const auto probe = connectTo(first.port());
+		CHECK(static_cast<long long>(probe) >= 0);
+		for(int i = 0; i < 100 && !first.editorConnected(); ++i)
+		{
+			first.poll(in);
+			std::this_thread::sleep_for(5ms);
+		}
+		CHECK(!readSome(probe, 1).empty());
+		closeSock(probe);
+		std::this_thread::sleep_for(20ms);
+	}
+
 	const auto editor = connectTo(first.port());
 	CHECK(static_cast<long long>(editor) >= 0);
 
-	std::vector<uint8_t> in;
+	// The probe's departure and the editor's arrival are seen in the same poll.
+	first.poll(in);
 	for(int i = 0; i < 100 && !first.editorConnected(); ++i)
 	{
 		first.poll(in);
