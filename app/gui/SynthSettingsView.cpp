@@ -1,42 +1,266 @@
 #include "SynthSettingsView.h"
 
-#include "Overlay.h"
+#include "G1Skin.h"
+#include "Panel.h"
+
+#include <algorithm>
 
 namespace g1gui
 {
 	namespace
 	{
-		// The settings window's look: the colours and sizes are the overlay's (Overlay.h).
-		const juce::Colour g_noteText = overlay::NoteText;
-		constexpr int g_cardW = 780, g_cardH = 400, g_margin = overlay::Margin, g_colW = 252;	// the last column ends at the margin
-		constexpr int g_labelW = 100, g_controlW = 120, g_rowH = 22, g_rowStep = 30;
-		constexpr int g_headY = 56, g_firstRowY = 84, g_footerY = 346;
-		constexpr int g_lowerHeadY = 242;		// the second row of headings, under the longest column
-		constexpr float g_textSize = overlay::TextSize;
-		constexpr int g_cardNudge = 0;			// down (or up, negative) from the top of the synth's sections
+		// The settings' look: Mike Fiction's frame (skin/settings_panel.png, with the title, headings
+		// and labels) over the knobs' four sections, and the boxes of his Nord Lead 2x settings: rounded,
+		// with white text. Sizes are the panel's pixels, inside the frame.
+		const juce::Colour g_heading(0xff4d587e), g_label(0xfff9f9fa), g_boxText(0xffffffff);
+		// His Perf / Global page's boxes (perfDropBox): the slate half see-through, solid and darker under the mouse.
+		const juce::Colour g_box(0x804e587e), g_boxHover(0xff4e5a84), g_menu(0xff767c98);
+		const juce::Colour g_rule(0xff525c79), g_ruleLight(0xff8e93a6);
+		constexpr float g_boxRound = 12.0f / 28.0f, g_condensed = 0.85f;	// corners: 12 on a box 28 high
+		constexpr int g_frameEdge = 4;			// the frame's orange border, which the rules stop at
+		constexpr int g_fadeMs = 60;			// in and out: just enough to see, quicker than the Nord Lead 2x skin's Perf page
+		constexpr int g_pollHz = 5, g_rereadS = 1;	// looks for the OS's answer; asks it again every second
+		constexpr int g_margin = 16, g_colW = 186;	// the name and the note from the frame's sides; the columns' spacing
+		// Where the columns begin, each a label's width (g_labelW) and then its box: the boxes beside the
+		// frame's labels.
+		constexpr int g_colsX = -20;
+		constexpr int g_labelW = 74, g_controlW = 88, g_rowH = 14, g_rowStep = 22;	// boxes 1.8 times their text's caps, as on the Nord
+		constexpr int g_titleY = 10, g_titleRuleY = 34, g_firstRowY = 60, g_footerY = 242;
+		constexpr int g_velocityY = 183;		// Minimum's row, under the frame's Velocity Scale
+		constexpr int g_tuneY = 187;			// Master tune's centre: its disk between Global sync and the rule
+		constexpr float g_textSize = 11.0f;
 
 		// Ids are value + offset, as a ComboBox wants them above 0.
-		constexpr int g_channelOff = 16, g_tuneOffset = 128;
+		constexpr int g_channelOff = 16;
+		constexpr int g_tuneRange = 100;	// cents either way, as the ticks show it
+
+		// A box as the Perf / Global page has it, at _r.
+		void fillBox(juce::Graphics& _g, const juce::Rectangle<float> _r, const juce::Colour _c)
+		{
+			_g.setColour(_c);
+			_g.fillRoundedRectangle(_r, _r.getHeight() * g_boxRound);
+		}
 
 		juce::String cents(const int _c) { return (_c > 0 ? "+" : "") + juce::String(_c) + " cents"; }
+
+		// Global sync's length, in quarter notes as Clavia counted it.
+		juce::String syncText(const int _beats)
+		{
+			return juce::String(_beats) + (_beats == 1 ? " Qtr. Note" : " Qtr. Notes");
+		}
+
+		// Halved while it can be, then to size: one big step down loses the frame's fine edge.
+		juce::Image scaledTo(juce::Image _img, const int _w, const int _h)
+		{
+			while(_img.getWidth() >= _w * 2 && _img.getHeight() >= _h * 2)
+				_img = _img.rescaled(_img.getWidth() / 2, _img.getHeight() / 2, juce::Graphics::highResamplingQuality);
+			return _img.getWidth() == _w && _img.getHeight() == _h ? _img : _img.rescaled(_w, _h, juce::Graphics::highResamplingQuality);
+		}
+	}
+
+	SkinImage::SkinImage(const void* _png, const int _pngSize, const int _frameSize)
+		: m_source(juce::ImageCache::getFromMemory(_png, _pngSize)), m_frameSize(_frameSize)
+	{
+	}
+
+	void SkinImage::draw(juce::Graphics& _g, const juce::Rectangle<float> _dest, const int _frame)
+	{
+		const float px = _g.getInternalContext().getPhysicalPixelScaleFactor();
+		const juce::Point<int> size(std::max(1, juce::roundToInt(_dest.getWidth() * px)), std::max(1, juce::roundToInt(_dest.getHeight() * px)));
+		if(size != m_size)
+		{
+			m_frames.clear();
+			m_size = size;
+		}
+		auto& img = m_frames[_frame];
+		if(img.isNull())
+		{
+			const int cols = m_frameSize ? m_source.getWidth() / m_frameSize : 1;
+			img = scaledTo(m_frameSize ? m_source.getClippedImage({_frame % cols * m_frameSize, _frame / cols * m_frameSize, m_frameSize, m_frameSize}) : m_source,
+				size.x, size.y);
+		}
+		_g.drawImage(img, _dest);
+	}
+
+	SettingsLook::SettingsLook()
+		: m_knob(G1Skin::knob_png, G1Skin::knob_pngSize, 113)
+		, m_shadow(G1Skin::knob_shadow_png, G1Skin::knob_shadow_pngSize)
+		, m_tuneBg(G1Skin::master_tune_bg_png, G1Skin::master_tune_bg_pngSize)
+	{
+		setColour(juce::ComboBox::textColourId, g_boxText);
+		setColour(juce::TextEditor::textColourId, g_boxText);
+		setColour(juce::TextEditor::highlightColourId, g_boxText);	// the selection white, so it shows on the boxes
+		setColour(juce::TextEditor::highlightedTextColourId, g_heading);
+		setColour(juce::TextEditor::focusedOutlineColourId, g_label);
+		setColour(juce::CaretComponent::caretColourId, g_boxText);
+		setColour(juce::PopupMenu::backgroundColourId, g_menu);
+		setColour(juce::PopupMenu::textColourId, g_boxText);
+		setColour(juce::PopupMenu::highlightedBackgroundColourId, g_heading);
+		setColour(juce::PopupMenu::highlightedTextColourId, g_boxText);
 	}
 
 	juce::Font SettingsLook::getComboBoxFont(juce::ComboBox&) { return juce::FontOptions(g_textSize); }
 	juce::Font SettingsLook::getPopupMenuFont() { return juce::FontOptions(g_textSize); }
 
-	SynthSettingsView::SynthSettingsView(g1app::SynthSettingsLink& _link) : m_link(_link)
+	// A rounded box with no arrow, its text centred over all of it.
+	void SettingsLook::drawComboBox(juce::Graphics& _g, const int _w, const int _h, bool, int, int, int, int, juce::ComboBox& _box)
+	{
+		const auto c = _box.isEnabled() ? (_box.isMouseOver(true) ? g_boxHover : g_box) : g_box.withMultipliedAlpha(0.5f);
+		fillBox(_g, {0, 0, static_cast<float>(_w), static_cast<float>(_h)}, c);
+	}
+
+	void SettingsLook::positionComboBoxText(juce::ComboBox& _box, juce::Label& _label)
+	{
+		_label.setBounds(_box.getLocalBounds().reduced(4, 0));
+		_label.setFont(getComboBoxFont(_box));
+		_label.setJustificationType(juce::Justification::centred);
+		_label.setMinimumHorizontalScale(0.75f);
+	}
+
+	void SettingsLook::fillTextEditorBackground(juce::Graphics& _g, const int _w, const int _h, juce::TextEditor& _editor)
+	{
+		fillBox(_g, {0, 0, static_cast<float>(_w), static_cast<float>(_h)}, _editor.isMouseOver(true) || _editor.hasKeyboardFocus(true) ? g_boxHover : g_box);
+	}
+
+	void SettingsLook::drawTextEditorOutline(juce::Graphics& _g, const int _w, const int _h, juce::TextEditor& _editor)
+	{
+		if(!_editor.hasKeyboardFocus(true))
+			return;
+		_g.setColour(g_label.withAlpha(0.6f));
+		_g.drawRoundedRectangle(juce::Rectangle<float>(0, 0, static_cast<float>(_w), static_cast<float>(_h)).reduced(0.5f), static_cast<float>(_h) * g_boxRound, 1.0f);
+	}
+
+	// As the panel draws its knobs (Panel::paint, KnobLook), at its scale: the shadow's disk under
+	// the cap, whose 128 frames turn through the same ±120° as the ticks round it.
+	void SettingsLook::drawRotarySlider(juce::Graphics& _g, const int _x, const int _y, const int _w, const int _h, const float _pos, float, float, juce::Slider&)
+	{
+		constexpr float s = Panel::SkinScale;
+		const auto c = juce::Rectangle<int>(_x, _y, _w, _h).toFloat().getCentre();
+		m_shadow.draw(_g, {c.x - 33.0f * s, c.y - 33.0f * s, 100.0f * s, 101.0f * s});
+		m_knob.draw(_g, {c.x - 56.0f * s, c.y - 56.0f * s, 113.0f * s, 113.0f * s}, juce::roundToInt(_pos * 127.0f));
+	}
+
+	// Mike Fiction's disk with its ticks, marks and name (skin/master_tune_bg.png, 151 x 180), at
+	// the background's scale: its disk is the size of the panel's red ones, and sits on the knob's
+	// centre as they do (the disk's own centre, 77, 79, half a pixel past it).
+	void SettingsLook::drawTuneBackground(juce::Graphics& _g, const juce::Point<float> _centre)
+	{
+		constexpr float s = Panel::SkinScale;
+		m_tuneBg.draw(_g, {_centre.x - 76.5f * s, _centre.y - 78.5f * s, 151.0f * s, 180.0f * s});
+	}
+
+	ValueBox::ValueBox(const int _min, const int _max) : m_min(_min), m_max(_max), m_value(_min)
+	{
+		setMouseCursor(juce::MouseCursor::UpDownResizeCursor);
+		m_editor.setFont(juce::FontOptions(g_textSize));
+		m_editor.setJustification(juce::Justification::centred);
+		m_editor.setIndents(4, 0);
+		m_editor.setSelectAllWhenFocused(true);	// typing replaces the value
+		m_editor.setInputRestrictions(juce::String(_max).length(), "0123456789");
+		m_editor.onReturnKey = [this] { commit(); };
+		m_editor.onFocusLost = [this] { commit(); };
+		m_editor.onEscapeKey = [this] { cancel(); };
+		addChildComponent(m_editor);
+	}
+
+	void ValueBox::setValue(const int _value)
+	{
+		if(_value == m_value)
+			return;
+		m_value = _value;	// as the OS says, even outside the range: only what is set here is kept in it
+		repaint();
+	}
+
+	void ValueBox::change(const int _value)
+	{
+		const int v = std::clamp(_value, m_min, m_max);
+		if(v == m_value)
+			return;
+		m_value = v;
+		repaint();
+		if(onChange)
+			onChange();
+	}
+
+	void ValueBox::paint(juce::Graphics& _g)
+	{
+		const auto c = isEnabled() ? (isMouseOver(true) ? g_boxHover : g_box) : g_box.withMultipliedAlpha(0.5f);
+		fillBox(_g, getLocalBounds().toFloat(), c);
+		if(m_editor.isVisible())
+			return;
+
+		// Two small solid triangles at the right, up over down: it can be dragged and scrolled.
+		constexpr float w = 5.0f, h = 3.0f, gap = 2.5f, right = 6.0f;
+		const float x = static_cast<float>(getWidth()) - right - w, mid = static_cast<float>(getHeight()) * 0.5f;
+		juce::Path arrows;
+		arrows.addTriangle(x, mid - gap * 0.5f, x + w, mid - gap * 0.5f, x + w * 0.5f, mid - gap * 0.5f - h);
+		arrows.addTriangle(x, mid + gap * 0.5f, x + w, mid + gap * 0.5f, x + w * 0.5f, mid + gap * 0.5f + h);
+		_g.setColour(g_boxText.withAlpha(0.8f));
+		_g.fillPath(arrows);
+
+		_g.setColour(g_boxText);
+		_g.setFont(juce::FontOptions(g_textSize));
+		_g.drawText(juce::String(m_value), getLocalBounds(), juce::Justification::centred);
+	}
+
+	void ValueBox::resized()
+	{
+		m_editor.setBounds(getLocalBounds());
+	}
+
+	// Up raises it, a step every 3 pixels from where the drag began.
+	void ValueBox::mouseDown(const juce::MouseEvent&)
+	{
+		m_dragFrom = m_value;
+	}
+
+	void ValueBox::mouseDrag(const juce::MouseEvent& _e)
+	{
+		if(isEnabled() && !m_editor.isVisible())
+			change(m_dragFrom - _e.getDistanceFromDragStartY() / 3);
+	}
+
+	void ValueBox::mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails& _wheel)
+	{
+		if(!isEnabled() || m_editor.isVisible() || _wheel.deltaY == 0.0f)
+			return;
+		change(m_value + (_wheel.deltaY > 0 ? 1 : -1));
+	}
+
+	void ValueBox::mouseDoubleClick(const juce::MouseEvent&)
+	{
+		if(!isEnabled())
+			return;
+		m_editor.setText(juce::String(m_value), false);
+		m_editor.setVisible(true);
+		m_editor.grabKeyboardFocus();
+		m_editor.selectAll();
+		repaint();
+	}
+
+	void ValueBox::commit()
+	{
+		if(!m_editor.isVisible())
+			return;
+		const auto text = m_editor.getText().trim();
+		m_editor.setVisible(false);
+		repaint();
+		if(text.isNotEmpty())
+			change(text.getIntValue());
+	}
+
+	void ValueBox::cancel()
+	{
+		m_editor.setVisible(false);
+		repaint();
+	}
+
+	SynthSettingsView::SynthSettingsView(g1app::SynthSettingsLink& _link)
+		: m_link(_link), m_frame(G1Skin::settings_panel_png, G1Skin::settings_panel_pngSize)
 	{
 		setWantsKeyboardFocus(true);
 		setLookAndFeel(&m_look);
 
-		auto label = [this](juce::Label& _l, const juce::String& _text)
-		{
-			_l.setFont(juce::FontOptions(g_textSize));
-			_l.setText(_text, juce::dontSendNotification);
-			_l.setColour(juce::Label::textColourId, juce::Colours::white);
-			_l.setJustificationType(juce::Justification::centredRight);
-			addAndMakeVisible(_l);
-		};
 		auto combo = [this](juce::ComboBox& _c)
 		{
 			_c.onChange = [this] { apply(); };
@@ -49,9 +273,15 @@ namespace g1gui
 			combo(_c);
 		};
 
-		label(m_nameLabel, "Name");
+		// Name's label, which the frame does not have, as its labels: small white condensed capitals.
+		m_nameLabel.setFont(juce::FontOptions(g_textSize).withHorizontalScale(g_condensed));
+		m_nameLabel.setText("NAME", juce::dontSendNotification);
+		m_nameLabel.setColour(juce::Label::textColourId, g_label);
+		m_nameLabel.setJustificationType(juce::Justification::centredRight);
+		addAndMakeVisible(m_nameLabel);
 		m_name.setFont(juce::FontOptions(g_textSize));
-		m_name.setIndents(6, 4);
+		m_name.setIndents(6, 0);
+		m_name.setJustification(juce::Justification::centred);	// as the boxes' text
 		m_name.setInputRestrictions(16);
 		m_name.onReturnKey = [this] { apply(); };
 		m_name.onFocusLost = [this] { apply(); };
@@ -59,62 +289,47 @@ namespace g1gui
 
 		for(size_t i = 0; i < 4; ++i)
 		{
-			label(m_slotLabels[i], juce::String("Slot ") + static_cast<char>('A' + i));
 			for(int ch = 0; ch < 16; ++ch)
 				m_channels[i].addItem(juce::String(ch + 1), ch + 1);
 			m_channels[i].addItem("Off", g_channelOff + 1);
 			combo(m_channels[i]);
 		}
-		label(m_keyboardLabel, "Keyboard mode");
-		choices(m_keyboard, {"Active slot", "Selected slots"});
 
-		label(m_clockLabel, "Source");
 		choices(m_clock, {"Internal", "External"});
-		label(m_bpmLabel, "Rate (BPM)");
-		for(int bpm = 24; bpm <= 240; ++bpm)
-			m_bpm.addItem(juce::String(bpm), bpm + 1);
-		combo(m_bpm);
-		label(m_syncLabel, "Global sync");
+		m_bpm.onChange = [this] { apply(); };
+		m_bpm.setTooltip("24 to 240 BPM. Drag up or down, scroll, or double-click to type");
+		addAndMakeVisible(m_bpm);
 		for(int beats = 1; beats <= 32; ++beats)
-			m_sync.addItem(juce::String(beats) + (beats == 1 ? " beat" : " beats"), beats);
+			m_sync.addItem(syncText(beats), beats);
 		combo(m_sync);
-		label(m_tuneLabel, "Master tune");
-		for(int c = -100; c <= 100; ++c)
-			m_tune.addItem(cents(c), c + g_tuneOffset);
-		combo(m_tune);
+		m_tune.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+		m_tune.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+		m_tune.setRange(-g_tuneRange, g_tuneRange, 1);
+		m_tune.setDoubleClickReturnValue(true, 0);
+		m_tune.onValueChange = [this] { apply(); };
+		addAndMakeVisible(m_tune);
 
-		label(m_knobLabel, "Knob mode");
 		choices(m_knob, {"Immediate", "Hook"});
-		label(m_pedalLabel, "Pedal polarity");
 		choices(m_pedal, {"Normal", "Inverted"});
-		label(m_programLabel, "Program change");
 		choices(m_program, {"Off", "Receive", "Send", "Send and receive"});
-		label(m_localLabel, "Local");
-		choices(m_local, {"On", "Off"});
-		label(m_ledsLabel, "Editor LEDs");
 		choices(m_leds, {"Active", "Off"});
-		label(m_velMinLabel, "Minimum");
-		label(m_velMaxLabel, "Maximum");
-		for(int v = 0; v <= 127; ++v)
+		for(auto* v : {&m_velMin, &m_velMax})
 		{
-			m_velMin.addItem(juce::String(v), v + 1);
-			m_velMax.addItem(juce::String(v), v + 1);
+			v->onChange = [this] { apply(); };
+			v->setTooltip("0 to 127. Drag up or down, scroll, or double-click to type");
+			addAndMakeVisible(*v);
 		}
-		combo(m_velMin);
-		combo(m_velMax);
 
 		m_note.setText("Changes reach the G1 at once. To keep them after a restart, press Shift + Store "
 			"on the panel (Save Synth Settings).", juce::dontSendNotification);
 		m_note.setFont(juce::FontOptions(g_textSize));
-		m_note.setColour(juce::Label::textColourId, g_noteText);
-		m_note.setJustificationType(juce::Justification::topLeft);
+		m_note.setColour(juce::Label::textColourId, g_heading);
+		m_note.setJustificationType(juce::Justification::centredLeft);
 		addAndMakeVisible(m_note);
 
-		m_close.onClick = [this] { close(); };
-		addAndMakeVisible(m_close);
-
 		for(auto* c : getChildren())
-			c->setEnabled(c == &m_close);	// until the OS has said what it has
+			c->setEnabled(false);	// until the OS has said what it has
+		addMouseListener(this, true);	// the boxes' hover colour (mouseEnter)
 	}
 
 	SynthSettingsView::~SynthSettingsView()
@@ -122,16 +337,14 @@ namespace g1gui
 		setLookAndFeel(nullptr);
 	}
 
-	void SynthSettingsView::open(juce::Component& _behind, const int _faceHeight, const juce::Rectangle<int> _space)
+	void SynthSettingsView::open(const juce::Rectangle<int> _frame)
 	{
 		m_link.read();
-		m_backdrop = overlay::backdrop(_behind);
-		m_faceHeight = _faceHeight;
-		m_space = _space;
-		setBounds(_behind.getLocalBounds());
-		setVisible(true);
+		setBounds(_frame);
+		juce::Desktop::getInstance().getAnimator().fadeIn(this, g_fadeMs);
 		toFront(true);
-		startTimerHz(5);
+		m_ticks = 0;
+		startTimerHz(g_pollHz);
 		timerCallback();
 	}
 
@@ -139,87 +352,79 @@ namespace g1gui
 	{
 		apply();	// a name still being typed
 		stopTimer();
-		setVisible(false);
-		m_backdrop = {};
+		juce::Desktop::getInstance().getAnimator().fadeOut(this, g_fadeMs);	// hidden at once, a picture of it fades
 		if(onClose)
 			onClose();
 	}
 
-	// Centred across its space, its top on the space's top.
-	juce::Rectangle<int> SynthSettingsView::card() const
-	{
-		const auto space = m_space.isEmpty() ? getLocalBounds() : m_space;
-		return juce::Rectangle<int>(g_cardW, g_cardH).withCentre(space.getCentre()).withY(space.getY() + g_cardNudge);
-	}
-
 	void SynthSettingsView::paint(juce::Graphics& _g)
 	{
-		const auto c = card();
-		overlay::paintCard(_g, getLocalBounds(), m_backdrop, m_faceHeight, c, "SYNTH SETTINGS");
-		_g.setColour(overlay::Rule);
-		_g.drawLine(static_cast<float>(c.getX() + g_margin), static_cast<float>(c.getY() + g_footerY),
-			static_cast<float>(c.getRight() - g_margin), static_cast<float>(c.getY() + g_footerY));
+		const auto c = getLocalBounds();
+		m_frame.draw(_g, c.toFloat());
+		m_look.drawTuneBackground(_g, m_tune.getBounds().toFloat().getCentre());
 
-		_g.setColour(juce::Colours::white);
-		_g.setFont(juce::FontOptions(overlay::HeadingSize, juce::Font::bold));
-		// Each heading centred over its column's labels and boxes.
-		auto heading = [&](const int _col, const int _y, const juce::String& _text)
+		// The rules as the Nord's: a dark line with a light one under it, from border to border.
+		for(const int y : {g_titleRuleY, g_footerY})
 		{
-			_g.drawText(_text, c.getX() + g_margin + _col * g_colW, c.getY() + _y, g_labelW + 8 + g_controlW, 20, juce::Justification::centred);
-		};
-		heading(0, g_headY, "MIDI CHANNELS");
-		heading(0, g_lowerHeadY, "KEYBOARD");
-		heading(1, g_headY, "MIDI CLOCK");
-		heading(1, g_lowerHeadY, "TUNING");
-		heading(2, g_headY, "CONTROL");
-		heading(2, g_lowerHeadY, "VELOCITY SCALE");
+			const auto rule = juce::Rectangle<int>(c.getX() + g_frameEdge, c.getY() + y - 1, c.getWidth() - 2 * g_frameEdge, 3);
+			_g.setColour(g_rule);
+			_g.fillRect(rule);
+			_g.setColour(g_ruleLight);
+			_g.fillRect(rule.withY(rule.getBottom()).withHeight(1));
+		}
+
+		// The title, headings and labels are the frame's (Mike Fiction's art).
 		if(!m_haveSettings)
 		{
-			_g.setColour(g_noteText);
-			_g.setFont(juce::FontOptions(12.0f));
-			_g.drawText("Asking the G1...", c.getX() + 200, c.getY() + 12, 300, 22, juce::Justification::centredLeft);
+			_g.setColour(g_heading);
+			_g.setFont(juce::FontOptions(g_textSize));
+			_g.drawText("Asking the G1...", c.getX() + 150, c.getY() + g_titleY, 150, g_rowH, juce::Justification::centredLeft);
 		}
 	}
 
 	void SynthSettingsView::resized()
 	{
-		const auto c = card();
-		auto row = [&](const int _col, const int _y, juce::Label& _label, juce::Component& _control)
+		const auto c = getLocalBounds();
+		// Each box right of its label in the frame's art.
+		auto row = [&](const int _col, const int _y, juce::Component& _control)
 		{
-			const int x = c.getX() + g_margin + _col * g_colW;
-			_label.setBounds(x, c.getY() + _y, g_labelW, g_rowH);
-			_control.setBounds(x + g_labelW + 8, c.getY() + _y, g_controlW, g_rowH);
+			_control.setBounds(c.getX() + g_colsX + _col * g_colW + g_labelW + 4, c.getY() + _y, g_controlW, g_rowH);
 		};
 		auto rowY = [](const int _i) { return g_firstRowY + _i * g_rowStep; };
-		m_nameLabel.setBounds(c.getRight() - g_margin - 160 - 8 - 60, c.getY() + 12, 60, g_rowH);
-		m_name.setBounds(c.getRight() - g_margin - 160, c.getY() + 12, 160, g_rowH);
+		m_name.setBounds(c.getRight() - g_margin - 130, c.getY() + g_titleY, 130, g_rowH);
+		m_nameLabel.setBounds(m_name.getX() - 4 - 40, c.getY() + g_titleY, 40, g_rowH);
 
 		for(size_t i = 0; i < 4; ++i)
-			row(0, rowY(static_cast<int>(i)), m_slotLabels[i], m_channels[i]);
-		row(0, g_lowerHeadY + 28, m_keyboardLabel, m_keyboard);
+			row(0, rowY(static_cast<int>(i)), m_channels[i]);
 
-		row(1, rowY(0), m_clockLabel, m_clock);
-		row(1, rowY(1), m_bpmLabel, m_bpm);
-		row(1, rowY(2), m_syncLabel, m_sync);
-		row(1, g_lowerHeadY + 28, m_tuneLabel, m_tune);
+		row(1, rowY(0), m_clock);
+		row(1, rowY(1), m_bpm);
+		row(1, rowY(2), m_sync);
+		// The knob under the MIDI channels' boxes, centred on them, in its disk (paint); its value
+		// is on the panel's display while the mouse is on it (lcdTips).
+		const int tuneX = c.getX() + g_colsX + g_labelW + 4 + g_controlW / 2;
+		m_tune.setBounds(tuneX - 28, c.getY() + g_tuneY - 28, 56, 56);
 
-		row(2, rowY(0), m_knobLabel, m_knob);
-		row(2, rowY(1), m_pedalLabel, m_pedal);
-		row(2, rowY(2), m_programLabel, m_program);
-		row(2, rowY(3), m_localLabel, m_local);
-		row(2, rowY(4), m_ledsLabel, m_leds);
-		row(2, g_lowerHeadY + 28, m_velMinLabel, m_velMin);
-		row(2, g_lowerHeadY + 28 + g_rowStep, m_velMaxLabel, m_velMax);
+		row(2, rowY(0), m_knob);
+		row(2, rowY(1), m_pedal);
+		row(2, rowY(2), m_program);
+		row(2, rowY(3), m_leds);
+		row(2, g_velocityY, m_velMin);
+		row(2, g_velocityY + g_rowStep, m_velMax);
 
-		m_note.setBounds(c.getX() + g_margin, c.getY() + g_footerY + 10, g_cardW - 2 * g_margin - 110, 36);
-		m_close.setBounds(c.getRight() - g_margin - 90, c.getY() + g_footerY + 13, 90, 26);
+		m_note.setBounds(c.getX() + g_margin - 4, c.getY() + g_footerY + 4, c.getWidth() - 2 * g_margin + 8, 32);
 	}
 
-	// A click beside the card closes it, as Escape does.
-	void SynthSettingsView::mouseDown(const juce::MouseEvent& _e)
+	// The mouse going in or out of a box's text (its child) is not the box's own event, so the box
+	// would keep or miss its hover colour: the control it is part of is redrawn here.
+	void SynthSettingsView::mouseEnter(const juce::MouseEvent& _e) { repaintControl(_e); }
+	void SynthSettingsView::mouseExit(const juce::MouseEvent& _e) { repaintControl(_e); }
+
+	void SynthSettingsView::repaintControl(const juce::MouseEvent& _e)
 	{
-		if(!card().contains(_e.getPosition()))
-			close();
+		for(auto* c = _e.eventComponent; c != nullptr && c != this; c = c->getParentComponent())
+			if(c->getParentComponent() == this)
+				c->repaint();
 	}
 
 	bool SynthSettingsView::keyPressed(const juce::KeyPress& _key)
@@ -234,6 +439,10 @@ namespace g1gui
 
 	void SynthSettingsView::timerCallback()
 	{
+		// Asked again now and then while it is open: an editor, or the panel's System menu, may have
+		// changed them meanwhile. The link waits while an editor is talking.
+		if(++m_ticks % (g_pollHz * g_rereadS) == 0)
+			m_link.read();
 		g1app::SynthSettings s;
 		uint64_t revision = 0;
 		if(!m_link.settings(s, revision) || revision == m_revision)
@@ -264,42 +473,62 @@ namespace g1gui
 			m_name.setText(_s.name, false);
 		for(size_t i = 0; i < 4; ++i)
 			select(m_channels[i], std::min(_s.midiChannel[i], g_channelOff) + 1, juce::String(_s.midiChannel[i] + 1));
-		m_keyboard.setSelectedId(_s.keyboardMode + 1, n);
 		m_clock.setSelectedId(_s.clockInternal ? 1 : 2, n);
-		select(m_bpm, _s.clockBpm + 1, juce::String(_s.clockBpm));
+		m_bpm.setValue(_s.clockBpm);
 		m_sync.setSelectedId(_s.globalSync + 1, n);
-		select(m_tune, _s.masterTune + g_tuneOffset, cents(_s.masterTune));
+		m_tune.setValue(std::clamp(_s.masterTune, -g_tuneRange, g_tuneRange), n);
 		m_knob.setSelectedId(_s.knobMode + 1, n);
 		m_pedal.setSelectedId(_s.pedalPolarity + 1, n);
 		m_program.setSelectedId(1 + (_s.programChangeReceive ? 1 : 0) + (_s.programChangeSend ? 2 : 0), n);
-		m_local.setSelectedId(_s.localOn ? 1 : 2, n);
 		m_leds.setSelectedId(_s.ledsActive ? 1 : 2, n);
-		m_velMin.setSelectedId(_s.velScaleMin + 1, n);
-		m_velMax.setSelectedId(_s.velScaleMax + 1, n);
+		m_velMin.setValue(_s.velScaleMin);
+		m_velMax.setValue(_s.velScaleMax);
+		lcdTips();
+	}
+
+	// Each control's name and value on the panel's display, while the mouse is on it (or turns it),
+	// as the synth's own controls have theirs.
+	void SynthSettingsView::lcdTips()
+	{
+		auto tip = [](juce::Component& _c, const juce::String& _name, const juce::String& _value) { setLcdTip(_c, _name + "\t" + _value); };
+		tip(m_name, "Synth Name", m_name.getText());
+		for(size_t i = 0; i < 4; ++i)
+			tip(m_channels[i], juce::String("Slot ") + static_cast<char>('A' + i) + " MIDI Ch", m_channels[i].getText());
+		tip(m_clock, "MIDI Clock", m_clock.getText());
+		tip(m_bpm, "Clock Rate", juce::String(m_bpm.getValue()) + " BPM");
+		tip(m_sync, "Global Sync", m_sync.getText());
+		tip(m_tune, "Master Tune", cents(juce::roundToInt(m_tune.getValue())));
+		tip(m_knob, "Knob Mode", m_knob.getText());
+		tip(m_pedal, "Pedal Polarity", m_pedal.getText());
+		tip(m_program, "Program Change", m_program.getSelectedId() == 4 ? juce::String("Snd/Rcv") : m_program.getText());	// fits the display
+		tip(m_leds, "Editor LEDs", m_leds.getText());
+		tip(m_velMin, "Velocity Min", juce::String(m_velMin.getValue()));
+		tip(m_velMax, "Velocity Max", juce::String(m_velMax.getValue()));
 	}
 
 	void SynthSettingsView::apply()
 	{
+		lcdTips();	// what was changed, on the display at once
 		if(!m_haveSettings)
 			return;
 		auto s = m_known;
 		s.name = m_name.getText().substring(0, 16).toStdString();
 		for(size_t i = 0; i < 4; ++i)
 			s.midiChannel[i] = m_channels[i].getSelectedId() - 1;
-		s.keyboardMode = m_keyboard.getSelectedId() - 1;
 		s.clockInternal = m_clock.getSelectedId() == 1;
-		s.clockBpm = m_bpm.getSelectedId() - 1;
+		s.clockBpm = m_bpm.getValue();
 		s.globalSync = m_sync.getSelectedId() - 1;
-		s.masterTune = m_tune.getSelectedId() - g_tuneOffset;
+		const int tune = juce::roundToInt(m_tune.getValue());
+		if(tune != std::clamp(m_known.masterTune, -g_tuneRange, g_tuneRange))
+			s.masterTune = tune;	// one beyond the knob's range stays until it is turned
 		s.knobMode = m_knob.getSelectedId() - 1;
 		s.pedalPolarity = m_pedal.getSelectedId() - 1;
 		const int program = m_program.getSelectedId() - 1;
 		s.programChangeReceive = (program & 1) != 0;
 		s.programChangeSend = (program & 2) != 0;
-		s.localOn = m_local.getSelectedId() == 1;
 		s.ledsActive = m_leds.getSelectedId() == 1;
-		s.velScaleMin = m_velMin.getSelectedId() - 1;
-		s.velScaleMax = m_velMax.getSelectedId() - 1;
+		s.velScaleMin = m_velMin.getValue();
+		s.velScaleMax = m_velMax.getValue();
 		if(s == m_known)
 			return;		// nothing changed (the name editor losing the focus)
 		m_known = s;

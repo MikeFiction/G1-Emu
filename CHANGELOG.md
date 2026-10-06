@@ -7,6 +7,24 @@ Older entries cite their commit by hand.
 
 ## 2026-10-06
 
+- [Change] **Synth Settings as a page of the panel, in Mike Fiction's artwork (Claude, requested
+  by Mike Fiction).** Two buttons under the tooltips' display, Main and Synth Settings, each with
+  its LED, switch between the synth and its settings, as on Mike's Nord Lead 2x skin; the extras'
+  Synth Settings button and the page's Close are gone, and the page fades in and out quickly. The
+  settings sit in Mike's frame over the knobs' four sections (`skin/settings_panel.png`,
+  with its title, headings and labels) and leave the rest of the panel working. The boxes are
+  drawn as his Perf / Global page's, with their hover colour. Master tune is a knob in his disk
+  (`skin/master_tune_bg.png`); the clock's rate and the velocity scale are number boxes, dragged,
+  scrolled or typed into, and only take values in range. Global sync reads in quarter notes. Each
+  setting shows its name and value on the tooltips' display, and the page asks the G1 again every
+  second while open, so a change from an editor or the System menu shows. Local and Keyboard mode
+  are left out: they do nothing on the rack (`NOTES.md`). The background gains the two buttons'
+  labels. Only `app/gui` and the skin list change, no plugin or `EmuHost` code; the plugin shows it
+  as well, since it draws the same panel. The halving image scaler is now in `SynthSettingsView.cpp`
+  as well as in `Panel.cpp`'s `Sprite`. Checked on Windows: everything builds,
+  the eight `g1` tests pass, and the page works in the standalone and in the VST3 in Bitwig. Not
+  built on Linux.
+
 - [Imp] **Mike Fiction's panel skin merged with the direct link (Claude, requested by Javier).**
   Mike's `panel-skin` branch and the direct link (#8) both added a PC Port talker beside the editor's
   (the synth settings and the link): the runner and `EmuHost` now take both, and an editor's bytes
@@ -27,6 +45,7 @@ Older entries cite their commit by hand.
   on, a knob the window has just turned (Random, or by hand) keeps its own position for half a
   second instead of jumping back to the patch's old value until the OS has read it. Checked: it
   builds.
+
 - [Imp] **Cleanup of the panel, the synth settings and the plugin work (Claude, requested by Mike
   Fiction).** No change in behaviour; long functions split and repeats folded together: the panel's
   timer, the tooltips' display, the icons, the synth settings' reply handling, the runner's two PC
@@ -38,6 +57,7 @@ Older entries cite their commit by hand.
   `forEachMessage`...), left as the author wrote them. Checked: everything builds, and
   `g1formattest`, `g1synthsettingstest`, `g1slotkeepertest`, `g1runnertest` and `g1vst3check` (with
   and without `--window`) pass.
+
 - [Imp] **Knob values read as the editor shows them (Claude, requested by Mike Fiction).** The knob
   displays, the tooltips' display and the plugin's knob parameters show "Sine", "C#4", "1.25 kHz"
   and so on instead of the OS's raw number (a DAW also takes the text typed in). The readings are
@@ -45,6 +65,7 @@ Older entries cite their commit by hand.
   reads which way generated from NME's `data/modules.xml` (Nomad's module descriptions, GPL). The
   text is the editor's, so in places it can differ from the G1's own display. Checked with the new
   `g1formattest` and `g1vst3check`.
+
 - [Fix] **Shift lets go after the next key, as on the hardware (Claude, reported by Mike Fiction).**
   The OS takes Shift for one key only: held on in the window (latched with a right click, or the
   keyboard's), the next shifted key did nothing (Shift, System, then Save Synth. Settings), and
@@ -53,11 +74,13 @@ Older entries cite their commit by hand.
   down, so several slots can be picked in a row, and the OS sees it pressed again for the next key.
   `g1patchtest`'s `G1_PRESS` steps can hold and let go a button (`h2.7`, `u2.7`). Checked with
   `g1patchtest` (NOTES.md, "Shift counts for the next key only") and it builds.
+
 - [New] **The master volume, 0-127 and in the DAW (Claude, requested by Mike Fiction).** The panel's
   display shows it as the OS takes it, the knob's position halved (0-127). The plugin has it as a
   "Master Volume" parameter, so a DAW can automate it, and the knob on the panel follows. A new
   instance's project saved before it ever ran keeps it too. Checked with `g1vst3check`: the host
   sets it to 64, and it stays there and comes back in a project reopened.
+
 - [New] **A display for the synth's controls (Claude, artwork by Mike Fiction).** The background has
   a one-line display at the bottom centre. Hovering a control of the synth's own (knob, button,
   dial, volume) names it there, in the knob displays' dot font, a little larger. A knob shows what
@@ -111,6 +134,7 @@ Older entries cite their commit by hand.
 - [Imp] **A held panel button lets go on a click (Claude, requested by Mike Fiction).** A button
   latched with a right click (Shift, say) is released by a left click too, which presses nothing,
   and it shows no hover highlight while held. Checked: it builds.
+
 - [New] **A Restart button, in the window and the plugin (Claude, requested by Mike Fiction).** A
   power icon at the right end of the extras, after Synth Settings (now at the right too), switches
   the emulated G1 off and on after asking in a card over the panel in the Synth Settings' look
@@ -120,6 +144,7 @@ Older entries cite their commit by hand.
   an OS update boots the OS that came in (`EmuHost::restart`). In the plugin its state as it is goes
   back in as a project's would, so the new G1 boots with the same banks, slots, knobs and programs
   (`Processor::restart`). Checked: it builds, and `g1vst3check` passes.
+
 - [New] **Synth Settings from the panel, a test version (Claude, requested by Mike Fiction).** A
   button in the extras opens an overlay over the synth with the slots' MIDI channels and the global
   settings (clock, global sync, master tune, knob mode, pedal, program change, local, velocity
@@ -128,8 +153,10 @@ Older entries cite their commit by hand.
   window and the plugin. **It is there to test the settings, not the final look or version:** the
   artwork is still to come. Checked with `g1synthsettingstest` (the OS takes what is written and
   reads it back the same) and in the window.
+
 - [Imp] **The extras drawer slides open and closed (Claude, requested by Mike Fiction)** instead of
   appearing at once. Checked in the window.
+
 - [Change] **The panel drawn from PNG artwork (Claude, artwork by Mike Fiction).** `app/gui/skin/`
   holds a 3000 x 1238 background with the faceplate, every label, the knobs' red rings and the
   displays' frames, and sprites for the knob caps and their shadows, the dial, the wide, tall and
@@ -139,34 +166,41 @@ Older entries cite their commit by hand.
   painted by the code, follows the art; what is around the skin takes its dark purple
   (`Panel::FaceColour`). Checked against the artist's reference images pixel by pixel and in the
   window.
+
 - [New] **The window and the plugin's editor are resizable (Claude, requested by Mike Fiction).**
   `PanelView` scales the panel, still laid out at 1200 pixels, from 50% to 250% in its proportions,
   which change with the extras drawer; they start at 1500 pixels wide. The standalone keeps its size
   in the settings file, the plugin in the project. Checked on Windows at several sizes and across
   restarts.
+
 - [Fix] **The plugin remembers its window (Claude, reported by Mike Fiction).** A change to the
   editor's size or the extras' switches now marks the project as changed (`setDirty`), so hosts save
   it, and a new instance starts as the last editor was left (`plugin.conf`, beside the settings
   file; a project's own state still wins; listed in `CLAUDE.md`). `g1vst3check --window` checks
   both; confirmed by Mike Fiction in Cubase, Bitwig and Reaper.
+
 - [New] **What the knobs move (Claude, requested by Mike Fiction).** The parameter displays (extras:
   "Parameter Displays") take the knobs' LEDs' place, write in the big display's dot font and go dark
   on a knob with nothing assigned. **Knob Follows Patch** (extras) shows each knob where the patch's
   value puts it, and turning it starts there. A knob's tooltip says what it moves and its value, so
   the displays can stay off. Checked with patches loaded from NME.
+
 - [Imp] **The dial turns, with a thumb indent (Claude, artwork by Mike Fiction).** The dial's sheets
   could not show it turning (their frames were alike); it is now turned in code, the ridges a step
   at a time within one ridge so their light stays put, and Mike Fiction's painted thumb indent, cut
   out of the knob, slides round its face. 48 detents a turn; it starts with the indent at eight
   o'clock. Checked by putting the pieces back together (the painted knob) and in the window.
+
 - [Imp] **The panel's buttons (Claude, requested by Mike Fiction).** A button held without the mouse
   (right click, or a key) pulses with Mike Fiction's red picture of it, all held buttons together;
   the navigator's keys repeat when held instead, and they and Panel Split no longer latch. The
   navigator, Shift, Assign/Morph, Panel Split and Find are centred on the art's labels. Tooltips sit
   on a dark glass that blurs the panel behind. Seen in the window.
+
 - [Imp] **The standalone's window (Claude, requested by Mike Fiction).** Its title bar follows
   Windows' dark mode (`NativeTitleBarTheme`), it has the plugin's resize grip in its corner, and it
   remembers the master volume (`masterVolume` in the settings file). Checked in the window.
+
 - [Imp] **What the panel's keys do on the rack (Claude, reported by Mike Fiction).** `NOTES.md`
   records that Shift + Find (Panic) works in the emulator, and that holding several slot buttons
   does not layer them for MIDI on the rack: slots are layered by giving them the same MIDI channel.

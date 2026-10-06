@@ -582,6 +582,10 @@ Both pass since the fix ([CI run 35570337853](https://github.com/animatek/G1-Emu
   set to 1 as well. As with Oct Shift below, selected slots are the keyboard model's (its own keys
   play them); on the rack each slot answers its own channel, and slots are layered by giving them
   the same one.
+- **Local Off stops nothing on the rack** (Mike Fiction, 2026-10-06). With LOCAL set to Off,
+  nothing was found that stopped working. Like KEYBOARD MODE, it is the keyboard model's: it
+  would part its own keys and wheels from the sound. Whether the knobs then also go out on MIDI is
+  not known, since the emulator's MIDI OUT goes nowhere. The window's Synth Settings leave both out.
 - **Oct Shift is the keyboard model's, not the rack's.** The OS keeps an octave shift per slot at
   `$1C3AB8 + slot`, signed −2 to +2, with a setter (`$101E0E`, taking 0–4) and a getter
   (`$101E28`). It travels **in the patch**: the deserializer writes it and the serializer reads it
