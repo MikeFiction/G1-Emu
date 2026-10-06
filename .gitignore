@@ -10,3 +10,6 @@ bin/
 
 # Private Patreon drafts
 /Patreon post/
+
+# Private correspondence drafts (Spanish notes, not part of the project)
+/Correspondencia/

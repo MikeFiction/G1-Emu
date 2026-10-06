@@ -7,6 +7,14 @@ Older entries cite their commit by hand.
 
 ## 2026-10-06
 
+- **The direct link says which MIDI PC Port leads to the same G1 (#8; Claude).** The greeting is
+  now `G1-Emu 1 <name>\tpcport=<id>,<id>`, with the ids other programs see for this instance's PC
+  Port (`MidiTransport::portIds`: "client-port" on ALSA, the JUCE device identifiers elsewhere), so
+  an editor already on that MIDI port does not connect the same G1 a second time over the link. An
+  editor that only knows the old greeting still reads the name (it ends at the tab). Checked
+  against `g1run`: `G1-Emu 1 G1-Emu\tpcport=130-0` for ALSA client 130, the id NME lists for it.
+  `Correspondencia/` (private notes) is ignored.
+
 - **The direct link in the VST3/CLAP plugin (#8, #7; Claude, requested by Javier).** Each plugin
   instance listens like the standalone (`G1-Emu plugin <n>`, the first free port from 47310) and
   its runner polls the link beside the PC Port's MIDI port, feeding the SlotKeeper the same way.

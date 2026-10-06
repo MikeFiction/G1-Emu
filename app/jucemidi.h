@@ -51,6 +51,19 @@ namespace g1app
 		// Creates a port and returns its index. Input and output share a name, like a DIN pair --
 		// unless _manual names an existing system MIDI device to open instead of creating a new
 		// one (see the class comment). Either direction can be set without the other.
+		std::vector<std::string> portIds(const int _index) const override
+		{
+			std::vector<std::string> ids;
+			if(_index < 0 || static_cast<size_t>(_index) >= m_ports.size())
+				return ids;
+			const auto& port = m_ports[static_cast<size_t>(_index)];
+			if(port.out)
+				ids.push_back(port.out->getIdentifier().toStdString());
+			if(port.in)
+				ids.push_back(port.in->getIdentifier().toStdString());
+			return ids;
+		}
+
 		int addPort(const char* _name, const PortDevices& _manual = {}) override
 		{
 			auto& port = m_ports.emplace_back();

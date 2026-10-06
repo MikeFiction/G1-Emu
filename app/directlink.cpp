@@ -164,7 +164,14 @@ namespace g1app
 			const int one = 1;
 			::setsockopt(c, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&one), sizeof(one));
 			m_client = static_cast<long long>(c);
-			const auto hello = "G1-Emu " + std::to_string(kProtocolVersion) + " " + m_name + "\n";
+			auto hello = "G1-Emu " + std::to_string(kProtocolVersion) + " " + m_name;
+			if(!m_pcPortIds.empty())
+			{
+				hello += "\tpcport=";
+				for(size_t i = 0; i < m_pcPortIds.size(); ++i)
+					hello += (i ? "," : "") + m_pcPortIds[i];
+			}
+			hello += "\n";
 			send(std::vector<uint8_t>(hello.begin(), hello.end()));
 		}
 	}

@@ -42,6 +42,11 @@ namespace g1app
 		// Sends raw bytes through a port.
 		virtual void send(int _index, const std::vector<uint8_t>& _bytes) = 0;
 
+		// How other programs' MIDI APIs name a port's devices (on ALSA "client-port", as JUCE gives
+		// it), so an editor connected through them can tell it is talking to this instance and not
+		// connect to it a second time over the direct link. Empty when unknown.
+		virtual std::vector<std::string> portIds(int _index) const { (void)_index; return {}; }
+
 		// Where the ports are, or why they are not, in one line for the status bar. Call it
 		// after the ports have been added.
 		virtual std::string describe() const = 0;

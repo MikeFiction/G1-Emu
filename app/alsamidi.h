@@ -48,6 +48,13 @@ namespace g1app
 		bool valid() const { return m_seq != nullptr; }
 		int clientId() const { return m_seq ? snd_seq_client_id(m_seq) : -1; }
 
+		std::vector<std::string> portIds(const int _index) const override
+		{
+			if(!m_seq || _index < 0 || static_cast<size_t>(_index) >= m_ports.size())
+				return {};
+			return { std::to_string(snd_seq_client_id(m_seq)) + "-" + std::to_string(m_ports[static_cast<size_t>(_index)]) };
+		}
+
 		// Creates a port and returns its index. The ports are always our own sequencer ports.
 		int addPort(const char* _name, const PortDevices& = {}) override
 		{

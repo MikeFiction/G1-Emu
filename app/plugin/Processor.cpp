@@ -215,6 +215,8 @@ namespace g1plugin
 		// Numbered by the port it got, which is what tells instances apart in the editor.
 		const int n = m_link.port() - g1app::DirectLink::kBasePort;
 		m_link.setName("G1-Emu plugin " + std::to_string(n + 1));
+		if(m_pcPort && m_pcPort->virtualPorts())
+			m_link.setPcPortIds(m_pcPort->portIds(m_pcIndex));
 	}
 
 	void Processor::findRom()

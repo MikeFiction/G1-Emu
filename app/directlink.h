@@ -9,8 +9,9 @@
 //
 // The wire is the PC Port as it is: raw MIDI bytes both ways, no framing of our own. Each instance
 // listens on 127.0.0.1, on the first free port from kBasePort up, so instance n is found at
-// kBasePort + n. On accepting an editor it sends one line first, "G1-Emu <version> <name>\n", so the
-// editor knows it reached an emulator and which one before any SysEx.
+// kBasePort + n. On accepting an editor it sends one line first, "G1-Emu <version> <name>", then a
+// tab and "pcport=<id>,<id>" when the MIDI PC Port's ids are known, then "\n", so the editor knows it
+// reached an emulator, which one, and whether it already reaches the same G1 by MIDI.
 //
 // One editor at a time: a second connection is accepted and closed at once. No threads: poll() and
 // send() are called from the loop that already moves the PC Port's bytes, and never block.
@@ -44,6 +45,9 @@ namespace g1app
 		const std::string& name() const { return m_name; }
 		// The name sent to the next editor that connects (an instance learns its number from its port).
 		void setName(const std::string& _name) { m_name = _name; }
+		// The ids of the MIDI PC Port that leads to this same G1 (MidiTransport::portIds), told to
+		// every editor in the greeting so it does not connect twice, once by MIDI and once here.
+		void setPcPortIds(std::vector<std::string> _ids) { m_pcPortIds = std::move(_ids); }
 
 		// Accepts a waiting editor and appends whatever it sent to _in.
 		void poll(std::vector<uint8_t>& _in);
@@ -61,5 +65,6 @@ namespace g1app
 		long long m_client = -1;
 		int m_port = 0;
 		std::string m_name;
+		std::vector<std::string> m_pcPortIds;
 	};
 }

@@ -161,6 +161,7 @@ namespace g1app
 				const int n = m_link.port() - DirectLink::kBasePort;
 				if(n > 0)
 					m_link.setName("G1-Emu " + std::to_string(n + 1));
+				m_link.setPcPortIds(m_midi->portIds(m_pcPort));
 				_log += m_link.describe() + "\n";
 			}
 			else
