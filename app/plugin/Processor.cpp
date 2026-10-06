@@ -216,7 +216,10 @@ namespace g1plugin
 		const int n = m_link.port() - g1app::DirectLink::kBasePort;
 		m_link.setName("G1-Emu plugin " + std::to_string(n + 1));
 		if(m_pcPort && m_pcPort->virtualPorts())
+		{
 			m_link.setPcPortIds(m_pcPort->portIds(m_pcIndex));
+			m_link.setPcPortName(m_pcPort->portListName(m_pcIndex));
+		}
 	}
 
 	void Processor::findRom()

@@ -7,6 +7,16 @@ Older entries cite their commit by hand.
 
 ## 2026-10-06
 
+- **The greeting also names the PC Port (#8; Claude).** JUCE gives its virtual ports no identifier
+  on Linux, so the plugin's greeting carried `pcport=,`: empty ids are left out now, and a
+  `pcname=<name>` field (`MidiTransport::portListName`) lets an editor match the port by name. The
+  plugin as built and installed for Bitwig on 2026-10-06 listens and greets ("G1-Emu plugin 1").
+  Its IAm over the link was not answered within 3 s under `g1vst3check`, which renders offline
+  (the emulator only advances while the host pulls audio): to be confirmed in a DAW. Also seen:
+  `g1vst3check` FAILS on three points (an instance silent after its note, the restored instance
+  silent, B answering A's greeting) **with the 2026-10-04 build too**, so they are not this change;
+  not looked into yet.
+
 - **The direct link says which MIDI PC Port leads to the same G1 (#8; Claude).** The greeting is
   now `G1-Emu 1 <name>\tpcport=<id>,<id>`, with the ids other programs see for this instance's PC
   Port (`MidiTransport::portIds`: "client-port" on ALSA, the JUCE device identifiers elsewhere), so

@@ -171,6 +171,8 @@ namespace g1app
 				for(size_t i = 0; i < m_pcPortIds.size(); ++i)
 					hello += (i ? "," : "") + m_pcPortIds[i];
 			}
+			if(!m_pcPortName.empty())
+				hello += "\tpcname=" + m_pcPortName;
 			hello += "\n";
 			send(std::vector<uint8_t>(hello.begin(), hello.end()));
 		}

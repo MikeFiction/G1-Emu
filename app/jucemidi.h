@@ -57,11 +57,19 @@ namespace g1app
 			if(_index < 0 || static_cast<size_t>(_index) >= m_ports.size())
 				return ids;
 			const auto& port = m_ports[static_cast<size_t>(_index)];
-			if(port.out)
+			if(port.out && port.out->getIdentifier().isNotEmpty())
 				ids.push_back(port.out->getIdentifier().toStdString());
-			if(port.in)
+			if(port.in && port.in->getIdentifier().isNotEmpty())
 				ids.push_back(port.in->getIdentifier().toStdString());
 			return ids;
+		}
+
+		std::string portListName(const int _index) const override
+		{
+			if(_index < 0 || static_cast<size_t>(_index) >= m_ports.size())
+				return {};
+			const auto& port = m_ports[static_cast<size_t>(_index)];
+			return port.out ? port.out->getName().toStdString() : port.name.toStdString();
 		}
 
 		int addPort(const char* _name, const PortDevices& _manual = {}) override

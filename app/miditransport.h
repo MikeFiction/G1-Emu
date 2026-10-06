@@ -46,6 +46,9 @@ namespace g1app
 		// it), so an editor connected through them can tell it is talking to this instance and not
 		// connect to it a second time over the direct link. Empty when unknown.
 		virtual std::vector<std::string> portIds(int _index) const { (void)_index; return {}; }
+		// The port's name as other programs list it, for when there is no id to go by (JUCE gives
+		// its virtual ports none on Linux). Empty when unknown.
+		virtual std::string portListName(int _index) const { (void)_index; return {}; }
 
 		// Where the ports are, or why they are not, in one line for the status bar. Call it
 		// after the ports have been added.
