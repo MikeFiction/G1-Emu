@@ -117,6 +117,7 @@ namespace g1gui
 		bool m_autoRepeat = false, m_repeatUp = false;	// m_repeatUp: let go for a moment between presses
 		bool m_wasHeld = false;
 		bool m_latchable = true;
+		bool m_unlatching = false;	// this left click lets a latched button go, and presses nothing
 		juce::uint32 m_pressedAt = 0;
 	};
 

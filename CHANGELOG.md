@@ -7,6 +7,9 @@ Older entries cite their commit by hand.
 
 ## 2026-10-05
 
+- **A held panel button lets go on a click (Claude, requested by Mike Fiction).** A button latched
+  with a right click (Shift, say) is released by a left click too, which presses nothing, and it
+  shows no hover highlight while held. Checked: it builds.
 - **A Restart button, in the window and the plugin (Claude, requested by Mike Fiction).** A power
   icon at the right end of the extras, after Synth Settings (now at the right too), switches the
   emulated G1 off and on after asking in a card over the panel in the Synth Settings' look

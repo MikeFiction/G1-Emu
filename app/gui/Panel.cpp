@@ -380,11 +380,20 @@ namespace g1gui
 
 	// A right click (Ctrl+click on a Mac) latches the button instead of pressing it, so several
 	// can be down at once: hold A, click B, and the G1 sees both. Not a key held for nothing (the
-	// navigator's, which repeat, and Panel Split): latched it would only stick.
+	// navigator's, which repeat, and Panel Split): latched it would only stick. A left click on a
+	// latched button lets it go, and is not a press of its own.
 	void PanelButton::mouseDown(const juce::MouseEvent& _e)
 	{
+		m_unlatching = false;
 		if(!_e.mods.isPopupMenu())
-			return juce::Button::mouseDown(_e);
+		{
+			if(!m_latched)
+				return juce::Button::mouseDown(_e);
+			m_unlatching = true;
+			m_latched = false;
+			update();
+			return;
+		}
 		if(isEnabled() && m_latchable)
 		{
 			m_latched = !m_latched;
@@ -394,13 +403,13 @@ namespace g1gui
 
 	void PanelButton::mouseDrag(const juce::MouseEvent& _e)
 	{
-		if(!_e.mods.isPopupMenu())
+		if(!_e.mods.isPopupMenu() && !m_unlatching)
 			juce::Button::mouseDrag(_e);
 	}
 
 	void PanelButton::mouseUp(const juce::MouseEvent& _e)
 	{
-		if(!_e.mods.isPopupMenu())
+		if(!_e.mods.isPopupMenu() && !std::exchange(m_unlatching, false))
 			juce::Button::mouseUp(_e);
 	}
 
@@ -424,7 +433,7 @@ namespace g1gui
 			heldPicture->draw(_g, 0, r);
 			_g.setOpacity(opacity);
 		}
-		if(_over && isEnabled())
+		if(_over && isEnabled() && !held())	// held, its glow is what it shows
 			sprite.draw(_g, frame, r, juce::Colours::white.withAlpha(0.07f));
 	}
 
