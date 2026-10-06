@@ -7,6 +7,12 @@ Older entries cite their commit by hand.
 
 ## 2026-10-06
 
+- [New] **An icon for the standalone (Claude, artwork by Mike Fiction).** `G1-Emu.exe` shows Mike's
+  icon (`app/gui/icon.png`, 256 x 256) in Explorer, on the taskbar and in its title bar, where it had
+  Windows' blank one; JUCE makes the sizes Windows wants from it (`ICON_BIG`). Only the standalone:
+  the file is outside `app/gui/skin`, so the plugin does not carry it. The artwork is Mike's, under
+  CC BY 4.0 like the skin's. Checked on Windows: it builds and the icon is the one in the exe.
+
 - [Imp] **Mike Fiction's panel skin merged with the direct link (Claude, requested by Javier).**
   Mike's `panel-skin` branch and the direct link (#8) both added a PC Port talker beside the editor's
   (the synth settings and the link): the runner and `EmuHost` now take both, and an editor's bytes
