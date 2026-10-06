@@ -7,6 +7,15 @@ Older entries cite their commit by hand.
 
 ## 2026-10-06
 
+- **The direct link in the VST3/CLAP plugin (#8, #7; Claude, requested by Javier).** Each plugin
+  instance listens like the standalone (`G1-Emu plugin <n>`, the first free port from 47310) and
+  its runner polls the link beside the PC Port's MIDI port, feeding the SlotKeeper the same way.
+  It needs no MIDI endpoint, so it is there on Windows, where JUCE can make no virtual port
+  (Windows MIDI Services, microsoft/MIDI#1047), and in a CLAP instance created after JUCE's MIDI
+  shut down. The editor's info text says where the link is. `WINDOWS.md` tells Windows users that
+  NME 0.21 needs no loopMIDI. Checked: builds, `g1runnertest` and `g1directlinktest` pass; **not
+  yet tried in a DAW**, nor on Windows.
+
 - **Direct link: an editor that knocks and leaves no longer locks out the next one (#8; Claude).**
   The link read its editor only after looking for new connections, so an editor that checked who
   was there and closed at once (what NME does to list the instances) was still counted when the

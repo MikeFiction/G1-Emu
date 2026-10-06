@@ -16,6 +16,7 @@
 // throws their late copies away when they arrive, so the timing stays locked to the host.
 
 #include "audiobridge.h"
+#include "directlink.h"
 #include "engine.h"
 #include "hostconfig.h"
 #include "miditransport.h"
@@ -64,9 +65,12 @@ namespace g1app
 		// a guard of 0.5 ms that keeps every event ahead of the emulator.
 		// _pcPort, if given, carries the G1's PC Port (an editor's SysEx) on its port _pcIndex:
 		// the worker polls it and sends the replies. _keeper, if given, talks to the PC Port too,
-		// between the editor's messages (SlotKeeper). Both must outlive the runner.
+		// between the editor's messages (SlotKeeper). _link, if given, is the direct link to Animatek
+		// NME (directlink.h): one more way in to the same PC Port, polled by the worker alongside it.
+		// All must outlive the runner.
 		Runner(Engine& _engine, double _rate, size_t _maxBlock, float _gainDb,
-			MidiTransport* _pcPort = nullptr, int _pcIndex = 0, SlotKeeper* _keeper = nullptr);
+			MidiTransport* _pcPort = nullptr, int _pcIndex = 0, SlotKeeper* _keeper = nullptr,
+			DirectLink* _link = nullptr);
 		~Runner();	// stops the worker and detaches from the engine; the engine keeps its state
 
 		size_t latency() const { return m_latency; }
@@ -97,6 +101,7 @@ namespace g1app
 
 		Engine& m_engine;
 		MidiTransport* const m_pcPort;
+		DirectLink* const m_link;
 		const int m_pcIndex;
 		SlotKeeper* const m_keeper;
 		const double m_rate;

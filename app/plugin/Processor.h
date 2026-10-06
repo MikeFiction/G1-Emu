@@ -136,6 +136,12 @@ namespace g1plugin
 		int m_pcIndex = -1;
 		std::string m_pcProblem;				// why there is no PC Port, when there is none
 		void openPcPort();
+		// The direct link to Animatek NME (#8): the PC Port over a local socket. It needs no MIDI
+		// endpoint at all, so it is there where JUCE can make no virtual port (Windows) and in a
+		// CLAP instance that came after JUCE's MIDI shut down.
+		g1app::DirectLink m_link;
+		std::string m_linkProblem;
+		void openLink();
 
 		std::vector<uint8_t> m_rom;
 		std::string m_romPath, m_romProblem;

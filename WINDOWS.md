@@ -5,6 +5,13 @@ G1-Emu runs on Windows 11, but its two application-owned MIDI ports are temporar
 fix reaches Windows, use [loopMIDI](https://www.tobias-erichsen.de/software/loopmidi.html) as the
 two virtual cables between G1-Emu and the editor.
 
+**With Animatek NME 0.21 or later you do not need loopMIDI for the editor.** G1-Emu (the
+standalone and the VST3/CLAP plugin) also offers its PC Port over a direct link on this computer,
+and NME finds every running instance by itself and connects it to a free port in MIDI Setup, where
+it shows as "G1-Emu (direct link)". loopMIDI is still the way for the original Clavia editor and
+for any other MIDI tool. The direct link can be turned off with `directLink = 0` in the settings
+file.
+
 G1-Emu includes no ROM. You need your own 512 KB ROM dump from a Nord Modular **rack** running OS
 3.03. Do not distribute the ROM with the emulator or upload it to the project.
 

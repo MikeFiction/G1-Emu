@@ -151,6 +151,7 @@ namespace g1plugin
 			addParameter(param.release());
 		}
 		openPcPort();
+		openLink();
 		findRom();
 		startTimerHz(20);
 	}
@@ -165,6 +166,7 @@ namespace g1plugin
 			m_engine.reset();
 		}
 		m_pcPort.reset();
+		m_link.stop();
 		if(m_instance > 0)
 			releaseInstanceNumber(m_instance);
 		m_instanceLock.reset();
@@ -192,6 +194,27 @@ namespace g1plugin
 		m_instance = takeInstanceNumber(m_instanceLock);
 		m_pcPort = std::make_unique<g1app::JuceMidi>(pcPortClient(m_instance).c_str());
 		m_pcIndex = m_pcPort->addPort("PC Port");
+	}
+
+	void Processor::openLink()
+	{
+		if(const char* v = std::getenv("G1_DIRECT_LINK"); v && *v == '0')
+		{
+			m_linkProblem = "off (G1_DIRECT_LINK=0)";
+			return;
+		}
+		g1app::HostOptions options;
+		options.load(g1app::defaultSettingsPath());
+		if(!options.directLink)
+		{
+			m_linkProblem = "off (directLink = 0 in the settings)";
+			return;
+		}
+		if(!m_link.start("G1-Emu plugin", m_linkProblem))
+			return;
+		// Numbered by the port it got, which is what tells instances apart in the editor.
+		const int n = m_link.port() - g1app::DirectLink::kBasePort;
+		m_link.setName("G1-Emu plugin " + std::to_string(n + 1));
 	}
 
 	void Processor::findRom()
@@ -306,7 +329,8 @@ namespace g1plugin
 		if(!m_engine || !m_prepared)
 			return;
 		m_runner = std::make_unique<g1app::Runner>(*m_engine, m_rate, static_cast<size_t>(m_maxBlock), m_gainDb,
-			m_pcPort && m_pcPort->virtualPorts() ? m_pcPort.get() : nullptr, m_pcIndex, m_keeper.get());
+			m_pcPort && m_pcPort->virtualPorts() ? m_pcPort.get() : nullptr, m_pcIndex, m_keeper.get(),
+			m_link.listening() ? &m_link : nullptr);
 		setLatencySamples(static_cast<int>(m_runner->latency()));
 		m_unstarted = false;
 		if(std::exchange(m_engineFresh, false))
@@ -738,6 +762,12 @@ namespace g1plugin
 				+ " PC Port\". Choose it in Animatek NME as input and output to edit this instance.";
 		else
 			d += "PC Port: " + m_pcPort->describe() + ".";
+		d += "\nDirect link: ";
+		if(m_link.listening())
+			d += "\"" + m_link.name() + "\" on port " + std::to_string(m_link.port())
+				+ ". Animatek NME finds it by itself, with no MIDI port.";
+		else
+			d += m_linkProblem + ".";
 		return d;
 	}
 

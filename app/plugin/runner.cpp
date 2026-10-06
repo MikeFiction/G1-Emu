@@ -29,8 +29,8 @@ namespace g1app
 	}
 
 	Runner::Runner(Engine& _engine, const double _rate, const size_t _maxBlock, const float _gainDb,
-		MidiTransport* _pcPort, const int _pcIndex, SlotKeeper* _keeper)
-		: m_engine(_engine), m_pcPort(_pcPort), m_pcIndex(_pcIndex), m_keeper(_keeper), m_rate(_rate > 0 ? _rate : 48000.0), m_ahead(aheadFor(m_rate, _maxBlock)),
+		MidiTransport* _pcPort, const int _pcIndex, SlotKeeper* _keeper, DirectLink* _link)
+		: m_engine(_engine), m_pcPort(_pcPort), m_link(_link), m_pcIndex(_pcIndex), m_keeper(_keeper), m_rate(_rate > 0 ? _rate : 48000.0), m_ahead(aheadFor(m_rate, _maxBlock)),
 		  m_latency(m_ahead + guardFor(m_rate)),
 		  m_bridge(std::pow(10.0f, _gainDb / 20.0f))
 	{
@@ -132,7 +132,7 @@ namespace g1app
 		auto lastStats = clock::now();
 		uint64_t lastCycles = mc.ucCycles();
 		double busy = 0;
-		std::vector<uint8_t> out, pcOut, toEditor, fromKeeper;
+		std::vector<uint8_t> out, pcOut, toEditor, fromKeeper, linkIn;
 		std::vector<std::vector<uint8_t>> pcIn;
 		auto nowMs = [&mc] { return mc.ucCycles() / (g1::g_ucClock / 1000); };
 
@@ -159,6 +159,20 @@ namespace g1app
 					if(m_keeper)
 						m_keeper->editorSent(bytes, nowMs());
 					bytes.clear();
+				}
+			}
+			// The editor on the direct link (NME, with no MIDI port: the way in on Windows) talks to the
+			// same PC Port.
+			if(m_link)
+			{
+				linkIn.clear();
+				m_link->poll(linkIn);
+				if(!linkIn.empty())
+				{
+					m_pcIn += linkIn.size();
+					mc.getPcPort().receive(linkIn);
+					if(m_keeper)
+						m_keeper->editorSent(linkIn, nowMs());
 				}
 			}
 			// The keeper's own requests, when the editor leaves it room.
@@ -215,6 +229,8 @@ namespace g1app
 				lock.unlock();
 				if(m_pcPort && !pcOut.empty())
 					m_pcPort->send(m_pcIndex, pcOut);
+				if(m_link && !pcOut.empty())
+					m_link->send(pcOut);
 				busy += std::chrono::duration<double>(clock::now() - t0).count();
 			}
 
