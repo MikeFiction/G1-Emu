@@ -548,8 +548,18 @@ Both pass since the fix ([CI run 35570337853](https://github.com/animatek/G1-Emu
     (the panel's "Save Synth. Settings", a different screen from Store's `Store?`), and **Shift +
     a slot** shows and changes that slot's voices (`( 1) --  --  --` → `( 1)  1  --  --`). The OS
     keeps the modifier in a block at `$1C39D4` and each shifted action branches on it.
+    **Shift counts for the next key only** (3.03 update, 2026-10-06, `g1patchtest` with
+    `G1_PRESS=h2.7,...`): held through another key (Find, a slot, System), the next Store is a
+    plain `Store?`; let go and pressed again, it is `Store settings` again. And Shift still held
+    about half a second after Shift + Store turns `Store settings` into `Store?`; let go sooner, the
+    display goes back to the patch. So the window's panel lets a latched Shift go after the key.
+    The slots are the exception: Shift held through A, B and C changes each one's voices
+    (`( 1)  1   1  --`), though the Store after them is still a plain `Store?`. Let go and pressed
+    again between the slots, they change the same and Store is `Store settings`: after a slot the
+    panel keeps Shift down and presses it again for the OS.
   - **Find**, held down, puts `Find` on the display and goes back when released. Its second
-    function, printed in red on the panel, is Panic.
+    function, printed in red on the panel, is Panic: Shift + Find works in the emulator
+    (Mike Fiction, 2026-10-05).
   - **Assign/Morph: nothing found yet.** Pressed or held, alone or with Shift, on the patch
     screen, on the Morph page, on a parameter page and in the System menu, before and after
     moving a knob or the dial: display, LEDs and the traffic to the editor come out the same as
@@ -566,6 +576,12 @@ Both pass since the fix ([CI run 35570337853](https://github.com/animatek/G1-Emu
   - **P**: VOICES, PORTAMENTO, PEDAL MODE, BEND RANGE, KEYB RANGE, VEL RANGE, PATCH NAME,
     VOICE RETRIG, CTRL SNAP SHOT.
   - **D**: DUMP ALL, DUMP ACTIVE, RECIEVE ALL (the OS's own spelling).
+- **Selecting several slots does not layer them for MIDI on the rack** (Mike Fiction, 2026-10-05).
+  Holding A and B (both pressed in the matrix) and trying the System menu's settings, notes from a
+  MIDI keyboard on channel 1 still played only slot A; slot B played only once its MIDI channel was
+  set to 1 as well. As with Oct Shift below, selected slots are the keyboard model's (its own keys
+  play them); on the rack each slot answers its own channel, and slots are layered by giving them
+  the same one.
 - **Oct Shift is the keyboard model's, not the rack's.** The OS keeps an octave shift per slot at
   `$1C3AB8 + slot`, signed −2 to +2, with a setter (`$101E0E`, taking 0–4) and a getter
   (`$101E28`). It travels **in the patch**: the deserializer writes it and the serializer reads it

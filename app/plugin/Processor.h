@@ -23,15 +23,18 @@
 
 #include <array>
 #include <atomic>
+#include <cmath>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 
 namespace g1plugin
 {
 	// One of the 18 panel knobs as a host parameter. Its name says what the knob moves in the
 	// patch now ("Knob 3: OscA Freq coars"), and its text is the value the OS gives that parameter,
-	// both read from the OS's tables (g1knobs.h) and changed when another patch comes.
+	// both read from the OS's tables (g1knobs.h) and changed when another patch comes. The value
+	// reads as the editor shows it ("Sine", "1.25 kHz": g1format.h).
 	class KnobParameter final : public juce::AudioParameterFloat
 	{
 	public:
@@ -51,6 +54,17 @@ namespace g1plugin
 		mutable std::mutex m_mutex;
 		juce::String m_name;
 		g1::KnobInfo m_info;
+	};
+
+	// The master volume as a host parameter, in the OS's 128 steps: it takes the knob's position
+	// halved (NOTES.md, "Master volume").
+	class VolumeParameter final : public juce::AudioParameterInt
+	{
+	public:
+		VolumeParameter() : juce::AudioParameterInt(juce::ParameterID{"volume", 1}, "Master Volume", 0, 127, 127) {}
+		static int fromAdc(const int _adc) { return _adc / 2; }
+		static uint8_t toAdc(const int _v) { return static_cast<uint8_t>(juce::jlimit(0, 127, _v) * 2 + 1); }
+		void setNotifyingHost(const int _v) { setValueNotifyingHost(convertTo0to1(static_cast<float>(_v))); }
 	};
 
 	class Processor : public juce::AudioProcessor, private juce::AsyncUpdater, private juce::Timer
@@ -98,16 +112,34 @@ namespace g1plugin
 		// The ROM picked by hand: remembered in the settings file, like the standalone does.
 		void useRom(const juce::File& _file);
 
+		// Switches the G1 off and on (the panel's Restart): its state as it is now goes back in as a
+		// project's would, so a new G1 boots with the same banks, slots, knobs and programs.
+		// Message thread; the editor's panel goes with the old G1.
+		void restart();
+
+		// The panel's preferences, kept in the project. A change is told to the host, or most would
+		// not save a project where nothing else changed and lose it (message thread). They are also
+		// what a new instance starts with (plugin.conf, beside the standalone's settings): the
+		// switches are written at once, the size when the editor closes (savePreferences).
+		g1app::SynthSettingsLink& synthSettings() { return m_synthSettings; }
 		bool extrasOpen() const { return m_extrasOpen; }
-		void setExtrasOpen(bool _open) { m_extrasOpen = _open; }
+		void setExtrasOpen(bool _open) { if(std::exchange(m_extrasOpen, _open) != _open) { stateChanged(); savePreferences(); } }
 		bool knobDisplays() const { return m_knobDisplays; }
-		void setKnobDisplays(bool _on) { m_knobDisplays = _on; }
+		void setKnobDisplays(bool _on) { if(std::exchange(m_knobDisplays, _on) != _on) { stateChanged(); savePreferences(); } }
+		bool knobFollowsPatch() const { return m_knobFollowsPatch; }
+		void setKnobFollowsPatch(bool _on) { if(std::exchange(m_knobFollowsPatch, _on) != _on) { stateChanged(); savePreferences(); } }
+		float panelScale() const { return m_panelScale; }
+		void setPanelScale(float _scale) { if(std::abs(std::exchange(m_panelScale, _scale) - _scale) > 0.002f) stateChanged(); }
+		void savePreferences() const;
 
 	private:
+		void stateChanged() { updateHostDisplay(juce::AudioProcessorListener::ChangeDetails().withNonParameterStateChanged(true)); }
+		void loadPreferences();
 		void handleAsyncUpdate() override;
 
-		// The 18 knobs both ways: the host's automation turns them (processBlock), and what turns
-		// them otherwise (the panel, Random, a project's state) is passed to the host (the timer).
+		// The 18 knobs and the master volume both ways: the host's automation turns them
+		// (processBlock), and what turns them otherwise (the panel, Random, a project's state) is
+		// passed to the host (the timer).
 		// m_knobMutex keeps the two apart; processBlock only tries it, and if the timer has it,
 		// leaves the knobs for the next block.
 		void timerCallback() override;
@@ -116,6 +148,8 @@ namespace g1plugin
 		std::array<KnobParameter*, 18> m_knobParams{};
 		std::array<int, 18> m_lastAdc{};				// the position each knob was last seen at
 		std::array<float, 18> m_lastParam{};			// the value each parameter was last seen at
+		VolumeParameter* m_volumeParam = nullptr;
+		int m_lastVolumeAdc = -1, m_lastVolumeParam = -1;
 		std::mutex m_knobMutex;
 		int m_knobGeneration = -1;
 		void findRom();
@@ -127,6 +161,9 @@ namespace g1plugin
 		bool applyState(g1app::Engine& _engine, const juce::MemoryBlock& _state);
 		juce::MemoryBlock snapshotState();
 		juce::MemoryBlock settingsOnlyState();
+		juce::XmlElement stateXml() const;					// the tag, the panel's preferences and the programs
+		void readPreferences(const juce::XmlElement& _xml);	// the panel's preferences out of a state
+		void knobsToHost(g1::Microcontroller& _mc);
 		void startFromStandalone(g1app::Engine& _engine);
 
 		// The PC Port's virtual MIDI port. Declared before the engine and the runner so it goes after them.
@@ -150,6 +187,7 @@ namespace g1plugin
 		std::unique_ptr<g1app::Engine> m_engine;
 		std::unique_ptr<g1app::Runner> m_runner;
 		std::unique_ptr<g1app::SlotKeeper> m_keeper;	// what each slot holds; lives as long as m_engine
+		g1app::SynthSettingsLink m_synthSettings;	// the OS's synth settings, for the panel's overlay
 		std::vector<uint8_t> m_os;				// HostOptions::os, if set: the OS to run instead of the ROM's
 		std::atomic<int> m_generation{0};
 		std::string m_origin;					// where this instance's flash came from
@@ -168,7 +206,8 @@ namespace g1plugin
 		float m_gainDb = 36.0f;					// undoes the -36 dB cap the OS puts on the master volume
 		juce::AudioBuffer<float> m_inputs;		// the inputs, copied before the outputs overwrite them
 
-		bool m_extrasOpen = false, m_knobDisplays = false;
+		bool m_extrasOpen = false, m_knobDisplays = false, m_knobFollowsPatch = false;
+		float m_panelScale = 1.25f;				// the editor's size: 1 is the panel's 1200 pixels wide; 1.25 is half the skin's
 
 		// The last Bank Select (CC 0 and 32) and Program Change the track sent on each channel.
 		// The OS does not keep which patch each slot had, so a G1 booting from a saved project

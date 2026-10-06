@@ -3,8 +3,11 @@
 #include "Editor.h"
 
 #include "romfinder.h"
+#include "g1Lib/g1format.h"
 
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <set>
 #include <utility>
 
@@ -120,13 +123,15 @@ namespace g1plugin
 	juce::String KnobParameter::getText(const float _v, const int _maxLength) const
 	{
 		std::lock_guard<std::mutex> lock(m_mutex);
-		// value = position * (max + 1) / 256, as the OS takes it (g1knobs.h, positionFor)
+		// value = position * (max + 1) / 256, as the OS takes it (g1knobs.h, positionFor), read
+		// as the editor shows it ("Sine", "1.25 kHz": g1format.h)
 		if(m_info.assigned && m_info.section != 2 && m_info.max > 0)
-			return juce::String(toAdc(_v) * (m_info.max + 1) / 256).substring(0, _maxLength);
+			return juce::String(g1::formatValue(m_info.type, m_info.param, toAdc(_v) * (m_info.max + 1) / 256)).substring(0, _maxLength);
 		return juce::String(juce::roundToInt(_v * 100.0f)) + "%";
 	}
 
-	// The way back of getText: a percentage, or the OS's value of the parameter the knob moves.
+	// The way back of getText: a percentage, the text of one of the values ("Saw"), or the OS's
+	// number for the value of the parameter the knob moves.
 	float KnobParameter::getValueForText(const juce::String& _text) const
 	{
 		const auto t = _text.trim();
@@ -134,6 +139,9 @@ namespace g1plugin
 		std::lock_guard<std::mutex> lock(m_mutex);
 		if(t.endsWithChar('%') || !m_info.assigned || m_info.section == 2 || m_info.max == 0)
 			return juce::jlimit(0.0f, 1.0f, n / 100.0f);
+		for(int v = 0; v <= m_info.max; ++v)
+			if(t.equalsIgnoreCase(juce::String(g1::formatValue(m_info.type, m_info.param, v))))
+				return toParam(g1::KnobMap::positionFor(static_cast<uint8_t>(v), m_info.max));
 		const auto value = static_cast<uint8_t>(juce::jlimit(0, static_cast<int>(m_info.max), juce::roundToInt(n)));
 		return toParam(g1::KnobMap::positionFor(value, m_info.max));
 	}
@@ -150,10 +158,54 @@ namespace g1plugin
 			m_knobParams[static_cast<size_t>(k)] = param.get();
 			addParameter(param.release());
 		}
+		auto volume = std::make_unique<VolumeParameter>();
+		m_volumeParam = volume.get();
+		addParameter(volume.release());
+		loadPreferences();
 		openPcPort();
 		openLink();
 		findRom();
 		startTimerHz(20);
+	}
+
+	namespace
+	{
+		std::string preferencesPath()
+		{
+			return (std::filesystem::path(g1app::defaultSettingsPath()).parent_path() / "plugin.conf").string();
+		}
+	}
+
+	// What the last editor was left like: a new instance starts there, and a project's state, when
+	// one comes, has the last word. Plain "key = value", like the settings file.
+	void Processor::loadPreferences()
+	{
+		std::ifstream f(preferencesPath());
+		std::string line;
+		while(std::getline(f, line))
+		{
+			const auto eq = line.find('=');
+			if(eq == std::string::npos || line[0] == '#')
+				continue;
+			const auto key = juce::String(line.substr(0, eq)).trim();
+			const auto value = juce::String(line.substr(eq + 1)).trim();
+			if(key == "extrasOpen")				m_extrasOpen = value != "0";
+			else if(key == "knobDisplays")		m_knobDisplays = value != "0";
+			else if(key == "knobFollowsPatch")	m_knobFollowsPatch = value != "0";
+			else if(key == "panelScale")		m_panelScale = juce::jlimit(g1gui::PanelView::MinScale, g1gui::PanelView::MaxScale, value.getFloatValue());
+		}
+	}
+
+	void Processor::savePreferences() const
+	{
+		std::error_code ec;
+		std::filesystem::create_directories(std::filesystem::path(preferencesPath()).parent_path(), ec);
+		std::ofstream f(preferencesPath(), std::ios::trunc);
+		f << "# G1-Emu plugin: how a new instance's window starts (a project keeps its own).\n"
+		  << "extrasOpen = " << (m_extrasOpen ? 1 : 0) << "\n"
+		  << "knobDisplays = " << (m_knobDisplays ? 1 : 0) << "\n"
+		  << "knobFollowsPatch = " << (m_knobFollowsPatch ? 1 : 0) << "\n"
+		  << "panelScale = " << m_panelScale << "\n";
 	}
 
 	Processor::~Processor()
@@ -285,6 +337,7 @@ namespace g1plugin
 			return;
 		auto engine = std::make_unique<g1app::Engine>(m_rom, m_os);
 		m_keeper = std::make_unique<g1app::SlotKeeper>();
+		m_synthSettings.reset();
 		m_unstarted = false;
 		if(_state)
 			applyState(*engine, *_state);
@@ -314,6 +367,9 @@ namespace g1plugin
 			m_knobParams[k]->setValueNotifyingHost(KnobParameter::toParam(adc));
 			m_lastParam[k] = m_knobParams[k]->get();
 		}
+		m_lastVolumeAdc = mc.adc(g1::g_adcVolume);
+		m_volumeParam->setNotifyingHost(VolumeParameter::fromAdc(m_lastVolumeAdc));
+		m_lastVolumeParam = m_volumeParam->get();
 		m_knobGeneration = m_generation.load();
 	}
 
@@ -335,7 +391,7 @@ namespace g1plugin
 			return;
 		m_runner = std::make_unique<g1app::Runner>(*m_engine, m_rate, static_cast<size_t>(m_maxBlock), m_gainDb,
 			m_pcPort && m_pcPort->virtualPorts() ? m_pcPort.get() : nullptr, m_pcIndex, m_keeper.get(),
-			m_link.listening() ? &m_link : nullptr);
+			&m_synthSettings, m_link.listening() ? &m_link : nullptr);
 		setLatencySamples(static_cast<int>(m_runner->latency()));
 		m_unstarted = false;
 		if(std::exchange(m_engineFresh, false))
@@ -503,18 +559,35 @@ namespace g1plugin
 
 	// Asked for a state before there is a G1 (the host saves before it starts the audio): what the
 	// plugin has besides the flash, which applyState takes as a new instance's.
-	juce::MemoryBlock Processor::settingsOnlyState()
+	juce::XmlElement Processor::stateXml() const
 	{
 		juce::XmlElement xml(g_stateTag);
 		xml.setAttribute("version", g_stateVersion);
 		xml.setAttribute("extrasOpen", m_extrasOpen);
 		xml.setAttribute("knobDisplays", m_knobDisplays);
+		xml.setAttribute("panelScale", static_cast<double>(m_panelScale));
+		xml.setAttribute("knobFollowsPatch", m_knobFollowsPatch);
 		xml.setAttribute("programs", juce::String(programsToString()));
+		return xml;
+	}
+
+	void Processor::readPreferences(const juce::XmlElement& _xml)
+	{
+		m_extrasOpen = _xml.getBoolAttribute("extrasOpen", m_extrasOpen);
+		m_knobDisplays = _xml.getBoolAttribute("knobDisplays", m_knobDisplays);
+		m_panelScale = static_cast<float>(_xml.getDoubleAttribute("panelScale", m_panelScale));
+		m_knobFollowsPatch = _xml.getBoolAttribute("knobFollowsPatch", m_knobFollowsPatch);
+	}
+
+	juce::MemoryBlock Processor::settingsOnlyState()
+	{
+		auto xml = stateXml();
 		// The knobs, as far as the host has turned them: their positions, 1..254.
 		juce::StringArray knobs;
 		for(auto* p : m_knobParams)
 			knobs.add(juce::String(KnobParameter::toAdc(p->get())));
 		xml.setAttribute("knobs", knobs.joinIntoString(" "));
+		xml.setAttribute("volume", VolumeParameter::toAdc(m_volumeParam->get()));
 		juce::MemoryBlock out;
 		copyXmlToBinary(xml, out);
 		return out;
@@ -532,11 +605,7 @@ namespace g1plugin
 			for(size_t i = 0; i < knobs.size(); ++i)
 				knobs[i] = m_engine->mc().adc(static_cast<uint8_t>(i));
 		}
-		juce::XmlElement xml(g_stateTag);
-		xml.setAttribute("version", g_stateVersion);
-		xml.setAttribute("extrasOpen", m_extrasOpen);
-		xml.setAttribute("knobDisplays", m_knobDisplays);
-		xml.setAttribute("programs", juce::String(programsToString()));
+		auto xml = stateXml();
 		xml.createNewChildElement("Flash")->addTextElement(packBytes(flash));
 		xml.createNewChildElement("Knobs")->addTextElement(packBytes(knobs));
 		// What each slot holds, which the flash does not (issue #25): as the keeper last read it.
@@ -556,8 +625,7 @@ namespace g1plugin
 			m_origin = "the factory flash: the project's state is not a G1-Emu one";
 			return false;
 		}
-		m_extrasOpen = xml->getBoolAttribute("extrasOpen", m_extrasOpen);
-		m_knobDisplays = xml->getBoolAttribute("knobDisplays", m_knobDisplays);
+		readPreferences(*xml);
 		programsFromString(xml->getStringAttribute("programs"));
 
 		std::vector<uint8_t> flash;
@@ -572,6 +640,8 @@ namespace g1plugin
 			const auto knobs = juce::StringArray::fromTokens(xml->getStringAttribute("knobs"), " ", {});
 			for(int k = 0; k < knobs.size() && k < 18; ++k)
 				_engine.mc().setAdc(g1::KnobMap::KnobAdc[static_cast<size_t>(k)], static_cast<uint8_t>(juce::jlimit(0, 255, knobs[k].getIntValue())));
+			if(xml->hasAttribute("volume"))
+				_engine.mc().setAdc(g1::g_adcVolume, static_cast<uint8_t>(juce::jlimit(0, 255, xml->getIntAttribute("volume"))));
 			return true;
 		}
 		if( !unpackBytes(flashXml->getAllSubText(), flash) || !_engine.setUserState(flash, error))
@@ -615,6 +685,13 @@ namespace g1plugin
 		_dest = snapshotState();
 	}
 
+	void Processor::restart()
+	{
+		juce::MemoryBlock state;
+		getStateInformation(state);
+		setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+	}
+
 	void Processor::setStateInformation(const void* _data, const int _size)
 	{
 		juce::MemoryBlock state(_data, static_cast<size_t>(std::max(_size, 0)));
@@ -654,10 +731,7 @@ namespace g1plugin
 			{
 				// Still read for the panel's preferences, and kept whole for getStateInformation.
 				if(const auto xml = getXmlFromBinary(m_state.getData(), static_cast<int>(m_state.getSize())))
-				{
-					m_extrasOpen = xml->getBoolAttribute("extrasOpen", m_extrasOpen);
-					m_knobDisplays = xml->getBoolAttribute("knobDisplays", m_knobDisplays);
-				}
+					readPreferences(*xml);
 			}
 			else
 			{
@@ -689,6 +763,12 @@ namespace g1plugin
 			mc.setAdc(g1::KnobMap::KnobAdc[k], adc);
 			m_lastAdc[k] = adc;
 		}
+		if(const int v = m_volumeParam->get(); v != m_lastVolumeParam)
+		{
+			m_lastVolumeParam = v;
+			m_lastVolumeAdc = VolumeParameter::toAdc(v);
+			mc.setAdc(g1::g_adcVolume, static_cast<uint8_t>(m_lastVolumeAdc));
+		}
 	}
 
 	// Message thread: knobs turned by anything but the host go to the host, and the parameters'
@@ -701,19 +781,7 @@ namespace g1plugin
 			if(!m_engine)
 				return;
 			auto& mc = m_engine->mc();
-			std::lock_guard<std::mutex> lock(m_knobMutex);
-			for(size_t k = 0; k < 18; ++k)
-			{
-				const int adc = mc.adc(g1::KnobMap::KnobAdc[k]);
-				if(adc == m_lastAdc[k])
-					continue;
-				m_lastAdc[k] = adc;
-				auto* p = m_knobParams[k];
-				p->beginChangeGesture();
-				p->setValueNotifyingHost(KnobParameter::toParam(static_cast<uint8_t>(adc)));
-				p->endChangeGesture();
-				m_lastParam[k] = p->get();
-			}
+			knobsToHost(mc);
 			g1::KnobMap map(mc);
 			for(uint32_t k = 0; k < 18; ++k)
 				renamed = m_knobParams[k]->setInfo(map.read(k)) || renamed;
@@ -721,6 +789,35 @@ namespace g1plugin
 		// Outside the locks: the host asks for the new names right away.
 		if(renamed)
 			updateHostDisplay(ChangeDetails().withParameterInfoChanged(true));
+	}
+
+	// Each knob that something other than the host turned, to its parameter, as a gesture.
+	void Processor::knobsToHost(g1::Microcontroller& _mc)
+	{
+		std::lock_guard<std::mutex> lock(m_knobMutex);
+		const auto gesture = [](juce::RangedAudioParameter& _p, const float _value)
+		{
+			_p.beginChangeGesture();
+			_p.setValueNotifyingHost(_value);
+			_p.endChangeGesture();
+		};
+		for(size_t k = 0; k < 18; ++k)
+		{
+			const int adc = _mc.adc(g1::KnobMap::KnobAdc[k]);
+			if(adc == m_lastAdc[k])
+				continue;
+			m_lastAdc[k] = adc;
+			gesture(*m_knobParams[k], KnobParameter::toParam(static_cast<uint8_t>(adc)));
+			m_lastParam[k] = m_knobParams[k]->get();
+		}
+		// The volume's parameter moves by whole steps: a position that keeps the step tells nothing.
+		const int adc = _mc.adc(g1::g_adcVolume);
+		if(adc == m_lastVolumeAdc)
+			return;
+		m_lastVolumeAdc = adc;
+		if(const int v = VolumeParameter::fromAdc(adc); v != m_volumeParam->get())
+			gesture(*m_volumeParam, m_volumeParam->convertTo0to1(static_cast<float>(v)));
+		m_lastVolumeParam = m_volumeParam->get();
 	}
 
 	// ____________________________________________________________________________________________

@@ -21,6 +21,7 @@
 #include "hostconfig.h"
 #include "miditransport.h"
 #include "slotkeeper.h"
+#include "synthsettings.h"
 
 #include <array>
 #include <atomic>
@@ -65,12 +66,12 @@ namespace g1app
 		// a guard of 0.5 ms that keeps every event ahead of the emulator.
 		// _pcPort, if given, carries the G1's PC Port (an editor's SysEx) on its port _pcIndex:
 		// the worker polls it and sends the replies. _keeper, if given, talks to the PC Port too,
-		// between the editor's messages (SlotKeeper). _link, if given, is the direct link to Animatek
-		// NME (directlink.h): one more way in to the same PC Port, polled by the worker alongside it.
-		// All must outlive the runner.
+		// between the editor's messages (SlotKeeper), and so does _settings (the synth settings).
+		// _link, if given, is the direct link to Animatek NME (directlink.h): one more way in to the
+		// same PC Port, polled by the worker alongside it. All must outlive the runner.
 		Runner(Engine& _engine, double _rate, size_t _maxBlock, float _gainDb,
 			MidiTransport* _pcPort = nullptr, int _pcIndex = 0, SlotKeeper* _keeper = nullptr,
-			DirectLink* _link = nullptr);
+			SynthSettingsLink* _settings = nullptr, DirectLink* _link = nullptr);
 		~Runner();	// stops the worker and detaches from the engine; the engine keeps its state
 
 		size_t latency() const { return m_latency; }
@@ -104,6 +105,7 @@ namespace g1app
 		DirectLink* const m_link;
 		const int m_pcIndex;
 		SlotKeeper* const m_keeper;
+		SynthSettingsLink* const m_settings;
 		const double m_rate;
 		const size_t m_ahead;		// how far the worker may run past what the host has taken
 		const size_t m_latency;		// where the events go: ahead plus a guard (runner.cpp)

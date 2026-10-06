@@ -57,6 +57,9 @@ namespace g1app
 			else if(key == "showDisclaimer") showDisclaimer = value != "0";
 			else if(key == "extrasOpen")	extrasOpen = value != "0";
 			else if(key == "knobDisplays")	knobDisplays = value != "0";
+			else if(key == "knobFollowsPatch") knobFollowsPatch = value != "0";
+			else if(key == "masterVolume")	masterVolume = std::atoi(value.c_str());
+			else if(key == "panelScale")	panelScale = static_cast<float>(std::atof(value.c_str()));
 			else if(key == "pcPortOutDevice") pcPortOutDevice = value;
 			else if(key == "pcPortInDevice")  pcPortInDevice = value;
 			else if(key == "midiOutDevice")   midiOutDevice = value;
@@ -103,6 +106,9 @@ namespace g1app
 		  << "showDisclaimer = " << (showDisclaimer ? 1 : 0) << "\n"
 		  << "extrasOpen = " << (extrasOpen ? 1 : 0) << "\n"
 		  << "knobDisplays = " << (knobDisplays ? 1 : 0) << "\n"
+		  << "knobFollowsPatch = " << (knobFollowsPatch ? 1 : 0) << "\n"
+		  << "masterVolume = " << masterVolume << "\n"
+		  << "panelScale = " << panelScale << "\n"
 		  << "pcPortOutDevice = " << pcPortOutDevice << "\n"
 		  << "pcPortInDevice = " << pcPortInDevice << "\n"
 		  << "midiOutDevice = " << midiOutDevice << "\n"

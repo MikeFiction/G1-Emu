@@ -1,0 +1,57 @@
+#pragma once
+
+// What the panel shows over itself, in one look: a card over the synth, what is behind it blurred
+// and showing through, the synth around it darkened. The Synth Settings use it, and ConfirmView,
+// the panel's own question before something that cannot be undone (Restart).
+
+#include <juce_gui_basics/juce_gui_basics.h>
+
+#include <functional>
+
+namespace g1gui
+{
+	namespace overlay
+	{
+		const juce::Colour Body(0xff1c1c20), Rule(0xff35353c), NoteText(0xffc8ccd0);
+		constexpr int Margin = 24, TitleRuleY = 44;
+		constexpr float TextSize = 13.0f, HeadingSize = 15.0f;
+
+		// _behind photographed small and blurred, for the card's backdrop.
+		juce::Image backdrop(juce::Component& _behind);
+		// The darkened synth (its top _faceHeight), the card with the backdrop through it, its border,
+		// and the title with its rule. _area is the whole overlay, the size of what is behind.
+		void paintCard(juce::Graphics& _g, juce::Rectangle<int> _area, const juce::Image& _backdrop, int _faceHeight,
+			juce::Rectangle<int> _card, const juce::String& _title);
+	}
+
+	// A question over the panel, with a button that does it and one that does not. Escape, Cancel
+	// or a click beside the card leave it; Return answers yes.
+	class ConfirmView : public juce::Component
+	{
+	public:
+		ConfirmView();
+
+		// Shows it over _behind (its parent), centred in _space; _onYes runs once it is closed.
+		void open(juce::Component& _behind, int _faceHeight, juce::Rectangle<int> _space, const juce::String& _title,
+			const juce::String& _text, const juce::String& _yes, std::function<void()> _onYes);
+		void close();
+		std::function<void()> onClose;
+
+		void paint(juce::Graphics& _g) override;
+		void resized() override;
+		void mouseDown(const juce::MouseEvent& _e) override;
+		bool keyPressed(const juce::KeyPress& _key) override;
+
+	private:
+		juce::Rectangle<int> card() const;
+		void answer(bool _yes);
+
+		juce::Image m_backdrop;
+		int m_faceHeight = 0;
+		juce::Rectangle<int> m_space;
+		juce::String m_title;
+		std::function<void()> m_onYes;
+		juce::Label m_text;
+		juce::TextButton m_yes, m_cancel{"Cancel"};
+	};
+}

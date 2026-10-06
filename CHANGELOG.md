@@ -7,6 +7,71 @@ Older entries cite their commit by hand.
 
 ## 2026-10-06
 
+- [Imp] **Mike Fiction's panel skin merged with the direct link (Claude, requested by Javier).**
+  Mike's `panel-skin` branch and the direct link (#8) both added a PC Port talker beside the editor's
+  (the synth settings and the link): the runner and `EmuHost` now take both, and an editor's bytes
+  over the link reach the synth settings too, as the MIDI PC Port's do. `SynthSettings::tied()` is
+  declared before the operators that use it, which GCC needs (MSVC took it as it was). Checked on
+  Linux: everything builds, the nine `g1` tests pass, and `g1vst3check` fails on two points that
+  fail on `main` as well (an instance silent after its note, the restored instance silent).
+  Approved by Javier; the loadable skins that come next are #28.
+
+- [Change] **Shift + Patch/Load is Random, instead of a button in the extras (Claude, requested by
+  Mike Fiction).** It turns the 18 knobs to random positions, as the extras' Random did; that button
+  is commented out for now (`Panel.cpp`), with its double click that put the patch's values back,
+  and Synth Settings takes its place in the extras. The OS has nothing of its own for Shift +
+  Patch/Load (it asks `Load?` as without Shift), so the window keeps that press and the G1 does not
+  see it. The OS ignores the knobs while Shift is down, so the G1 sees Shift let go while they move
+  and pressed again 300 ms later; Shift stays held, so Random can be pressed again and again. The
+  tooltips' display reads "Random Knobs" while Shift is down and flashes it. With Knob Follows Patch
+  on, a knob the window has just turned (Random, or by hand) keeps its own position for half a
+  second instead of jumping back to the patch's old value until the OS has read it. Checked: it
+  builds.
+- [Imp] **Cleanup of the panel, the synth settings and the plugin work (Claude, requested by Mike
+  Fiction).** No change in behaviour; long functions split and repeats folded together: the panel's
+  timer, the tooltips' display, the icons, the synth settings' reply handling, the runner's two PC
+  Port talkers, EmuHost's start and restart, the plugin's preferences in its state, and the editor's
+  size limits (now `PanelView::applyLimits` for both). `g1vst3check` puts the user's `plugin.conf`
+  back however it ends; its main run used to leave the size of its own editor there. **Known
+  duplicate:** the PC Port SysEx helpers are now in `app/pcsysex.h` for the synth settings, but
+  `app/slotkeeper.cpp` keeps its own identical copies (`frame`, `pack7`, `unpack7`,
+  `forEachMessage`...), left as the author wrote them. Checked: everything builds, and
+  `g1formattest`, `g1synthsettingstest`, `g1slotkeepertest`, `g1runnertest` and `g1vst3check` (with
+  and without `--window`) pass.
+- [Imp] **Knob values read as the editor shows them (Claude, requested by Mike Fiction).** The knob
+  displays, the tooltips' display and the plugin's knob parameters show "Sine", "C#4", "1.25 kHz"
+  and so on instead of the OS's raw number (a DAW also takes the text typed in). The readings are
+  Animatek NME's value formatters, ported to `g1Lib/g1format.*` with the table of which parameter
+  reads which way generated from NME's `data/modules.xml` (Nomad's module descriptions, GPL). The
+  text is the editor's, so in places it can differ from the G1's own display. Checked with the new
+  `g1formattest` and `g1vst3check`.
+- [Fix] **Shift lets go after the next key, as on the hardware (Claude, reported by Mike Fiction).**
+  The OS takes Shift for one key only: held on in the window (latched with a right click, or the
+  keyboard's), the next shifted key did nothing (Shift, System, then Save Synth. Settings), and
+  Shift + Store went on to `Store?`. Now a latched Shift lets go once the key it was used with is
+  released, and the keyboard's Shift must be pressed again. After a slot button (A-D) Shift stays
+  down, so several slots can be picked in a row, and the OS sees it pressed again for the next key.
+  `g1patchtest`'s `G1_PRESS` steps can hold and let go a button (`h2.7`, `u2.7`). Checked with
+  `g1patchtest` (NOTES.md, "Shift counts for the next key only") and it builds.
+- [New] **The master volume, 0-127 and in the DAW (Claude, requested by Mike Fiction).** The panel's
+  display shows it as the OS takes it, the knob's position halved (0-127). The plugin has it as a
+  "Master Volume" parameter, so a DAW can automate it, and the knob on the panel follows. A new
+  instance's project saved before it ever ran keeps it too. Checked with `g1vst3check`: the host
+  sets it to 64, and it stays there and comes back in a project reopened.
+- [New] **A display for the synth's controls (Claude, artwork by Mike Fiction).** The background has
+  a one-line display at the bottom centre. Hovering a control of the synth's own (knob, button,
+  dial, volume) names it there, in the knob displays' dot font, a little larger. A knob shows what
+  it moves at the left and its value at the right, and the value keeps updating while the knob
+  turns. Text too long for the display scrolls through. While Shift is down (mouse, latched or the
+  keyboard's), Find, Store and Assign show their second function instead (Panic, Save Synth.
+  Settings, Morph), and pressing Find or Store with Shift flashes that name twice. Store follows the
+  G1's mode, read from its mode LEDs: "Store Patch" in Patch/Load mode, "Save Synth. Settings" with
+  Shift in Patch/Load or System, and blank where the OS ignores it (Edit, or System without Shift).
+  With Shift down, an assigned knob reads "Clear Knob" in Edit mode, which turning it then does (the
+  manual, Assign/Morph), and the knobs read nothing in Patch/Load and System, where the OS ignores
+  them. Hints such as "Right click: hold it down" and the tooltips of the status bar and the extras
+  stay in the floating box. New artwork for the knob displays too. Checked: it builds.
+
 - **The greeting also names the PC Port (#8; Claude).** JUCE gives its virtual ports no identifier
   on Linux, so the plugin's greeting carried `pcport=,`: empty ids are left out now, and a
   `pcname=<name>` field (`MidiTransport::portListName`) lets an editor match the port by name. The
@@ -42,6 +107,70 @@ Older entries cite their commit by hand.
   connect case. Checked: the test, and NME's IAm answered over the link right after a discovery.
 
 ## 2026-10-05
+
+- [Imp] **A held panel button lets go on a click (Claude, requested by Mike Fiction).** A button
+  latched with a right click (Shift, say) is released by a left click too, which presses nothing,
+  and it shows no hover highlight while held. Checked: it builds.
+- [New] **A Restart button, in the window and the plugin (Claude, requested by Mike Fiction).** A
+  power icon at the right end of the extras, after Synth Settings (now at the right too), switches
+  the emulated G1 off and on after asking in a card over the panel in the Synth Settings' look
+  (`app/gui/Overlay.*`, which both now share), so a G1 that hangs comes back without closing G1-Emu.
+  In the window the flash is saved and a new G1 boots from it with the knobs where they were; the
+  MIDI ports and the sound card stay open, so the editor keeps its connection, and a restart after
+  an OS update boots the OS that came in (`EmuHost::restart`). In the plugin its state as it is goes
+  back in as a project's would, so the new G1 boots with the same banks, slots, knobs and programs
+  (`Processor::restart`). Checked: it builds, and `g1vst3check` passes.
+- [New] **Synth Settings from the panel, a test version (Claude, requested by Mike Fiction).** A
+  button in the extras opens an overlay over the synth with the slots' MIDI channels and the global
+  settings (clock, global sync, master tune, knob mode, pedal, program change, local, velocity
+  scale, name), as dropdowns. It reads and writes them through the PC Port with the same message
+  NME's Synth Settings dialog sends (`app/synthsettings.h`), between the editor's messages, in the
+  window and the plugin. **It is there to test the settings, not the final look or version:** the
+  artwork is still to come. Checked with `g1synthsettingstest` (the OS takes what is written and
+  reads it back the same) and in the window.
+- [Imp] **The extras drawer slides open and closed (Claude, requested by Mike Fiction)** instead of
+  appearing at once. Checked in the window.
+- [Change] **The panel drawn from PNG artwork (Claude, artwork by Mike Fiction).** `app/gui/skin/`
+  holds a 3000 x 1238 background with the faceplate, every label, the knobs' red rings and the
+  displays' frames, and sprites for the knob caps and their shadows, the dial, the wide, tall and
+  tilted buttons, the LEDs and the parameter displays, built into the window and the plugin
+  (`g1Skin`). `Panel` lays them out in the background's pixels, each sprite at its exact place (the
+  knobs measured ring by ring), and only a button's body takes the mouse. The big display's glass,
+  painted by the code, follows the art; what is around the skin takes its dark purple
+  (`Panel::FaceColour`). Checked against the artist's reference images pixel by pixel and in the
+  window.
+- [New] **The window and the plugin's editor are resizable (Claude, requested by Mike Fiction).**
+  `PanelView` scales the panel, still laid out at 1200 pixels, from 50% to 250% in its proportions,
+  which change with the extras drawer; they start at 1500 pixels wide. The standalone keeps its size
+  in the settings file, the plugin in the project. Checked on Windows at several sizes and across
+  restarts.
+- [Fix] **The plugin remembers its window (Claude, reported by Mike Fiction).** A change to the
+  editor's size or the extras' switches now marks the project as changed (`setDirty`), so hosts save
+  it, and a new instance starts as the last editor was left (`plugin.conf`, beside the settings
+  file; a project's own state still wins; listed in `CLAUDE.md`). `g1vst3check --window` checks
+  both; confirmed by Mike Fiction in Cubase, Bitwig and Reaper.
+- [New] **What the knobs move (Claude, requested by Mike Fiction).** The parameter displays (extras:
+  "Parameter Displays") take the knobs' LEDs' place, write in the big display's dot font and go dark
+  on a knob with nothing assigned. **Knob Follows Patch** (extras) shows each knob where the patch's
+  value puts it, and turning it starts there. A knob's tooltip says what it moves and its value, so
+  the displays can stay off. Checked with patches loaded from NME.
+- [Imp] **The dial turns, with a thumb indent (Claude, artwork by Mike Fiction).** The dial's sheets
+  could not show it turning (their frames were alike); it is now turned in code, the ridges a step
+  at a time within one ridge so their light stays put, and Mike Fiction's painted thumb indent, cut
+  out of the knob, slides round its face. 48 detents a turn; it starts with the indent at eight
+  o'clock. Checked by putting the pieces back together (the painted knob) and in the window.
+- [Imp] **The panel's buttons (Claude, requested by Mike Fiction).** A button held without the mouse
+  (right click, or a key) pulses with Mike Fiction's red picture of it, all held buttons together;
+  the navigator's keys repeat when held instead, and they and Panel Split no longer latch. The
+  navigator, Shift, Assign/Morph, Panel Split and Find are centred on the art's labels. Tooltips sit
+  on a dark glass that blurs the panel behind. Seen in the window.
+- [Imp] **The standalone's window (Claude, requested by Mike Fiction).** Its title bar follows
+  Windows' dark mode (`NativeTitleBarTheme`), it has the plugin's resize grip in its corner, and it
+  remembers the master volume (`masterVolume` in the settings file). Checked in the window.
+- [Imp] **What the panel's keys do on the rack (Claude, reported by Mike Fiction).** `NOTES.md`
+  records that Shift + Find (Panic) works in the emulator, and that holding several slot buttons
+  does not layer them for MIDI on the rack: slots are layered by giving them the same MIDI channel.
+  Documentation only.
 
 - **The direct link for Animatek NME, beside the PC Port (#8; Claude, requested by Javier).** The
   standalone listens on a local TCP socket (127.0.0.1, the first free port from 47310, so instance

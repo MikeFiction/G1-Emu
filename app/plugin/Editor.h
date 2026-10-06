@@ -39,13 +39,26 @@ namespace g1plugin
 		void setExtrasOpen(bool _open) override;
 		bool knobDisplays() const override;
 		void setKnobDisplays(bool _on) override;
+		bool knobFollowsPatch() const override;
+		void setKnobFollowsPatch(bool _on) override;
+		float panelScale() const override;
+		void setPanelScale(float _scale) override;
+		void fitTo(double _aspect);
 		juce::String settingsTooltip() const override { return "ROM, latency, and where this instance's patches came from"; }
 		void showSettings(juce::Component* _parent) override;
+		g1app::SynthSettingsLink& synthSettings() override;
+		bool canRestart() const override { return true; }
+		void restart() override;
+		juce::String restartNote() const override
+		{
+			return "As switching it off and on, then loading this project again: the banks, the slots and "
+				"the knobs come back as they are now. The PC Port stays open.";
+		}
 
 		Processor& m_processor;
 		g1app::Engine* m_engine = nullptr;
 		int m_generation = -1;
-		std::unique_ptr<g1gui::Panel> m_panel;
+		std::unique_ptr<g1gui::PanelView> m_panel;	// the panel, at the size the user gave the window
 
 		// Shown instead of the panel while there is no G1.
 		juce::Label m_message;

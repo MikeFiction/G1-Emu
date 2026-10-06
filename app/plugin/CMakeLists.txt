@@ -15,7 +15,7 @@ juce_add_plugin(g1plugin
 	FORMATS VST3)
 
 target_sources(g1plugin PRIVATE Processor.cpp Processor.h Editor.cpp Editor.h runner.cpp runner.h
-	../gui/Panel.cpp ../gui/Panel.h ../gui/LcdFont.h)
+	../gui/Panel.cpp ../gui/Panel.h ../gui/SynthSettingsView.cpp ../gui/SynthSettingsView.h ../gui/Overlay.cpp ../gui/Overlay.h ../gui/LcdFont.h)
 target_include_directories(g1plugin PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ../gui)
 target_compile_definitions(g1plugin PUBLIC
 	G1_BUILD_VERSION="${g1_build_version}"
@@ -23,7 +23,7 @@ target_compile_definitions(g1plugin PUBLIC
 	JUCE_USE_CURL=0
 	JUCE_VST3_CAN_REPLACE_VST2=0
 	JUCE_DISPLAY_SPLASH_SCREEN=0)
-target_link_libraries(g1plugin PRIVATE g1Core juce::juce_audio_utils
+target_link_libraries(g1plugin PRIVATE g1Core g1Skin juce::juce_audio_utils
 	PUBLIC juce::juce_recommended_config_flags)
 
 # The same plugin as CLAP (G1-Emu.clap), when the Gearmulator clone has clap-juce-extensions.
