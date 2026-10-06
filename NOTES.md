@@ -548,6 +548,15 @@ Both pass since the fix ([CI run 35570337853](https://github.com/animatek/G1-Emu
     (the panel's "Save Synth. Settings", a different screen from Store's `Store?`), and **Shift +
     a slot** shows and changes that slot's voices (`( 1) --  --  --` → `( 1)  1  --  --`). The OS
     keeps the modifier in a block at `$1C39D4` and each shifted action branches on it.
+    **Shift counts for the next key only** (3.03 update, 2026-10-06, `g1patchtest` with
+    `G1_PRESS=h2.7,...`): held through another key (Find, a slot, System), the next Store is a
+    plain `Store?`; let go and pressed again, it is `Store settings` again. And Shift still held
+    about half a second after Shift + Store turns `Store settings` into `Store?`; let go sooner, the
+    display goes back to the patch. So the window's panel lets a latched Shift go after the key.
+    The slots are the exception: Shift held through A, B and C changes each one's voices
+    (`( 1)  1   1  --`), though the Store after them is still a plain `Store?`. Let go and pressed
+    again between the slots, they change the same and Store is `Store settings`: after a slot the
+    panel keeps Shift down and presses it again for the OS.
   - **Find**, held down, puts `Find` on the display and goes back when released. Its second
     function, printed in red on the panel, is Panic: Shift + Find works in the emulator
     (Mike Fiction, 2026-10-05).

@@ -33,7 +33,8 @@ namespace g1plugin
 {
 	// One of the 18 panel knobs as a host parameter. Its name says what the knob moves in the
 	// patch now ("Knob 3: OscA Freq coars"), and its text is the value the OS gives that parameter,
-	// both read from the OS's tables (g1knobs.h) and changed when another patch comes.
+	// both read from the OS's tables (g1knobs.h) and changed when another patch comes. The value
+	// reads as the editor shows it ("Sine", "1.25 kHz": g1format.h).
 	class KnobParameter final : public juce::AudioParameterFloat
 	{
 	public:
@@ -53,6 +54,17 @@ namespace g1plugin
 		mutable std::mutex m_mutex;
 		juce::String m_name;
 		g1::KnobInfo m_info;
+	};
+
+	// The master volume as a host parameter, in the OS's 128 steps: it takes the knob's position
+	// halved (NOTES.md, "Master volume").
+	class VolumeParameter final : public juce::AudioParameterInt
+	{
+	public:
+		VolumeParameter() : juce::AudioParameterInt(juce::ParameterID{"volume", 1}, "Master Volume", 0, 127, 127) {}
+		static int fromAdc(const int _adc) { return _adc / 2; }
+		static uint8_t toAdc(const int _v) { return static_cast<uint8_t>(juce::jlimit(0, 127, _v) * 2 + 1); }
+		void setNotifyingHost(const int _v) { setValueNotifyingHost(convertTo0to1(static_cast<float>(_v))); }
 	};
 
 	class Processor : public juce::AudioProcessor, private juce::AsyncUpdater, private juce::Timer
@@ -125,8 +137,9 @@ namespace g1plugin
 		void loadPreferences();
 		void handleAsyncUpdate() override;
 
-		// The 18 knobs both ways: the host's automation turns them (processBlock), and what turns
-		// them otherwise (the panel, Random, a project's state) is passed to the host (the timer).
+		// The 18 knobs and the master volume both ways: the host's automation turns them
+		// (processBlock), and what turns them otherwise (the panel, Random, a project's state) is
+		// passed to the host (the timer).
 		// m_knobMutex keeps the two apart; processBlock only tries it, and if the timer has it,
 		// leaves the knobs for the next block.
 		void timerCallback() override;
@@ -135,6 +148,8 @@ namespace g1plugin
 		std::array<KnobParameter*, 18> m_knobParams{};
 		std::array<int, 18> m_lastAdc{};				// the position each knob was last seen at
 		std::array<float, 18> m_lastParam{};			// the value each parameter was last seen at
+		VolumeParameter* m_volumeParam = nullptr;
+		int m_lastVolumeAdc = -1, m_lastVolumeParam = -1;
 		std::mutex m_knobMutex;
 		int m_knobGeneration = -1;
 		void findRom();
@@ -146,6 +161,9 @@ namespace g1plugin
 		bool applyState(g1app::Engine& _engine, const juce::MemoryBlock& _state);
 		juce::MemoryBlock snapshotState();
 		juce::MemoryBlock settingsOnlyState();
+		juce::XmlElement stateXml() const;					// the tag, the panel's preferences and the programs
+		void readPreferences(const juce::XmlElement& _xml);	// the panel's preferences out of a state
+		void knobsToHost(g1::Microcontroller& _mc);
 		void startFromStandalone(g1app::Engine& _engine);
 
 		// The PC Port's virtual MIDI port. Declared before the engine and the runner so it goes after them.

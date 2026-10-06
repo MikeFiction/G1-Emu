@@ -62,6 +62,11 @@ namespace g1gui
 	// own pixels (3000 x 1238) and shown at SkinScale of them.
 	struct Skin;
 
+	// What the tooltips' display below the knobs says about a control of the synth's own: its name,
+	// and its value after a tab. Its hover tooltip only hints at how to use it (right click: hold it
+	// down); what is not on the hardware has a hover tooltip alone.
+	void setLcdTip(juce::Component& _c, const juce::String& _tip);
+
 	// The display's glass: the red frame around it is the background's.
 	class LcdView : public juce::Component
 	{
@@ -103,12 +108,23 @@ namespace g1gui
 		void mouseDown(const juce::MouseEvent& _e) override;
 		void mouseDrag(const juce::MouseEvent& _e) override;
 		void mouseUp(const juce::MouseEvent& _e) override;
+		bool isPressed() const { return m_down; }	// as the G1 sees it: by the mouse, a key or latched
+		void unlatch() { if(m_latched) { m_latched = false; update(); } }
+		// Still down: the G1 sees it let go for _upMs and pressed again. Called again meanwhile,
+		// the last one decides when it goes down.
+		void pressAgain(juce::uint32 _upMs);
+		bool wasTaken() const { return m_taken; }	// this press was the window's (takesPress)
+		std::function<void()> onPress, onRelease;	// each time it goes down, and up
+		// Asked as it goes down: true keeps the press for the window, and the G1 never sees it.
+		std::function<bool()> takesPress;
 	private:
 		void update();
 		void timerCallback() override;
+		void repeat();	// a navigator key held with the mouse: let go and pressed again in turns
 		void setBit(bool _down);
 		bool held() const { return m_keyHeld || m_latched; }
 		bool repeating() const { return m_autoRepeat && m_down && isDown(); }
+		bool timerNeeded() const { return repeating() || held(); }
 		g1::Microcontroller& m_mc;
 		MatrixBit m_bit;
 		Shape m_shape;
@@ -118,6 +134,8 @@ namespace g1gui
 		bool m_wasHeld = false;
 		bool m_latchable = true;
 		bool m_unlatching = false;	// this left click lets a latched button go, and presses nothing
+		bool m_taken = false;		// this press is the window's (takesPress)
+		int m_pressAgainId = 0;		// the latest pressAgain
 		juce::uint32 m_pressedAt = 0;
 	};
 
@@ -126,7 +144,7 @@ namespace g1gui
 	class DialView : public juce::Component, public juce::SettableTooltipClient, private juce::Timer
 	{
 	public:
-		explicit DialView(g1::Microcontroller& _mc) : m_mc(_mc) { setTooltip("Data Wheel"); }
+		explicit DialView(g1::Microcontroller& _mc) : m_mc(_mc) { setLcdTip(*this, "Data Wheel"); }
 		void paint(juce::Graphics& _g) override;
 		bool hitTest(int _x, int _y) override;
 		void mouseDown(const juce::MouseEvent& _e) override { m_lastY = _e.y; }
@@ -207,7 +225,8 @@ namespace g1gui
 		void drawRotarySlider(juce::Graphics&, int, int, int, int, float, float, float, juce::Slider&) override;
 	};
 
-	// The panel's tooltips: on a dark glass that blurs what is behind it.
+	// The tooltips of what is not on the hardware, and the hints of what is (right click: hold
+	// it down): on a dark glass that blurs what is behind it.
 	// _window is the tooltip window it draws, a child of the panel: what is behind it is the panel.
 	class TooltipLook : public juce::LookAndFeel_V4
 	{
@@ -218,6 +237,26 @@ namespace g1gui
 	private:
 		juce::Component& m_window;
 		bool m_snapshotting = false;	// while the panel behind is drawn for the blur, the tooltip is not
+	};
+
+	// The display below the knobs, in the knob displays' dots: the name of the synth's control
+	// under the mouse (setLcdTip), and its value at the right, after a tab. What is too long for it
+	// scrolls through and starts over.
+	class TipDisplay : public juce::Component, private juce::Timer
+	{
+	public:
+		TipDisplay() { setInterceptsMouseClicks(false, false); }
+		void set(const juce::String& _tip);
+		void flash(const juce::String& _text);	// shown twice, blinking, over the tip (Shift + Find: Panic)
+		void paint(juce::Graphics& _g) override;
+	private:
+		void timerCallback() override;	// a step of the flash or of the scrolling
+		void updateTimer();
+		bool scrolls() const;
+		juce::String line() const;		// what shows now
+		juce::String m_tip, m_text, m_value, m_flash;
+		int m_scroll = 0, m_ticks = 0;
+		int m_flashSteps = 0;			// left of the flash
 	};
 
 	class Panel : public juce::Component, private juce::Timer
@@ -239,6 +278,9 @@ namespace g1gui
 
 	private:
 		void timerCallback() override;
+		void updateKnobs(const std::array<g1::KnobInfo, 18>& _info);
+		void updateLcdTips(const std::array<g1::KnobInfo, 18>& _info);
+		void updateStatus();	// the status bar and the MIDI LED
 		void updateHeldKeys();
 		PanelButton& addButton(const juce::String& _name, MatrixBit _bit, PanelButton::Shape _shape = PanelButton::Shape::Wide);
 		LedView& addLed(MatrixBit _bit);
@@ -246,9 +288,11 @@ namespace g1gui
 		void setExtrasOpen(bool _open, bool _animate = false);
 		void slideDrawer(double _now);
 		void placeDrawer();
+		void shiftAsideForKnobs();
 		void randomizeKnobs();
 		void restoreKnobs();
 		void setKnobDisplays(bool _on);
+		void updateTip();
 
 		juce::SharedResourcePointer<Skin> m_skin;	// keeps the images while a panel is open
 		PanelHost& m_host;
@@ -258,6 +302,7 @@ namespace g1gui
 		LcdView m_lcd;
 		juce::Slider m_volume;
 		std::array<juce::Slider, 18> m_knobs;
+		std::array<juce::uint32, 18> m_knobTurnedAt{};	// when the window last turned each (0: never)
 		std::array<LedView*, 18> m_knobLeds{};
 		std::vector<std::unique_ptr<PanelButton>> m_buttons;
 		std::vector<std::unique_ptr<LedView>> m_leds;
@@ -273,7 +318,28 @@ namespace g1gui
 		std::array<LedView*, 4> m_slotLeds{};
 		PanelButton* m_assign = nullptr;
 		PanelButton* m_shift = nullptr;
+		// The buttons with a second function under Shift, printed red under them: the display
+		// names what the button does now, with Shift down or not, and flashes it when it is pressed
+		// with Shift (buttonPressed). Blank where the OS ignores it (Store in Edit mode).
+		struct ShiftName { PanelButton* button; std::function<juce::String(bool _shift)> name; };
+		std::vector<ShiftName> m_shiftNames;
+		// The G1's mode, from its mode LEDs: what Store can do depends on it.
+		enum class Mode { Other, Patch, System, Edit };
+		Mode m_mode = Mode::Other;
+		std::array<juce::uint32, 4> m_modeLitAt{};	// when each mode LED was last seen lit
+		void updateMode();
+		juce::String storeName(bool _shift) const;
+		juce::String shiftedKnobTip(const g1::KnobInfo& _k) const;	// what a knob does with Shift down
+		bool ledLit(MatrixBit _bit) const;
 		bool m_shiftKey = false;	// Shift on the computer's keyboard, held
+		// Shift is for the next key only, as on the hardware: the OS sees it no more past that key
+		// (and Shift + Store goes on to Store?). So it lets go once that key does; the keyboard's
+		// Shift is spent until it is pressed again. Not after a slot button: Shift stays down for
+		// the next slot, pressed again for the OS (buttonReleased). Nor after what the window takes
+		// for itself (Shift + Patch/Load: Random), which can be pressed again and again.
+		bool m_shiftUsed = false, m_shiftSpent = false;
+		void buttonPressed(PanelButton& _b);
+		void buttonReleased(PanelButton& _b);
 		std::array<PanelButton*, 4> m_nav{};			// up, left, right, down
 		DialView m_dial;
 
@@ -308,6 +374,7 @@ namespace g1gui
 		// back. Dropped when the knobs' assignments change (another patch).
 		std::array<g1::KnobInfo, 18> m_snapshot{};
 		bool m_haveSnapshot = false;
+		TipDisplay m_tip;
 		juce::TooltipWindow m_tooltips{this, 500};
 		TooltipLook m_tooltipLook{m_tooltips};
 		double m_peakHold = 0;
@@ -326,8 +393,9 @@ namespace g1gui
 
 		explicit PanelView(PanelHost& _host);
 		double aspectRatio() const { return static_cast<double>(m_panel.getWidth()) / static_cast<double>(m_panel.getHeight()); }
-		// The resizer's limits for these proportions, from MinScale to MaxScale.
-		void applyLimits(juce::ComponentBoundsConstrainer& _c) const;
+		// The resizer's limits for these proportions, or _aspect's, from MinScale to MaxScale.
+		void applyLimits(juce::ComponentBoundsConstrainer& _c) const { applyLimits(_c, aspectRatio()); }
+		static void applyLimits(juce::ComponentBoundsConstrainer& _c, double _aspect);
 		std::function<void()> onAspectChanged;
 
 		void resized() override;

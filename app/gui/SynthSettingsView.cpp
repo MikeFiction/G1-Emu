@@ -300,12 +300,7 @@ namespace g1gui
 		s.ledsActive = m_leds.getSelectedId() == 1;
 		s.velScaleMin = m_velMin.getSelectedId() - 1;
 		s.velScaleMax = m_velMax.getSelectedId() - 1;
-		if(s.name == m_known.name && s.midiChannel == m_known.midiChannel && s.keyboardMode == m_known.keyboardMode
-			&& s.clockInternal == m_known.clockInternal && s.clockBpm == m_known.clockBpm && s.globalSync == m_known.globalSync
-			&& s.masterTune == m_known.masterTune && s.knobMode == m_known.knobMode && s.pedalPolarity == m_known.pedalPolarity
-			&& s.programChangeReceive == m_known.programChangeReceive && s.programChangeSend == m_known.programChangeSend
-			&& s.localOn == m_known.localOn && s.ledsActive == m_known.ledsActive && s.velScaleMin == m_known.velScaleMin
-			&& s.velScaleMax == m_known.velScaleMax)
+		if(s == m_known)
 			return;		// nothing changed (the name editor losing the focus)
 		m_known = s;
 		m_link.write(s);

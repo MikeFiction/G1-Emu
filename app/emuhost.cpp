@@ -190,9 +190,7 @@ namespace g1app
 			m_wavMaxFrames = static_cast<uint64_t>(std::atof(rec) * 96000.0);
 		}
 
-		wireEngine();
-		m_quit = false;
-		m_thread = std::thread([this] { run(); });
+		launch();
 		return true;
 	}
 
@@ -254,10 +252,16 @@ namespace g1app
 		m_lastReportTime = 0;
 		m_lastReportCycles = 0;
 
+		launch();
+		return true;
+	}
+
+	// The G1 (a new one, or the first) connected and running.
+	void EmuHost::launch()
+	{
 		wireEngine();
 		m_quit = false;
 		m_thread = std::thread([this] { run(); });
-		return true;
 	}
 
 	// What connects a new G1 to the sound card: the input to DSP 0, the four outputs from DSP 3.

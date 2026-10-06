@@ -1,6 +1,7 @@
 #include "Panel.h"
 
 #include "LcdFont.h"
+#include "g1Lib/g1format.h"
 #include "G1Skin.h"
 
 #include <algorithm>
@@ -212,6 +213,15 @@ namespace g1gui
 		// The parameter displays, 170 x 57: centred on their knob, over its LED (which they replace
 		// while shown), their bottom edge clear of the knob's number and ring.
 		constexpr float g_knobLcdW = 170, g_knobLcdH = 57, g_knobLcdBottom[] = {208, 450, 681};
+		// Their glass inside the artwork's frame, 2 lines of 11 characters, and its dots' size.
+		constexpr int g_knobLcdCols = 11, g_knobLcdRows = 2;
+		constexpr float g_knobLcdGlassW = g_knobLcdW * 0.92f, g_knobLcdGlassH = g_knobLcdH * 0.74f;
+		constexpr float g_knobLcdDot = std::min(g_knobLcdGlassW / g_knobLcdCols / 6.0f, g_knobLcdGlassH / g_knobLcdRows / 9.0f);
+		// The tooltips' display below the knobs: its glass, and one line of characters a little
+		// larger than theirs.
+		constexpr float g_tipX = 1225, g_tipY = 895, g_tipW = 482, g_tipH = 38;
+		constexpr float g_tipDot = 2.9f;
+		constexpr int g_tipCols = 26;
 		constexpr float g_assignX = 2388, g_assignY = 453.5f;	// the tilted button's centre: as far from "Assign" as from "Morph"
 		constexpr float g_modeX[] = {1798.5f, 1918.5f, 2037.5f, 2157.5f};	// the LEDs' centres; the buttons below
 		constexpr float g_dialX = 2619, g_dialY = 580, g_dialSize = 233.8f;	// the knob (234 of 236) as large as before
@@ -283,13 +293,14 @@ namespace g1gui
 	PanelButton::PanelButton(const juce::String& _name, g1::Microcontroller& _mc, const MatrixBit _bit, const Shape _shape)
 		: juce::Button(_name), m_mc(_mc), m_bit(_bit), m_shape(_shape)
 	{
+		setLcdTip(*this, _name);
 		if(!_bit.known())
 		{
 			setEnabled(false);
-			setTooltip(_name + ": not yet identified in the panel matrix");
+			setTooltip("Not yet identified in the panel matrix");
 			return;
 		}
-		setTooltip(_name + " (right click: hold it down)");
+		setTooltip("Right click: hold it down");
 		setWantsKeyboardFocus(false);	// the keys are the panel's: see Panel::keyPressed
 		onStateChange = [this] { update(); };
 	}
@@ -311,17 +322,19 @@ namespace g1gui
 		{
 			m_down = down;
 			m_repeatUp = false;
-			setBit(down);
+			if(down)
+				m_taken = takesPress && takesPress();
+			if(!m_taken)
+				setBit(down);
 			m_pressedAt = juce::Time::getMillisecondCounter();
+			if(const auto& callback = down ? onPress : onRelease)
+				callback();
 		}
 		// The timer repeats a navigator key held with the mouse, and pulses a button held without it.
-		if(repeating() || held())
-		{
-			if(!isTimerRunning())
-				startTimer(15);
-		}
-		else
+		if(!timerNeeded())
 			stopTimer();
+		else if(!isTimerRunning())
+			startTimer(15);
 		repaint();
 	}
 
@@ -339,6 +352,11 @@ namespace g1gui
 		constexpr juce::uint32 g_repeatDelayMs = 500, g_repeatUpMs = 40, g_repeatPeriodMs = 120;
 		// A held button's glow: from dark to lit and back, once in this long.
 		constexpr double g_pulsePeriodMs = 1200.0;
+		// How long the G1 sees Shift let go after Shift + Random, for the OS to take the knobs.
+		constexpr juce::uint32 g_shiftAfterRandomMs = 300;
+		// A knob the window has just turned (by hand, Random) shows its own position this long
+		// before it follows the patch again: until the OS has read it, the patch's value is the old.
+		constexpr juce::uint32 g_knobSettleMs = 500;
 	}
 
 	void PanelButton::setAutoRepeat(const bool _on)
@@ -346,27 +364,40 @@ namespace g1gui
 		m_autoRepeat = _on;
 		setLatchable(!_on);
 		if(isEnabled() && _on)
-			setTooltip(getName() + " (hold: repeats)");
+			setTooltip("Hold: repeats");
 	}
 
 	void PanelButton::setLatchable(const bool _on)
 	{
 		m_latchable = _on;
 		if(isEnabled() && !m_autoRepeat)
-			setTooltip(getName() + (_on ? " (right click: hold it down)" : ""));
+			setTooltip(_on ? "Right click: hold it down" : "");
+	}
+
+	void PanelButton::pressAgain(const juce::uint32 _upMs)
+	{
+		if(!m_down)
+			return;
+		setBit(false);
+		juce::Timer::callAfterDelay(static_cast<int>(_upMs), [b = juce::Component::SafePointer<PanelButton>(this), id = ++m_pressAgainId]
+		{
+			if(b != nullptr && b->m_down && b->m_pressAgainId == id)
+				b->setBit(true);
+		});
 	}
 
 	void PanelButton::timerCallback()
 	{
-		if(!repeating() && !held())
-		{
-			stopTimer();
-			return;
-		}
 		if(held())
 			repaint();	// the pulse
-		if(!repeating())
-			return;
+		if(repeating())
+			repeat();
+		if(!timerNeeded())
+			stopTimer();
+	}
+
+	void PanelButton::repeat()
+	{
 		const auto since = juce::Time::getMillisecondCounter() - m_pressedAt;
 		if(since < g_repeatDelayMs)
 			return;
@@ -385,20 +416,19 @@ namespace g1gui
 	void PanelButton::mouseDown(const juce::MouseEvent& _e)
 	{
 		m_unlatching = false;
-		if(!_e.mods.isPopupMenu())
+		if(_e.mods.isPopupMenu())
 		{
-			if(!m_latched)
-				return juce::Button::mouseDown(_e);
-			m_unlatching = true;
-			m_latched = false;
-			update();
+			if(isEnabled() && m_latchable)
+			{
+				m_latched = !m_latched;
+				update();
+			}
 			return;
 		}
-		if(isEnabled() && m_latchable)
-		{
-			m_latched = !m_latched;
-			update();
-		}
+		if(!m_latched)
+			return juce::Button::mouseDown(_e);
+		m_unlatching = true;
+		unlatch();
 	}
 
 	void PanelButton::mouseDrag(const juce::MouseEvent& _e)
@@ -456,21 +486,15 @@ namespace g1gui
 		return false;
 	}
 
-	void IconButton::paintButton(juce::Graphics& _g, const bool _over, const bool _down)
+	namespace
 	{
-		auto r = getLocalBounds().toFloat().reduced(1.0f);
-		if(_down)
-			r = r.translated(0, 1.0f);
-		_g.setColour(juce::Colour(0xff1b1b1e).brighter(_over ? 0.35f : 0.15f));
-		_g.fillRoundedRectangle(r, 4.0f);
+		// The icons, drawn on a 24 x 24 grid and scaled into the button.
 
-		// Drawn on a 24 x 24 grid and scaled into the button.
-		juce::Path p;
-		switch(m_icon)
+		// Eight teeth and a ring, all overlapping: non-zero winding fills them as one. The hole is
+		// painted over it by the button, in its own colour.
+		juce::Path gearIcon()
 		{
-		case Icon::Settings:
-			// Eight teeth and a ring, all overlapping: non-zero winding fills them as one. The
-			// hole is painted over it below, in the button's colour.
+			juce::Path p;
 			for(int i = 0; i < 8; ++i)
 			{
 				juce::Path tooth;
@@ -479,8 +503,12 @@ namespace g1gui
 				p.addPath(tooth);
 			}
 			p.addEllipse(4.5f, 4.5f, 15.0f, 15.0f);
-			break;
-		case Icon::Report:
+			return p;
+		}
+
+		juce::Path warningIcon()
+		{
+			juce::Path p;
 			p.startNewSubPath(12.0f, 2.0f);
 			p.lineTo(23.0f, 21.5f);
 			p.lineTo(1.0f, 21.5f);
@@ -489,38 +517,72 @@ namespace g1gui
 			p.setUsingNonZeroWinding(false);	// the exclamation mark is cut out of the triangle
 			p.addRoundedRectangle(10.6f, 8.0f, 2.8f, 7.5f, 1.2f);
 			p.addEllipse(10.5f, 16.8f, 3.0f, 3.0f);
-			break;
-		case Icon::Patreon:
+			return p;
+		}
+
+		juce::Path patreonIcon()
+		{
+			juce::Path p;
 			p.addEllipse(8.0f, 2.0f, 14.0f, 14.0f);
 			p.addRectangle(2.0f, 2.0f, 4.0f, 20.0f);
-			break;
-		case Icon::ExtrasOpen:
-		case Icon::ExtrasClose:
-		{
-			// A chevron: down opens the drawer, up closes it.
-			const bool down = m_icon == Icon::ExtrasOpen;
-			juce::Path line;
-			line.startNewSubPath(3.0f, down ? 8.0f : 16.0f);
-			line.lineTo(12.0f, down ? 17.0f : 7.0f);
-			line.lineTo(21.0f, down ? 8.0f : 16.0f);
-			juce::PathStrokeType(3.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded).createStrokedPath(p, line);
-			p.addRectangle(0.0f, 0.0f, 0.01f, 24.0f);	// keeps the 24 x 24 frame, so it scales like the others
-			p.addRectangle(23.99f, 0.0f, 0.01f, 24.0f);
-			break;
+			return p;
 		}
-		case Icon::Restart:
+
+		// A line drawn with a round pen, in the whole 24 x 24 frame (two hairlines at its sides),
+		// so it scales as the filled icons do.
+		juce::Path strokedIcon(const juce::Path& _line, const float _width)
 		{
-			// The power symbol: a ring open at the top, and the line through the gap.
+			juce::Path p;
+			juce::PathStrokeType(_width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded).createStrokedPath(p, _line);
+			p.addRectangle(0.0f, 0.0f, 0.01f, 24.0f);
+			p.addRectangle(23.99f, 0.0f, 0.01f, 24.0f);
+			return p;
+		}
+
+		// A chevron: down opens the drawer, up closes it.
+		juce::Path chevronIcon(const bool _down)
+		{
+			juce::Path line;
+			line.startNewSubPath(3.0f, _down ? 8.0f : 16.0f);
+			line.lineTo(12.0f, _down ? 17.0f : 7.0f);
+			line.lineTo(21.0f, _down ? 8.0f : 16.0f);
+			return strokedIcon(line, 3.2f);
+		}
+
+		// The power symbol: a ring open at the top, and the line through the gap.
+		juce::Path powerIcon()
+		{
 			juce::Path line;
 			line.addCentredArc(12.0f, 13.0f, 9.0f, 9.0f, 0.0f, juce::degreesToRadians(35.0f), juce::degreesToRadians(325.0f), true);
 			line.startNewSubPath(12.0f, 1.5f);
 			line.lineTo(12.0f, 11.0f);
-			juce::PathStrokeType(3.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded).createStrokedPath(p, line);
-			p.addRectangle(0.0f, 0.0f, 0.01f, 24.0f);	// the 24 x 24 frame, as the chevron's
-			p.addRectangle(23.99f, 0.0f, 0.01f, 24.0f);
-			break;
+			return strokedIcon(line, 3.0f);
 		}
+
+		juce::Path iconPath(const IconButton::Icon _icon)
+		{
+			switch(_icon)
+			{
+			case IconButton::Icon::Settings:	return gearIcon();
+			case IconButton::Icon::Report:		return warningIcon();
+			case IconButton::Icon::Patreon:		return patreonIcon();
+			case IconButton::Icon::ExtrasOpen:	return chevronIcon(true);
+			case IconButton::Icon::ExtrasClose:	return chevronIcon(false);
+			case IconButton::Icon::Restart:		return powerIcon();
+			}
+			return {};
 		}
+	}
+
+	void IconButton::paintButton(juce::Graphics& _g, const bool _over, const bool _down)
+	{
+		auto r = getLocalBounds().toFloat().reduced(1.0f);
+		if(_down)
+			r = r.translated(0, 1.0f);
+		_g.setColour(juce::Colour(0xff1b1b1e).brighter(_over ? 0.35f : 0.15f));
+		_g.fillRoundedRectangle(r, 4.0f);
+
+		const auto p = iconPath(m_icon);
 		const auto icon = r.reduced(5.0f);
 		_g.setColour(juce::Colour(0xffe8e8f0).withAlpha(isEnabled() ? 1.0f : 0.4f));
 		_g.fillPath(p, p.getTransformToScaleToFit(icon, true));
@@ -620,6 +682,31 @@ namespace g1gui
 
 	namespace
 	{
+		// A line in the big display's dots (LcdFont.h), 5 x 7 a character, in cells _cellW wide from
+		// _x, _y their top. Only the lit dots: the glass is the artwork's.
+		void drawLcdText(juce::Graphics& _g, const juce::String& _line, const float _x, const float _y, const float _cellW, const float _dot)
+		{
+			const auto& font = lcdFont();
+			_g.setColour(juce::Colour(0xff141d06));
+			for(int c = 0; c < _line.length(); ++c)
+			{
+				const auto ch = static_cast<juce::juce_wchar>(_line[c]);
+				if(ch <= 0x20 || ch >= 0x80)
+					continue;
+				const float x0 = _x + static_cast<float>(c) * _cellW + (_cellW - _dot * 5.0f) * 0.5f;
+				for(int y = 0; y < 7; ++y)
+					for(int x = 0; x < 5; ++x)
+						if((font[static_cast<size_t>(ch - 0x20)][static_cast<size_t>(x)] >> y) & 1)
+							_g.fillRect(x0 + static_cast<float>(x) * _dot, _y + static_cast<float>(y) * _dot, _dot * 0.86f, _dot * 0.86f);
+			}
+		}
+
+		// The display's steps, 150 ms each. Scrolling: a character a step, after the start and the
+		// end have shown for 10 steps. A flash: shown for 2 steps and blank for 1, twice.
+		constexpr int g_tipStepMs = 150, g_tipHoldSteps = 10;
+		constexpr int g_flashOnSteps = 2, g_flashPeriod = 3, g_flashSteps = 2 * g_flashPeriod;
+
+		// The floating tooltips' look.
 		constexpr float g_tipFontHeight = 12.0f, g_tipCorner = 5.0f, g_tipBlur = 6.0f;
 		constexpr int g_tipPadX = 8, g_tipPadY = 5;
 
@@ -675,11 +762,88 @@ namespace g1gui
 		tipLayout(_tip).draw(_g, area.reduced(static_cast<float>(g_tipPadX), static_cast<float>(g_tipPadY)));
 	}
 
+	void setLcdTip(juce::Component& _c, const juce::String& _tip)
+	{
+		_c.getProperties().set("lcdTip", _tip);
+	}
+
+	void TipDisplay::flash(const juce::String& _text)
+	{
+		m_flash = _text;
+		m_flashSteps = g_flashSteps;
+		updateTimer();
+		repaint();
+	}
+
+	void TipDisplay::set(const juce::String& _tip)
+	{
+		if(_tip == m_tip)
+			return;
+		m_tip = _tip;
+		m_text = _tip.upToFirstOccurrenceOf("\t", false, false).trimEnd();
+		m_value = _tip.fromFirstOccurrenceOf("\t", false, false).trim();
+		m_scroll = m_ticks = 0;
+		updateTimer();
+		repaint();
+	}
+
+	bool TipDisplay::scrolls() const
+	{
+		return m_value.isEmpty() && m_text.length() > g_tipCols;
+	}
+
+	void TipDisplay::updateTimer()
+	{
+		if(m_flashSteps > 0 || scrolls())
+			startTimer(g_tipStepMs);
+		else
+			stopTimer();
+	}
+
+	// A flash goes first; the scrolling waits for it.
+	void TipDisplay::timerCallback()
+	{
+		repaint();
+		if(m_flashSteps > 0)
+		{
+			if(--m_flashSteps == 0)
+				updateTimer();
+			return;
+		}
+		const int end = m_text.length() - g_tipCols;
+		++m_ticks;
+		if(m_scroll == 0 && m_ticks < g_tipHoldSteps)
+			return;
+		if(m_scroll < end)
+			++m_scroll;
+		else if(m_ticks >= end + 2 * g_tipHoldSteps)
+			m_scroll = m_ticks = 0;
+	}
+
+	juce::String TipDisplay::line() const
+	{
+		if(m_flashSteps > 0)
+			return (g_flashSteps - m_flashSteps) % g_flashPeriod < g_flashOnSteps ? m_flash.substring(0, g_tipCols) : juce::String();
+		if(m_value.isEmpty())
+			return m_text.substring(m_scroll, m_scroll + g_tipCols);
+		// The value whole at the right, the description cut short before it if it must be.
+		const int room = std::max(0, g_tipCols - m_value.length() - 1);
+		return m_text.substring(0, room).trimEnd().paddedRight(' ', g_tipCols - m_value.length()) + m_value;
+	}
+
+	void TipDisplay::paint(juce::Graphics& _g)
+	{
+		const auto r = spriteArea(*this);
+		const float dot = g_tipDot * r.getWidth() / g_tipW, cell = dot * 6.0f;
+		drawLcdText(_g, line(), r.getCentreX() - cell * g_tipCols * 0.5f, r.getCentreY() - dot * 3.5f, cell, dot);
+	}
+
 	void KnobDisplay::set(const g1::KnobInfo& _info)
 	{
 		const juce::String top = _info.assigned ? juce::String(_info.moduleName) : juce::String();
 		juce::String bottom = _info.assigned ? juce::String(_info.paramName) : juce::String();
-		juce::String value = _info.assigned && _info.section != 2 ? juce::String(static_cast<int>(_info.value)) : juce::String();
+		// The value as the editor reads it ("Sine", "1.25kHz"), without spaces: there are 11 characters.
+		juce::String value = _info.assigned && _info.section != 2 ? juce::String(g1::formatValue(_info.type, _info.param, _info.value)).removeCharacters(" ") : juce::String();
 		const auto t = value.isEmpty() ? top : top.substring(0, 10 - value.length()).paddedRight(' ', 11 - value.length()) + value;
 		if(t == m_top && bottom == m_bottom && _info.assigned == m_assigned)
 			return;
@@ -695,55 +859,46 @@ namespace g1gui
 		(m_assigned ? skin().smallLcd : skin().smallLcdDark).draw(_g, 0, r);
 		if(!m_assigned)
 			return;	// unlit: the knob moves nothing
-		// In the big display's dots (LcdFont.h): 2 lines of 11 characters, 5 x 7 dots each, on the
-		// glass inside the artwork's frame.
-		constexpr int cols = 11, rows = 2;
-		const auto glass = r.reduced(r.getWidth() * 0.04f, r.getHeight() * 0.13f);
-		const float cellW = glass.getWidth() / cols, cellH = glass.getHeight() / rows;
-		const float dot = std::min(cellW / 6.0f, cellH / 9.0f);
-		const auto& font = lcdFont();
-		_g.setColour(juce::Colour(0xff141d06));
-		const juce::String lines[rows] = {m_top, m_bottom};
-		for(int row = 0; row < rows; ++row)
-			for(int c = 0; c < cols && c < lines[row].length(); ++c)
-			{
-				const auto ch = static_cast<juce::juce_wchar>(lines[row][c]);
-				if(ch <= 0x20 || ch >= 0x80)
-					continue;
-				const float x0 = glass.getX() + static_cast<float>(c) * cellW + (cellW - dot * 5.0f) * 0.5f;
-				const float y0 = glass.getY() + static_cast<float>(row) * cellH + (cellH - dot * 7.0f) * 0.5f;
-				for(int y = 0; y < 7; ++y)
-					for(int x = 0; x < 5; ++x)
-						if((font[static_cast<size_t>(ch - 0x20)][static_cast<size_t>(x)] >> y) & 1)
-							_g.fillRect(x0 + static_cast<float>(x) * dot, y0 + static_cast<float>(y) * dot, dot * 0.86f, dot * 0.86f);
-			}
+		const auto glass = r.withSizeKeepingCentre(r.getWidth() * g_knobLcdGlassW / g_knobLcdW, r.getHeight() * g_knobLcdGlassH / g_knobLcdH);
+		const float cellW = glass.getWidth() / g_knobLcdCols, cellH = glass.getHeight() / g_knobLcdRows;
+		const float dot = g_knobLcdDot * r.getWidth() / g_knobLcdW;
+		const juce::String lines[g_knobLcdRows] = {m_top, m_bottom};
+		for(int row = 0; row < g_knobLcdRows; ++row)
+			drawLcdText(_g, lines[row].substring(0, g_knobLcdCols), glass.getX(), glass.getY() + static_cast<float>(row) * cellH + (cellH - dot * 7.0f) * 0.5f, cellW, dot);
 	}
 
 	Panel::Panel(PanelHost& _host) : m_host(_host), m_mc(_host.mc()), m_lcd(_host.mc().getLcd()), m_dial(_host.mc()), m_synthView(_host.synthSettings()), m_knobMap(_host.mc())
 	{
 		addAndMakeVisible(m_lcd);
 		addAndMakeVisible(m_dial);
+		addAndMakeVisible(m_tip);
 		m_tooltips.setOpaque(false);	// rounded, over the panel blurred
 		m_tooltips.setLookAndFeel(&m_tooltipLook);
 
 		// Each knob starts where the G1's ADC says it is: the G1 is already running (and in the
 		// plugin, the editor comes and goes), so writing a position here would be turning it.
-		auto setupKnob = [this](juce::Slider& _s, const uint8_t _adc, const juce::String& _tip)
+		// _turnedAt, if given, keeps when the window last turned it (updateKnobs).
+		auto setupKnob = [this](juce::Slider& _s, const uint8_t _adc, const juce::String& _tip, juce::uint32* _turnedAt)
 		{
 			_s.setLookAndFeel(&m_knobLook);
 			_s.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
 			_s.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
 			_s.setRange(0, 255, 1);
 			_s.setRotaryParameters(juce::MathConstants<float>::pi * 1.25f, juce::MathConstants<float>::pi * 2.75f, true);
-			_s.setTooltip(_tip);
+			setLcdTip(_s, _tip);
 			_s.setValue(m_mc.adc(_adc), juce::dontSendNotification);
-			_s.onValueChange = [this, &_s, _adc] { m_mc.setAdc(_adc, static_cast<uint8_t>(_s.getValue())); };
+			_s.onValueChange = [this, &_s, _adc, _turnedAt]
+			{
+				m_mc.setAdc(_adc, static_cast<uint8_t>(_s.getValue()));
+				if(_turnedAt)
+					*_turnedAt = juce::Time::getMillisecondCounter();
+			};
 			addAndMakeVisible(_s);
 		};
-		setupKnob(m_volume, VolumeAdc, "Master Volume");
+		setupKnob(m_volume, VolumeAdc, "Master Volume", nullptr);
 		for(size_t i = 0; i < m_knobs.size(); ++i)
 		{
-			setupKnob(m_knobs[i], g_knobAdc[i], "Knob " + juce::String(static_cast<int>(i + 1)));
+			setupKnob(m_knobs[i], g_knobAdc[i], "Knob " + juce::String(static_cast<int>(i + 1)), &m_knobTurnedAt[i]);
 			m_knobLeds[i] = &addLed({static_cast<int>(i % 3), 1 + static_cast<int>(i / 3)});
 		}
 
@@ -751,7 +906,6 @@ namespace g1gui
 		m_panelSplitLed = &addLed(g_panelSplitLed);
 		m_panelSplit = &addButton("Panel Split", g_btnPanelSplit);
 		m_panelSplit->setLatchable(false);	// a toggle: held, it does nothing more
-		m_panelSplit->setTooltip("Panel Split");
 		m_find = &addButton("Find", g_btnFind);
 
 		const char* modes[] = {"Store", "System", "Edit", "Patch/Load"};
@@ -766,10 +920,26 @@ namespace g1gui
 		for(size_t i = 0; i < 4; ++i)
 		{
 			m_slotButtons[i] = &addButton(slots[i], slotBits[i]);
+			setLcdTip(*m_slotButtons[i], juce::String("Slot ") + slots[i]);
 			m_slotLeds[i] = &addLed(g_slotLeds[i]);
 		}
 		m_assign = &addButton("Assign / Morph", g_btnAssign, PanelButton::Shape::Tilted);
 		m_shift = &addButton("Shift", g_btnShift);
+		m_shiftNames = {
+			{m_find, [](const bool _shift) { return juce::String(_shift ? "Panic" : "Find"); }},
+			{m_modeButtons[0], [this](const bool _shift) { return storeName(_shift); }},
+			{m_assign, [](const bool _shift) { return juce::String(_shift ? "Morph" : "Assign"); }},
+			{m_modeButtons[3], [](const bool _shift) { return juce::String(_shift ? "Random Knobs" : "Patch/Load"); }}};
+		// Shift + Patch/Load is the extras' Random: the OS has nothing of its own there (it asks
+		// Load? as without Shift), so the G1 does not see that press. Shift stays held, for
+		// another Random or another key.
+		m_modeButtons[3]->takesPress = [this]
+		{
+			if(!m_shift->isPressed())
+				return false;
+			randomizeKnobs();
+			return true;
+		};
 		m_nav[0] = &addButton("Up", g_btnUp, PanelButton::Shape::Tall);
 		m_nav[1] = &addButton("Left", g_btnLeft);
 		m_nav[2] = &addButton("Right", g_btnRight);
@@ -777,7 +947,7 @@ namespace g1gui
 		for(auto* nav : m_nav)
 		{
 			nav->setAutoRepeat(true);
-			nav->setTooltip("Nav: " + nav->getName());
+			setLcdTip(*nav, "Navigator " + nav->getName());
 		}
 
 		m_status.setFont(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 12.5f, juce::Font::plain));
@@ -811,10 +981,11 @@ namespace g1gui
 
 		// Random: each of the 18 knobs to a value of its own, as if turned by hand. What it
 		// changes is whatever the patch has assigned to them; knobs with nothing assigned do nothing.
-		m_random.setTooltip("Turn the 18 knobs to random positions (double click: back to the patch's values)");
-		m_random.onSingleClick = [this] { randomizeKnobs(); };
-		m_random.onDoubleClick = [this] { restoreKnobs(); };
-		m_drawer.addAndMakeVisible(m_random);
+		// Out of the extras for now: Shift + Patch/Load does it on the panel (randomizeKnobs).
+		// m_random.setTooltip("Turn the 18 knobs to random positions (double click: back to the patch's values)");
+		// m_random.onSingleClick = [this] { randomizeKnobs(); };
+		// m_random.onDoubleClick = [this] { restoreKnobs(); };
+		// m_drawer.addAndMakeVisible(m_random);
 
 		m_displaysToggle.setTooltip("Show above each knob the module and parameter it moves");
 		m_displaysToggle.setColour(juce::ToggleButton::textColourId, g_textLight);
@@ -873,8 +1044,64 @@ namespace g1gui
 	PanelButton& Panel::addButton(const juce::String& _name, const MatrixBit _bit, const PanelButton::Shape _shape)
 	{
 		m_buttons.push_back(std::make_unique<PanelButton>(_name, m_mc, _bit, _shape));
-		addAndMakeVisible(*m_buttons.back());
-		return *m_buttons.back();
+		auto& b = *m_buttons.back();
+		b.onPress = [this, &b] { buttonPressed(b); };
+		b.onRelease = [this, &b] { buttonReleased(b); };
+		addAndMakeVisible(b);
+		return b;
+	}
+
+	void Panel::buttonPressed(PanelButton& _b)
+	{
+		if(&_b == m_shift || !m_shift->isPressed())
+			return;
+		m_shiftUsed = !_b.wasTaken();	// what the window takes (Random) leaves Shift held
+		// Not Morph: it is held while the dial sets the range, a flash would only be in the way.
+		for(const auto& s : m_shiftNames)
+			if(const auto name = s.name(true); s.button == &_b && s.button != m_assign && name.isNotEmpty())
+				m_tip.flash(name);
+	}
+
+	// Store asks "Store?" in Patch/Load mode only; Shift + Store saves the synth settings there
+	// and in System. In Edit the OS ignores both (NOTES.md, "What each button does").
+	juce::String Panel::storeName(const bool _shift) const
+	{
+		if(_shift)
+			return m_mode == Mode::Patch || m_mode == Mode::System ? "Save Synth. Settings" : "";
+		return m_mode == Mode::Patch ? "Store Patch" : "";
+	}
+
+	bool Panel::ledLit(const MatrixBit _bit) const
+	{
+		return !(m_mc.ledRow(static_cast<uint32_t>(_bit.row)) & (1u << _bit.bit));	// active low
+	}
+
+	// A mode LED counts as lit for a while after it was seen lit: in a prompt (Load?) it blinks.
+	// Edit and System win over Patch/Load, Store's LED is not a mode of its own (Store? is asked
+	// from Patch/Load, whose LED stays lit).
+	void Panel::updateMode()
+	{
+		constexpr juce::uint32 holdMs = 600;
+		const auto now = juce::Time::getMillisecondCounter();
+		for(size_t i = 0; i < 4; ++i)
+			if(ledLit(g_modeLeds[i]))
+				m_modeLitAt[i] = now;
+		const auto lit = [&](const size_t _i) { return m_modeLitAt[_i] != 0 && now - m_modeLitAt[_i] < holdMs; };
+		m_mode = lit(2) ? Mode::Edit : lit(1) ? Mode::System : lit(3) ? Mode::Patch : Mode::Other;
+	}
+
+	void Panel::buttonReleased(PanelButton& _b)
+	{
+		if(&_b == m_shift || !std::exchange(m_shiftUsed, false))
+			return;
+		// The slot buttons take Shift one after the other (Shift, A, B: both slots' voices), so it
+		// stays down for them. The OS still wants it pressed again for the next key: it gets that.
+		if(std::find(m_slotButtons.begin(), m_slotButtons.end(), &_b) != m_slotButtons.end())
+			return m_shift->pressAgain(g_repeatUpMs);
+		if(m_shiftKey)
+			m_shiftSpent = true;
+		m_shift->unlatch();
+		updateHeldKeys();
 	}
 
 	LedView& Panel::addLed(const MatrixBit _bit)
@@ -937,6 +1164,7 @@ namespace g1gui
 
 		// Right: display, modes, slots, navigator, Assign/Morph, Shift and the dial
 		m_lcd.setBounds(sk(1781, 188, 477, 120));
+		place(m_tip, skf(g_tipX, g_tipY, g_tipW, g_tipH));
 		for(size_t i = 0; i < 4; ++i)
 		{
 			place(*m_modeLeds[i], ledAt(g_modeX[i], 474.5f));
@@ -964,13 +1192,13 @@ namespace g1gui
 		m_settings.setBounds(getWidth() - 14 - 26, bar + 3, 26, 24);
 		m_drawerClip.setBounds(0, Height, getWidth(), g_extrasHeight);
 		m_drawer.setSize(getWidth(), g_extrasHeight);
-		m_random.setBounds(140, 15, 100, 28);
+		// m_random.setBounds(140, 15, 100, 28);	// out of the extras for now
+		m_synthButton.setBounds(140, 15, 110, 28);	// where Random was
 		m_displaysToggle.setBounds(260, 15, 180, 28);
 		m_followToggle.setBounds(450, 15, 200, 28);
-		// At the right: Synth Settings, and Restart (where there is one) at the very end.
+		// At the right: Restart (where there is one).
 		const int right = getWidth() - 12 - 10;	// the tray's edge, less the margin above and below them
 		m_restart.setBounds(right - 28, 15, 28, 28);
-		m_synthButton.setBounds((m_restart.isVisible() ? right - 38 : right) - 130, 15, 130, 28);
 		if(m_synthView.isVisible())
 			m_synthView.setBounds(getLocalBounds());
 		placeDrawer();
@@ -982,7 +1210,7 @@ namespace g1gui
 	{
 		m_extrasOpen = _open;
 		m_extras.setIcon(_open ? IconButton::Icon::ExtrasClose : IconButton::Icon::ExtrasOpen);
-		m_extras.setTooltip(_open ? "Hide the extras" : "Extras: Random and more");
+		m_extras.setTooltip(_open ? "Hide the extras" : "Extras: knob displays, synth settings and more");	// was "Extras: Random and more"
 		if(_open)
 		{
 			m_drawerClip.setVisible(true);
@@ -1039,18 +1267,52 @@ namespace g1gui
 			led->setVisible(!_on);
 	}
 
+	// The synth's control under the mouse, on the tooltips' display: at once, and also while it is
+	// held, so a knob being turned shows its value. Blank anywhere else.
+	void Panel::updateTip()
+	{
+		juce::String tip;
+		const auto mouse = juce::Desktop::getInstance().getMainMouseSource();
+		for(auto* c = mouse.isTouch() ? nullptr : mouse.getComponentUnderMouse(); c != nullptr && isParentOf(c); c = c->getParentComponent())
+		{
+			if(const auto* t = c->getProperties().getVarPointer("lcdTip"))
+			{
+				tip = t->toString();
+				break;
+			}
+		}
+		m_tip.set(tip);
+	}
+
+	namespace
+	{
+		// Whether a knob moves the same parameter of the same module in both.
+		bool sameAssignment(const g1::KnobInfo& _a, const g1::KnobInfo& _b)
+		{
+			return _a.assigned == _b.assigned && _a.slot == _b.slot && _a.section == _b.section
+				&& _a.module == _b.module && _a.param == _b.param && _a.type == _b.type;
+		}
+	}
+
+	// The OS ignores the knobs while Shift is down: when the window turns them (Random, its
+	// double click) with Shift held, the G1 sees Shift let go while they move and down again after.
+	// On the panel Shift stays as it was.
+	void Panel::shiftAsideForKnobs()
+	{
+		if(m_shift->isPressed())
+			m_shift->pressAgain(g_shiftAfterRandomMs);
+	}
+
 	void Panel::randomizeKnobs()
 	{
+		shiftAsideForKnobs();
 		// Keep the patch's values the first time, and again once the assignments have changed.
-		bool same = m_haveSnapshot;
 		std::array<g1::KnobInfo, 18> now;
+		bool same = m_haveSnapshot;
 		for(uint32_t k = 0; k < 18; ++k)
 		{
 			now[k] = m_knobMap.read(k);
-			const auto& a = now[k];
-			const auto& b = m_snapshot[k];
-			if(a.assigned != b.assigned || a.slot != b.slot || a.section != b.section || a.module != b.module || a.param != b.param || a.type != b.type)
-				same = false;
+			same = same && sameAssignment(now[k], m_snapshot[k]);
 		}
 		if(!same)
 		{
@@ -1061,19 +1323,18 @@ namespace g1gui
 			k.setValue(1 + m_rng.nextInt(254), juce::sendNotificationSync);	// 0 and 255 the OS ignores
 	}
 
+	// Only where the knob still moves the same parameter, and not the morph groups, whose value
+	// the snapshot does not have.
 	void Panel::restoreKnobs()
 	{
 		if(!m_haveSnapshot)
 			return;
+		shiftAsideForKnobs();
 		for(uint32_t k = 0; k < 18; ++k)
 		{
 			const auto& s = m_snapshot[k];
-			const auto now = m_knobMap.read(k);
-			// Only where the knob still moves the same parameter, and not the morph groups, whose
-			// value the snapshot does not have.
-			if(!s.assigned || s.section == 2 || !now.assigned || now.slot != s.slot || now.section != s.section || now.module != s.module || now.param != s.param)
-				continue;
-			m_knobs[k].setValue(g1::KnobMap::positionFor(s.value, s.max), juce::sendNotificationSync);
+			if(s.assigned && s.section != 2 && sameAssignment(s, m_knobMap.read(k)))
+				m_knobs[k].setValue(g1::KnobMap::positionFor(s.value, s.max), juce::sendNotificationSync);
 		}
 	}
 
@@ -1127,7 +1388,9 @@ namespace g1gui
 	{
 		const bool focused = hasKeyboardFocus(true);
 		const bool shift = juce::ModifierKeys::getCurrentModifiersRealtime().isShiftDown();
-		m_shiftKey = shift && (m_shiftKey || focused || isMouseOver(true));
+		if(!shift)
+			m_shiftSpent = false;
+		m_shiftKey = shift && !m_shiftSpent && (m_shiftKey || focused || isMouseOver(true));
 		m_shift->setKeyHeld(m_shiftKey);
 		for(size_t i = 0; i < 4; ++i)
 			m_slotButtons[i]->setKeyHeld(focused && juce::KeyPress::isKeyCurrentlyDown(g_slotKeys[i]));
@@ -1137,44 +1400,85 @@ namespace g1gui
 	{
 		m_lcd.repaint();
 		updateHeldKeys();
-		// The knobs follow the G1's own positions, which something else may have moved (the
-		// plugin's host automation), except the one being turned by hand. Following the patch, a
-		// knob shows instead where its parameter's value would put it, as a patch loaded on the
-		// hardware leaves its knobs where they were; turning it starts from there. A knob with
-		// nothing assigned, or on a morph group (no value to read), shows its position.
-		const bool follow = m_followToggle.getToggleState();
 		std::array<g1::KnobInfo, 18> info{};
 		for(uint32_t k = 0; k < 18; ++k)
 			info[k] = m_knobMap.read(k);
-		// Each knob's tooltip says what it moves, as its display does: with the displays off,
-		// hovering a knob still tells. JUCE reads it again while it shows, so it follows the patch.
-		for(size_t i = 0; i < m_knobs.size(); ++i)
-		{
-			const auto& k = info[i];
-			juce::String tip = "Knob " + juce::String(static_cast<int>(i + 1)) + ": ";
-			if(!k.assigned)
-				tip << "nothing assigned";
-			else if(k.section == 2)
-				tip << juce::String(k.moduleName) << ", " << juce::String(k.paramName);
-			else
-				tip << juce::String(k.moduleName) << ", " << juce::String(k.paramName) << " = " << static_cast<int>(k.value);
-			if(m_knobs[i].getTooltip() != tip)
-				m_knobs[i].setTooltip(tip);
-		}
+		updateKnobs(info);
+		updateLcdTips(info);
+		for(auto& [led, bit] : m_ledMap)
+			led->setOn(ledLit(bit));
+		updateStatus();
+	}
+
+	// The knobs follow the G1's own positions, which something else may have moved (the plugin's
+	// host automation), except the one being turned by hand. Following the patch, a knob shows
+	// instead where its parameter's value would put it, as a patch loaded on the hardware leaves
+	// its knobs where they were; turning it starts from there. A knob with nothing assigned, or on
+	// a morph group (no value to read), shows its position.
+	void Panel::updateKnobs(const std::array<g1::KnobInfo, 18>& _info)
+	{
+		const bool follow = m_followToggle.getToggleState();
+		const auto now = juce::Time::getMillisecondCounter();
 		for(size_t i = 0; i < m_knobs.size(); ++i)
 		{
 			if(m_knobs[i].isMouseButtonDown())
 				continue;
-			const auto& k = info[i];
-			const bool fromPatch = follow && k.assigned && k.section != 2;
+			const auto& k = _info[i];
+			const bool settling = m_knobTurnedAt[i] != 0 && now - m_knobTurnedAt[i] < g_knobSettleMs;
+			const bool fromPatch = follow && k.assigned && k.section != 2 && !settling;
 			m_knobs[i].setValue(fromPatch ? g1::KnobMap::positionFor(k.value, k.max) : m_mc.adc(g_knobAdc[i]), juce::dontSendNotification);
 		}
+		if(!m_volume.isMouseButtonDown())
+			m_volume.setValue(m_mc.adc(VolumeAdc), juce::dontSendNotification);
 		if(m_knobDisplays[0].isVisible())
 			for(uint32_t k = 0; k < 18; ++k)
-				m_knobDisplays[k].set(info[k]);
-		for(auto& [led, bit] : m_ledMap)
-			led->setOn(!(m_mc.ledRow(static_cast<uint32_t>(bit.row)) & (1u << bit.bit)));
+				m_knobDisplays[k].set(_info[k]);
+	}
 
+	namespace
+	{
+		// What a knob moves, for the tooltips' display, as its display says it: with the displays
+		// off, hovering a knob still tells. The value after a tab, at the right. Its number is on
+		// the panel already.
+		juce::String knobTip(const g1::KnobInfo& _k)
+		{
+			if(!_k.assigned)
+				return "Nothing assigned";
+			const auto name = juce::String(_k.moduleName) + ", " + juce::String(_k.paramName);
+			if(_k.section == 2)
+				return name;	// a morph group: no value to read
+			return name + "\t" + juce::String(g1::formatValue(_k.type, _k.param, _k.value));
+		}
+	}
+
+	juce::String Panel::shiftedKnobTip(const g1::KnobInfo& _k) const
+	{
+		if(m_mode == Mode::Edit)
+			return _k.assigned ? "Clear Knob" : knobTip(_k);
+		if(m_mode == Mode::Patch || m_mode == Mode::System)
+			return {};
+		return knobTip(_k);
+	}
+
+	// What the tooltips' display says for the controls whose text changes: the knobs, the master
+	// volume (in the OS's steps: it takes the knob's position halved, NOTES.md) and the buttons
+	// with a second function.
+	void Panel::updateLcdTips(const std::array<g1::KnobInfo, 18>& _info)
+	{
+		updateMode();
+		const bool shift = m_shift->isPressed();
+		// With Shift down, a turn changes nothing (the OS ignores it), except in Edit mode, where it
+		// takes an assigned knob's assignment away (the manual, Assign/Morph).
+		for(size_t i = 0; i < m_knobs.size(); ++i)
+			setLcdTip(m_knobs[i], shift ? shiftedKnobTip(_info[i]) : knobTip(_info[i]));
+		setLcdTip(m_volume, "Master Volume\t" + juce::String(m_mc.adc(VolumeAdc) / 2));
+		for(const auto& s : m_shiftNames)
+			setLcdTip(*s.button, s.name(shift));
+		updateTip();
+	}
+
+	void Panel::updateStatus()
+	{
 		const auto s = m_host.stats();
 		// MIDI LED: lights briefly with whatever comes in on the MIDI port (notes, CC)
 		if(s.midiIn != m_lastMidiIn)
@@ -1218,12 +1522,11 @@ namespace g1gui
 		setSize(juce::roundToInt(static_cast<float>(m_panel.getWidth()) * s), juce::roundToInt(static_cast<float>(m_panel.getHeight()) * s));
 	}
 
-	void PanelView::applyLimits(juce::ComponentBoundsConstrainer& _c) const
+	void PanelView::applyLimits(juce::ComponentBoundsConstrainer& _c, const double _aspect)
 	{
-		const double ratio = aspectRatio();
-		const auto w = [&](const float _s) { return juce::roundToInt(static_cast<float>(m_panel.getWidth()) * _s); };
-		_c.setFixedAspectRatio(ratio);
-		_c.setSizeLimits(w(MinScale), juce::roundToInt(w(MinScale) / ratio), w(MaxScale), juce::roundToInt(w(MaxScale) / ratio));
+		const auto w = [](const float _s) { return juce::roundToInt(static_cast<float>(Panel::Width) * _s); };
+		_c.setFixedAspectRatio(_aspect);
+		_c.setSizeLimits(w(MinScale), juce::roundToInt(w(MinScale) / _aspect), w(MaxScale), juce::roundToInt(w(MaxScale) / _aspect));
 	}
 
 	// The panel as large as it fits, centred: a window whose resizer counts its title bar, or a

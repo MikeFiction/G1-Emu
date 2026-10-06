@@ -87,6 +87,7 @@ namespace g1app
 	private:
 		void run();
 		void boot(bool _update, std::string& _log);
+		void launch();
 		void wireEngine();
 		bool bindRawMidi(std::string& _log);
 		void saveFlash();

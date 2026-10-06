@@ -680,8 +680,14 @@ int main(int argc, char** argv)
 	};
 	// A step of a sequence can also be a knob or the dial, so that a whole panel gesture can be
 	// written down: "1.2,1.6,k1=200,d3,2.6" is Edit, down, knob 1 to 200, three detents, Assign.
+	// "h2.7" holds a button down and "u2.7" lets it go: Shift pressed again in the middle.
 	auto gesture = [&](const juce::String& _step) -> bool
 	{
+		if(_step.startsWithChar('h') || _step.startsWithChar('u'))
+		{
+			button(_step.substring(1), _step.startsWithChar('h'));
+			return true;
+		}
 		if(_step.startsWithChar('k'))
 		{
 			static constexpr std::array<uint8_t, 18> adc = {0x31, 0x37, 0x2d, 0x32, 0x28, 0x2e, 0x33, 0x29, 0x2f, 0x34, 0x2a, 0x1a, 0x35, 0x2b, 0x1b, 0x36, 0x2c, 0x1c};

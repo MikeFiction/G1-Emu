@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <mutex>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace g1app
@@ -39,6 +40,16 @@ namespace g1app
 		// The section as the OS sends and takes it (type 3 and its fields), 8-bit.
 		std::vector<uint8_t> encode() const;
 		static bool decode(const std::vector<uint8_t>& _section, SynthSettings& _out);
+
+		bool operator==(const SynthSettings& _o) const { return tied() == _o.tied(); }
+		bool operator!=(const SynthSettings& _o) const { return !(*this == _o); }
+
+	private:
+		auto tied() const
+		{
+			return std::tie(clockInternal, velScaleMin, velScaleMax, ledsActive, clockBpm, localOn, keyboardMode, pedalPolarity,
+				globalSync, masterTune, programChangeReceive, programChangeSend, knobMode, name, midiChannel);
+		}
 	};
 
 	class SynthSettingsLink
@@ -61,8 +72,11 @@ namespace g1app
 	private:
 		enum class State { Idle, Greeting, Reading, Writing };
 
-		void send(const std::vector<uint8_t>& _msg, uint64_t _nowMs, std::vector<uint8_t>& _toG1);
+		void startNext(uint64_t _nowMs, std::vector<uint8_t>& _toG1);
+		void request(const std::vector<uint8_t>& _msg, State _state, uint64_t _timeoutMs, uint64_t _nowMs, std::vector<uint8_t>& _toG1);
 		void finish(uint64_t _nowMs);
+		bool hides(uint8_t _cc, uint64_t _nowMs) const;
+		void takeReply(const std::vector<uint8_t>& _m, uint64_t _nowMs);
 
 		mutable std::mutex m_mutex;		// what the other threads see and ask for
 		SynthSettings m_settings;

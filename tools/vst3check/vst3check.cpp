@@ -317,6 +317,74 @@ namespace
 		return out;
 	}
 
+	// The panel's preferences in a plugin state, as they read.
+	juce::String preferencesText(const juce::XmlElement& _xml)
+	{
+		juce::StringArray parts;
+		for(const auto* key : {"panelScale", "extrasOpen", "knobDisplays", "knobFollowsPatch"})
+			parts.add(juce::String(key) + " " + _xml.getStringAttribute(key, "(none)"));
+		return parts.joinIntoString(", ");
+	}
+
+	int parameterIndex(juce::AudioPluginInstance& _p, const juce::String& _name)
+	{
+		const auto params = _p.getParameters();
+		for(int i = 0; i < params.size(); ++i)
+			if(params[i]->getName(64) == _name)
+				return i;
+		return -1;
+	}
+
+	// The host sets parameter _index to _value and plays; then the project, saved, goes into a new
+	// instance. What the parameter is after playing, and in the new instance.
+	struct RoundTrip { float kept = -1, restored = -1; };
+	RoundTrip roundTrip(juce::AudioPluginFormatManager& _formats, const juce::String& _path, Voice& _v, const int _index, const float _value)
+	{
+		auto* p = _v.plugin->getParameters()[_index];
+		p->setValueNotifyingHost(_value);
+		play({&_v}, 1.0);
+		juce::MessageManager::getInstance()->runDispatchLoopUntil(300);
+		RoundTrip r;
+		r.kept = p->getValue();
+		juce::MemoryBlock state;
+		_v.plugin->getStateInformation(state);
+		Voice d;
+		d.plugin = load(_formats, _path);
+		d.plugin->setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+		play({&d}, 1.0);
+		juce::MessageManager::getInstance()->runDispatchLoopUntil(300);
+		r.restored = d.plugin->getParameters()[_index]->getValue();
+		return r;
+	}
+
+	// The plugin's preferences (what a new instance starts with) are the user's: kept as they are
+	// while a check changes them, and put back however it ends.
+	class KeepPreferences
+	{
+	public:
+		KeepPreferences()
+		// The per-user G1-Emu directory, as g1app::defaultSettingsPath has it.
+	#if defined(_WIN32)
+			: m_file(juce::File(juce::SystemStats::getEnvironmentVariable("APPDATA", {})).getChildFile("Animatek/G1-Emu/plugin.conf"))
+	#else
+			: m_file(juce::File("~/.local/share/Animatek/G1-Emu/plugin.conf"))
+	#endif
+			, m_had(m_file.existsAsFile()), m_text(m_had ? m_file.loadFileAsString() : juce::String())
+		{
+		}
+		~KeepPreferences()
+		{
+			if(m_had)
+				m_file.replaceWithText(m_text);
+			else
+				m_file.deleteFile();
+		}
+	private:
+		const juce::File m_file;
+		const bool m_had;
+		const juce::String m_text;
+	};
+
 	std::unique_ptr<juce::AudioProcessorEditor> openEditor(juce::AudioPluginInstance& _p)
 	{
 		std::unique_ptr<juce::AudioProcessorEditor> editor(_p.createEditorIfNeeded());
@@ -341,23 +409,7 @@ namespace
 	// knobs following the patch opens like that, at the size it was saved at.
 	int checkWindow(juce::AudioPluginFormatManager& _formats, const juce::String& _path)
 	{
-		// The plugin's preferences (what a new instance starts with) are the user's: kept as they
-		// are and put back at the end.
-		// The per-user G1-Emu directory, as g1app::defaultSettingsPath has it.
-	#if defined(_WIN32)
-		const auto prefs = juce::File(juce::SystemStats::getEnvironmentVariable("APPDATA", {})).getChildFile("Animatek/G1-Emu/plugin.conf");
-	#else
-		const auto prefs = juce::File("~/.local/share/Animatek/G1-Emu/plugin.conf");
-	#endif
-		const bool hadPrefs = prefs.existsAsFile();
-		const auto userPrefs = hadPrefs ? prefs.loadFileAsString() : juce::String();
-		const auto restorePrefs = [&]
-		{
-			if(hadPrefs)
-				prefs.replaceWithText(userPrefs);
-			else
-				prefs.deleteFile();
-		};
+		const KeepPreferences keep;
 		int failed = 0;
 		Voice a;
 		a.plugin = load(_formats, _path);
@@ -391,9 +443,7 @@ namespace
 			std::printf("FAIL: the project's state is not the plugin's XML\n");
 			return 1;
 		}
-		std::printf("saved: panelScale %s, extrasOpen %s, knobDisplays %s, knobFollowsPatch %s\n",
-			xml->getStringAttribute("panelScale", "(none)").toRawUTF8(), xml->getStringAttribute("extrasOpen", "(none)").toRawUTF8(),
-			xml->getStringAttribute("knobDisplays", "(none)").toRawUTF8(), xml->getStringAttribute("knobFollowsPatch", "(none)").toRawUTF8());
+		std::printf("saved: %s\n", preferencesText(*xml).toRawUTF8());
 		// The size kept is the one the editor was given. (JUCE's own host window, this one, gives
 		// a little less than it is asked for on Windows, about 3%: that is its business.)
 		const double kept = xml->getDoubleAttribute("panelScale");
@@ -427,9 +477,7 @@ namespace
 		b.plugin->getStateInformation(again);
 		if(const auto x = pluginXml(again))
 		{
-			std::printf("saved again: panelScale %s, extrasOpen %s, knobDisplays %s, knobFollowsPatch %s\n",
-				x->getStringAttribute("panelScale").toRawUTF8(), x->getStringAttribute("extrasOpen").toRawUTF8(),
-				x->getStringAttribute("knobDisplays").toRawUTF8(), x->getStringAttribute("knobFollowsPatch").toRawUTF8());
+			std::printf("saved again: %s\n", preferencesText(*x).toRawUTF8());
 			if(!x->getBoolAttribute("extrasOpen") || !x->getBoolAttribute("knobDisplays") || !x->getBoolAttribute("knobFollowsPatch"))
 			{
 				std::printf("FAIL: the extras' settings do not survive a reopened project\n");
@@ -455,7 +503,6 @@ namespace
 			std::printf("FAIL: a new instance does not start as the last editor was left\n");
 			failed = 1;
 		}
-		restorePrefs();
 		return failed;
 	}
 }
@@ -485,6 +532,7 @@ int main(int _argc, char** _argv)
 		return failed;
 	}
 
+	const KeepPreferences keep;	// the editor opened at the end saves its size as a new instance's
 	Voice a, b;
 	a.plugin = load(formats, path);
 	b.plugin = load(formats, path);
@@ -564,31 +612,31 @@ int main(int _argc, char** _argv)
 	// The 18 knobs as parameters: the host turns knob 1, the G1 keeps it there (nothing turns it
 	// back), and a project saved after that brings it back in a new instance.
 	{
-		auto& cp = *c.plugin;
-		auto params = cp.getParameters();
+		const auto params = c.plugin->getParameters();
 		int knobs = 0;
 		for(auto* prm : params)
 			if(prm->getName(64).startsWith("Knob "))
 				++knobs;
 		juce::MessageManager::getInstance()->runDispatchLoopUntil(300);	// the names follow the patch
 		std::printf("knob parameters: %d; knob 1 is \"%s\"\n", knobs, params.isEmpty() ? "" : params[0]->getName(64).toRawUTF8());
-		params[0]->setValueNotifyingHost(0.75f);
-		play({&c}, 1.0);
-		juce::MessageManager::getInstance()->runDispatchLoopUntil(300);
-		const float kept = params[0]->getValue();
-		juce::MemoryBlock withKnob;
-		cp.getStateInformation(withKnob);
-		Voice d;
-		d.plugin = load(formats, path);
-		d.plugin->setStateInformation(withKnob.getData(), static_cast<int>(withKnob.getSize()));
-		play({&d}, 1.0);
-		juce::MessageManager::getInstance()->runDispatchLoopUntil(300);
-		const float restored = d.plugin->getParameters()[0]->getValue();
+		const auto r = roundTrip(formats, path, c, 0, 0.75f);
 		std::printf("knob 1 set to 0.75 by the host: %.3f after playing (%s), %.3f in a project reopened\n",
-			kept, params[0]->getCurrentValueAsText().toRawUTF8(), restored);
-		if(knobs != 18 || std::abs(kept - 0.75f) > 0.005f || std::abs(restored - 0.75f) > 0.005f)
+			r.kept, params[0]->getCurrentValueAsText().toRawUTF8(), r.restored);
+		if(knobs != 18 || std::abs(r.kept - 0.75f) > 0.005f || std::abs(r.restored - 0.75f) > 0.005f)
 		{
 			std::printf("FAIL: the knobs as parameters\n");
+			failed = 1;
+		}
+	}
+
+	// The master volume as a parameter, the same way: 0-127, set to 64 by the host.
+	{
+		const int vol = parameterIndex(*c.plugin, "Master Volume");
+		const auto r = vol < 0 ? RoundTrip{} : roundTrip(formats, path, c, vol, 64.0f / 127.0f);
+		std::printf("master volume set to 64 by the host: %.0f after playing, %.0f in a project reopened\n", r.kept * 127.0f, r.restored * 127.0f);
+		if(vol < 0 || std::abs(r.kept * 127.0f - 64.0f) > 0.01f || std::abs(r.restored * 127.0f - 64.0f) > 0.01f)
+		{
+			std::printf("FAIL: the master volume as a parameter\n");
 			failed = 1;
 		}
 	}

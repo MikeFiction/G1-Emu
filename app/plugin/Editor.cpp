@@ -97,11 +97,7 @@ namespace g1plugin
 	// Resizable in the panel's proportions, from PanelView's smallest scale to its largest.
 	void Editor::fitTo(const double _aspect)
 	{
-		auto* c = getConstrainer();
-		const auto w = [](const float _s) { return juce::roundToInt(static_cast<float>(g1gui::Panel::Width) * _s); };
-		c->setFixedAspectRatio(_aspect);
-		c->setSizeLimits(w(g1gui::PanelView::MinScale), juce::roundToInt(w(g1gui::PanelView::MinScale) / _aspect),
-			w(g1gui::PanelView::MaxScale), juce::roundToInt(w(g1gui::PanelView::MaxScale) / _aspect));
+		g1gui::PanelView::applyLimits(*getConstrainer(), _aspect);
 	}
 
 	// The panel changes its own height when the extras drawer opens: the editor follows.

@@ -25,6 +25,11 @@ target_include_directories(g1Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_definitions(g1Core PRIVATE G1_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_link_libraries(g1Core PUBLIC g1Lib)
 
+# Parameter values as the editor reads them (g1Lib/g1format.h). No ROM needed.
+add_executable(g1formattest formattest.cpp)
+target_link_libraries(g1formattest PRIVATE g1Lib)
+add_test(NAME g1formattest COMMAND g1formattest)
+
 # The SlotKeeper against an emulated G1 (issue #25). Needs a ROM, so without one it reports itself
 # skipped.
 add_executable(g1slotkeepertest slotkeepertest.cpp)
