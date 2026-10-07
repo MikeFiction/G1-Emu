@@ -1700,7 +1700,7 @@ namespace g1gui
 		// The emulator's settings (the gear: audio, MIDI...) and About (the extras drawer's): the
 		// same as pressing them.
 		menu.addItem("Settings", [this] { m_settings.onClick(); });
-		menu.addItem("Info", [this] { m_about.onClick(); });
+		menu.addItem("About", [this] { m_about.onClick(); });
 		showMenu(menu);
 	}
 
