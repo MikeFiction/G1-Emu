@@ -569,13 +569,55 @@ Both pass since the fix ([CI run 35570337853](https://github.com/animatek/G1-Emu
   - **Find**, held down, puts `Find` on the display and goes back when released. Its second
     function, printed in red on the panel, is Panic: Shift + Find works in the emulator
     (Mike Fiction, 2026-10-05).
-  - **Assign/Morph: nothing found yet.** Pressed or held, alone or with Shift, on the patch
-    screen, on the Morph page, on a parameter page and in the System menu, before and after
-    moving a knob or the dial: display, LEDs and the traffic to the editor come out the same as
-    without it (checked against a control run each time). The OS does take the key: the jump
-    table at `$1255F4` sends it to `$106168` along with Shift and the two Oct keys, numbered
-    Oct up = 0, Shift = 1, Oct down = 2, Assign = 3. So either it needs a screen not reached yet,
-    or it is another thing the rack does not use.
+  - **The rotary dial** (2026-10-07, `g1patchtest`): on the patch display a turn opens `Load?`;
+    with Shift held it sets the active slot's requested voices (`( 1)` → `( 7)` in four steps, as
+    the manual says); at `Load?` and `Store?` it picks the patch or the location; in Edit mode it
+    changes the value in focus, on the morph page the group's value, and with Shift + Assign held
+    the morph range; in the System menu it does nothing on the top page and changes a setting
+    inside one, except CTRL SNAP SHOT. Shift changes nothing in Edit or System mode.
+  - **The System pages, one by one** (2026-10-07, `g1patchtest`: Down from the menu's SYNTH or
+    PATCH, then the dial turned both ways and Right pressed, against the page as it was):
+
+    | Page | Dial | Right |
+    | --- | --- | --- |
+    | SYNTH: MASTER TUNE | the tuning in cents | nothing |
+    | MIDI CLOCK | EXT / INT, or the tempo | to the tempo |
+    | GLOBAL SYNC | quarter notes | nothing |
+    | LOCAL | ON / OFF | nothing |
+    | PROGRAM CHANGE | SEND AND RECEIVE / RECEIVE / ... | nothing |
+    | KEYBOARD MODE | ACTIVE SLOT / SELECTED SLOTS | nothing |
+    | PEDAL POLARITY | NORMAL / INVERTED | nothing |
+    | KNOB MODE | IMMEDIATE / HOOK | nothing |
+    | LEDS ACTIVE | YES / NO | nothing |
+    | MIDI VEL SCALE | the field in brackets (min, max) | to the next field |
+    | MIDI CHANNELS | the slot's channel in brackets | to the next slot |
+    | SYNTH NAME | the letter in brackets | to the next letter |
+    | MEMORY PROTECT | OFF / ON | nothing |
+    | PATCH: VOICES | the requested voices | nothing |
+    | CTRL SNAP SHOT | **nothing** | **sends the snapshot** (`[--] SEND` → `-- [DONE]`) |
+    | VOICE RETRIG | Y / N of the field in brackets (POLY, COMM) | to the next field |
+    | PATCH NAME | the letter in brackets | to the next letter |
+    | BEND RANGE | the range | nothing |
+    | KEYB RANGE | the field in brackets (low, high) | to the next field |
+    | VEL RANGE | the field in brackets (low, high) | to the next field |
+    | PORTAMENTO | the field in brackets (TIME, NORM) | to the next field |
+    | PEDAL MODE | SUSTAIN / ON/OFF SWITCH / ... | nothing |
+
+    MEMORY PROTECT is the last Synth page and PEDAL MODE the last Patch page: Down stays there.
+  - **Store** (2026-10-07, `g1patchtest`; the manual, p. 50): Store asks `Store?` in Patch mode
+    only, and does nothing in System or Edit mode ("You can not store any patches if Nord Modular
+    is in System or Edit mode"). Shift + Store opens `Store settings` (Save Synth. Settings) in
+    Patch and System mode, and does nothing in Edit mode.
+  - **Assign/Morph works in Edit mode only, held** (2026-10-07, `g1patchtest`, as the manual
+    says, v3.0 pp. 41 and 49). With a parameter in focus in Edit mode, **Assign held + a knob
+    turned** assigns that parameter to the knob: on another module afterwards, turning the knob
+    jumps the display back to it (`ADSR … Attack 13.4m`). The same in Patch mode assigns nothing.
+    **Shift + Assign held** shows the focused parameter's morph end value, with `|` in place of
+    `:` (`Attack |13.4m`), and the dial changes it (`|16.3m`); let go, the display is back to the
+    value (`:3.23m`); a parameter with no morph shows `| --`. Pressed and let go on its own, or
+    outside Edit mode, it does nothing, which is what the earlier tries saw. The OS takes the key
+    through the jump table at `$1255F4`, which sends it to `$106168` along with Shift and the two
+    Oct keys (Oct up = 0, Shift = 1, Oct down = 2, Assign = 3).
   - Moving a knob that the patch has on a morph group jumps the display to the Morph page with
     that group's value, and the OS sends the editor a `$2F` message.
 - **The System menu**, from the OS's table at `$1442EE` (the letter closing each line is the
