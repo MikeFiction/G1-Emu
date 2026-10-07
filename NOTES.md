@@ -556,7 +556,16 @@ Both pass since the fix ([CI run 35570337853](https://github.com/animatek/G1-Emu
     The slots are the exception: Shift held through A, B and C changes each one's voices
     (`( 1)  1   1  --`), though the Store after them is still a plain `Store?`. Let go and pressed
     again between the slots, they change the same and Store is `Store settings`: after a slot the
-    panel keeps Shift down and presses it again for the OS.
+    panel keeps Shift down and presses it again for the OS. **The navigator in Edit mode** is the
+    other: on a module's page, Shift held + Right steps to the next module (`ADSR` → `Out` →
+    `Amp`) as many times as pressed, with no need to press Shift again (2026-10-07, `g1patchtest`);
+    so in Edit mode the panel keeps Shift down after a navigator key. The manual says the same,
+    for all four navigator keys (v3.0, pp. 49 and 59).
+  - **The mode keys (Store, System, Edit, Patch/Load)** act on the press: each held through the
+    navigator, the dial, a slot, Assign, Find, a knob turn or another mode key, every display ends
+    as with it pressed and let go (2026-10-07, `g1patchtest`), and the manual has no use for them
+    held (Store and Patch/Load confirm on a second press, not a hold, and in Shift + Store it is
+    Shift that is held; v3.0, pp. 50, 51 and 59). So the panel does not latch them.
   - **Find**, held down, puts `Find` on the display and goes back when released. Its second
     function, printed in red on the panel, is Panic: Shift + Find works in the emulator
     (Mike Fiction, 2026-10-05).
