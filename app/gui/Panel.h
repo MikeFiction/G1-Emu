@@ -47,6 +47,10 @@ namespace g1gui
 		virtual void setKnobFollowsPatch(bool _on) = 0;
 		virtual uint32_t randomExcluded() const = 0;	// the knobs Random leaves alone: bit k for knob k + 1
 		virtual void setRandomExcluded(uint32_t _knobs) = 0;
+		// The tooltips beside the mouse, on unless turned off in the extras. Where the host does not
+		// keep the choice, it is on at every start.
+		virtual bool tooltips() const { return true; }
+		virtual void setTooltips(bool) {}
 		virtual float panelScale() const = 0;			// the window's size, as PanelView keeps it
 		virtual void setPanelScale(float _scale) = 0;
 		virtual juce::String settingsTooltip() const = 0;
@@ -227,6 +231,21 @@ namespace g1gui
 		void drawRotarySlider(juce::Graphics&, int, int, int, int, float, float, float, juce::Slider&) override;
 	};
 
+	// JUCE's tooltip window shows the next tip at once for a while after one has gone; this one
+	// waits the same each time: a control's tip comes only once the mouse has rested on it for
+	// DelayMs. And none at all when turned off (the extras).
+	class DelayedTooltips : public juce::TooltipWindow
+	{
+	public:
+		static constexpr juce::uint32 DelayMs = 500;
+		explicit DelayedTooltips(juce::Component* _parent) : juce::TooltipWindow(_parent, 0) {}
+		juce::String getTipFor(juce::Component& _c) override;
+		bool enabled = true;
+	private:
+		const juce::Component* m_over = nullptr;	// only compared, never used: it may be gone
+		juce::uint32 m_overSince = 0;
+	};
+
 	// The tooltips of what is not on the hardware, and the hints of what is (right click: hold
 	// it down): on a dark glass that blurs what is behind it.
 	// _window is the tooltip window it draws, a child of the panel: what is behind it is the panel.
@@ -363,6 +382,7 @@ namespace g1gui
 		double m_slideStart = -1.0;
 		std::optional<juce::VBlankAttachment> m_slide;	// while it slides
 		DoubleClickButton m_random{"Random"};
+		juce::ToggleButton m_tipsToggle{"Tooltips"};
 		juce::ToggleButton m_displaysToggle{"Parameter Displays"};
 		juce::ToggleButton m_followToggle{"Knob Follows Patch"};
 		juce::TextButton m_synthButton{"Synth Settings"};
@@ -388,7 +408,7 @@ namespace g1gui
 		std::array<g1::KnobInfo, 18> m_snapshot{};
 		bool m_haveSnapshot = false;
 		TipDisplay m_tip;
-		juce::TooltipWindow m_tooltips{this, 500};
+		DelayedTooltips m_tooltips{this};
 		TooltipLook m_tooltipLook{m_tooltips};
 		double m_peakHold = 0;
 		uint64_t m_lastMidiIn = 0;
