@@ -1,8 +1,8 @@
 #pragma once
 
 // What the panel shows over itself, in one look: a card over the synth, what is behind it blurred
-// and showing through, the synth around it darkened. The Synth Settings use it, and ConfirmView,
-// the panel's own question before something that cannot be undone (Restart).
+// and showing through, the synth around it darkened. ConfirmView uses it: the panel's own question
+// before something that cannot be undone (Restart).
 
 #include <juce_gui_basics/juce_gui_basics.h>
 

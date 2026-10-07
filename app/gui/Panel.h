@@ -167,6 +167,16 @@ namespace g1gui
 		float m_angle = StartAngle, m_targetAngle = StartAngle;
 	};
 
+	// A button of the window's own, not the G1's, drawn as the panel's wide ones: Main and Synth
+	// Settings under the tooltips' display, as Mike Fiction's Nord Lead 2x skin has its page buttons.
+	class PageButton : public juce::Button
+	{
+	public:
+		explicit PageButton(const juce::String& _name) : juce::Button(_name) {}
+		void paintButton(juce::Graphics& _g, bool _over, bool _down) override;
+		bool hitTest(int _x, int _y) override;
+	};
+
 	// A small square button with an icon instead of text, for what is not on the hardware
 	// (Settings, Report issue, Patreon). The tooltip says what it does.
 	class IconButton : public juce::Button
@@ -316,6 +326,7 @@ namespace g1gui
 		void restoreKnobs();
 		void setKnobDisplays(bool _on);
 		void updateTip();
+		void showSynthSettings(bool _show);	// the Synth Settings page, or the main one
 
 		juce::SharedResourcePointer<Skin> m_skin;	// keeps the images while a panel is open
 		PanelHost& m_host;
@@ -385,9 +396,11 @@ namespace g1gui
 		juce::ToggleButton m_tipsToggle{"Tooltips"};
 		juce::ToggleButton m_displaysToggle{"Parameter Displays"};
 		juce::ToggleButton m_followToggle{"Knob Follows Patch"};
-		juce::TextButton m_synthButton{"Synth Settings"};
 		IconButton m_restart{"Restart", IconButton::Icon::Restart};	// where the host can (canRestart)
-		SynthSettingsView m_synthView;	// over everything while open
+		// The pages: the synth's panel, or its settings over the knobs; each button's LED lit for the one shown.
+		PageButton m_mainPage{"Main"}, m_settingsPage{"Synth Settings"};
+		LedView m_mainLed, m_settingsLed;
+		SynthSettingsView m_synthView;	// over the knobs while open
 		ConfirmView m_confirm;			// the same, for a question (Restart)
 		juce::Random m_rng;
 		// A right click on a knob opens its menu; the slider still gets the click, which does not

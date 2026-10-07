@@ -187,6 +187,17 @@ namespace g1gui
 		// The panel holds the skin while it is open, so this only finds it.
 		const Skin& skin() { return *juce::SharedResourcePointer<Skin>(); }
 
+		// A point of a button, in its sprite's own pixels (where its shape is measured).
+		juce::Point<float> inSprite(const juce::Component& _c, const Sprite& _sprite, const int _x, const int _y)
+		{
+			const auto size = _sprite.frameSize();
+			const auto area = spriteArea(_c);
+			return {(static_cast<float>(_x) - area.getX()) * static_cast<float>(size.x) / area.getWidth(),
+				(static_cast<float>(_y) - area.getY()) * static_cast<float>(size.y) / area.getHeight()};
+		}
+
+		const juce::Rectangle<float> g_wideButton(36, 23, 114, 61);	// a wide button in its sprite, without its shadow
+
 		const Sprite& buttonSprite(const PanelButton::Shape _shape)
 		{
 			switch(_shape)
@@ -222,6 +233,13 @@ namespace g1gui
 		constexpr float g_tipX = 1225, g_tipY = 895, g_tipW = 482, g_tipH = 38;
 		constexpr float g_tipDot = 2.9f;
 		constexpr int g_tipCols = 26;
+		// The page buttons (by their tops left, as wideAt), under the tooltips' display and centred on
+		// it, half into its purple frame (which ends at 976), as on the Nord Lead 2x skin. Their labels
+		// are the background's, centred under them; each LED at its label's left, level with its middle.
+		constexpr float g_pageX[2] = {1318.5f, 1499.5f}, g_pageY = 976 - 61 / 2.0f;	// 61: the button's height
+		constexpr float g_pageLedX[2] = {1348 - 24, 1512 - 24}, g_pageLedY = 1034.5f;	// 24 left of the labels' text
+		// The Synth Settings over the knobs' four sections, where Mike Fiction's frame fits them.
+		juce::Rectangle<int> settingsFrame() { return sk(344, 130, 1343, 707); }
 		constexpr float g_assignX = 2388, g_assignY = 453.5f;	// the tilted button's centre: as far from "Assign" as from "Morph"
 		constexpr float g_modeX[] = {1798.5f, 1918.5f, 2037.5f, 2157.5f};	// the LEDs' centres; the buttons below
 		constexpr float g_dialX = 2619, g_dialY = 580, g_dialSize = 233.8f;	// the knob (234 of 236) as large as before
@@ -283,6 +301,21 @@ namespace g1gui
 					}
 			}
 		}
+	}
+
+	// As a wide panel button (PanelButton): down while pressed, a touch lighter under the mouse.
+	void PageButton::paintButton(juce::Graphics& _g, const bool _over, const bool _down)
+	{
+		const auto& sprite = skin().buttonWide;
+		const auto r = spriteArea(*this);
+		sprite.draw(_g, _down ? 1 : 0, r);
+		if(_over)
+			sprite.draw(_g, _down ? 1 : 0, r, juce::Colours::white.withAlpha(0.07f));
+	}
+
+	bool PageButton::hitTest(const int _x, const int _y)
+	{
+		return !spriteArea(*this).isEmpty() && g_wideButton.contains(inSprite(*this, skin().buttonWide, _x, _y));
 	}
 
 	void LedView::paint(juce::Graphics& _g)
@@ -471,17 +504,14 @@ namespace g1gui
 	// neighbouring buttons overlap.
 	bool PanelButton::hitTest(const int _x, const int _y)
 	{
-		const auto size = buttonSprite(m_shape).frameSize();
-		const auto area = spriteArea(*this);
-		if(area.isEmpty())
+		if(spriteArea(*this).isEmpty())
 			return false;
-		const float x = (static_cast<float>(_x) - area.getX()) * static_cast<float>(size.x) / area.getWidth();
-		const float y = (static_cast<float>(_y) - area.getY()) * static_cast<float>(size.y) / area.getHeight();
+		const auto p = inSprite(*this, buttonSprite(m_shape), _x, _y);
 		switch(m_shape)
 		{
-		case Shape::Wide:	return juce::Rectangle<float>(36, 23, 114, 61).contains(x, y);
-		case Shape::Tall:	return juce::Rectangle<float>(21, 36, 60, 117).contains(x, y);
-		case Shape::Tilted:	return juce::Point<float>(x, y).getDistanceFrom({74, 74}) < 56.0f;
+		case Shape::Wide:	return g_wideButton.contains(p);
+		case Shape::Tall:	return juce::Rectangle<float>(21, 36, 60, 117).contains(p);
+		case Shape::Tilted:	return p.getDistanceFrom({74, 74}) < 56.0f;
 		}
 		return false;
 	}
@@ -1053,9 +1083,17 @@ namespace g1gui
 		m_followToggle.onClick = [this] { m_host.setKnobFollowsPatch(m_followToggle.getToggleState()); };
 		m_drawer.addAndMakeVisible(m_followToggle);
 
-		m_synthButton.setTooltip("The slots' MIDI channels, the clock and the other settings of the whole G1");
-		m_synthButton.onClick = [this] { m_synthView.open(*this, FaceHeight, sk(0, g_sectionsTop, 3000, 1238 - g_sectionsTop)); };
-		m_drawer.addAndMakeVisible(m_synthButton);
+		m_mainPage.setTooltip("The synth's panel");
+		m_mainPage.onClick = [this] { showSynthSettings(false); };
+		setLcdTip(m_mainPage, "Main Panel");
+		m_settingsPage.setTooltip("The slots' MIDI channels, the clock and the other settings of the whole G1");
+		m_settingsPage.onClick = [this] { showSynthSettings(true); };
+		setLcdTip(m_settingsPage, "Synth Settings");
+		addAndMakeVisible(m_mainPage);
+		addAndMakeVisible(m_settingsPage);
+		addAndMakeVisible(m_mainLed);
+		addAndMakeVisible(m_settingsLed);
+		m_mainLed.setOn(true);
 
 		// The power switch, where the host can work it: a G1 that hangs comes back without
 		// closing G1-Emu. Asked first, since what is in the slots and not stored is lost.
@@ -1069,7 +1107,12 @@ namespace g1gui
 			m_drawer.addAndMakeVisible(m_restart);
 		m_confirm.onClose = [this] { grabKeyboardFocus(); };
 		addChildComponent(m_confirm);
-		m_synthView.onClose = [this] { grabKeyboardFocus(); };
+		m_synthView.onClose = [this]
+		{
+			m_mainLed.setOn(true);
+			m_settingsLed.setOn(false);
+			grabKeyboardFocus();
+		};
 		addChildComponent(m_synthView);
 
 		setExtrasOpen(m_host.extrasOpen());
@@ -1203,6 +1246,12 @@ namespace g1gui
 		auto wideAt = [](const float _x, const float _y) { return skf(_x - 36, _y - 23, 180, 90); };	// by the button's top left
 		auto tallAt = [](const float _x, const float _y) { return skf(_x - 21, _y - 36, 90, 180); };
 
+		// The page buttons under the tooltips' display, and their LEDs (g_pageX).
+		place(m_mainPage, wideAt(g_pageX[0], g_pageY));
+		place(m_settingsPage, wideAt(g_pageX[1], g_pageY));
+		place(m_mainLed, ledAt(g_pageLedX[0], g_pageLedY));
+		place(m_settingsLed, ledAt(g_pageLedX[1], g_pageLedY));
+
 		// Left column
 		place(m_volume, knobAt(g_masterKnob));
 		place(*m_panelSplitLed, ledAt(142, 401));
@@ -1249,15 +1298,14 @@ namespace g1gui
 		m_drawerClip.setBounds(0, Height, getWidth(), g_extrasHeight);
 		m_drawer.setSize(getWidth(), g_extrasHeight);
 		// m_random.setBounds(140, 15, 100, 28);	// out of the extras for now
-		m_synthButton.setBounds(140, 15, 110, 28);	// where Random was
-		m_displaysToggle.setBounds(260, 15, 180, 28);
-		m_followToggle.setBounds(450, 15, 200, 28);
+		m_displaysToggle.setBounds(140, 15, 180, 28);	// where Random was (Synth Settings has its page button)
+		m_followToggle.setBounds(330, 15, 200, 28);
 		// At the right: Restart (where there is one).
 		const int right = getWidth() - 12 - 10;	// the tray's edge, less the margin above and below them
 		m_restart.setBounds(right - 28, 15, 28, 28);
 		m_tipsToggle.setBounds(m_followToggle.getRight() + 10, 15, 120, 28);
 		if(m_synthView.isVisible())
-			m_synthView.setBounds(getLocalBounds());
+			m_synthView.setBounds(settingsFrame());
 		placeDrawer();
 	}
 
@@ -1322,6 +1370,21 @@ namespace g1gui
 		// A display takes its knob's LED's place: lit or dark, it says what the LED would.
 		for(auto* led : m_knobLeds)
 			led->setVisible(!_on);
+	}
+
+	// A page button: the settings fade in over the knobs, or out to show them again.
+	void Panel::showSynthSettings(const bool _show)
+	{
+		if(_show == m_synthView.isVisible())
+			return;
+		if(!_show)
+		{
+			m_synthView.close();	// its onClose lights Main's LED
+			return;
+		}
+		m_synthView.open(settingsFrame());
+		m_mainLed.setOn(false);
+		m_settingsLed.setOn(true);
 	}
 
 	// The synth's control under the mouse, on the tooltips' display: at once, and also while it is
