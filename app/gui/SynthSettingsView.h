@@ -85,9 +85,11 @@ namespace g1gui
 		~SynthSettingsView() override;
 
 		// Shows it at _frame, in its parent's pixels (the knobs' sections); the rest of the panel
-		// stays as it is and works.
+		// stays as it is and works. Faded in, on top. _under: the other page is fading in over it,
+		// so it stays until covered.
 		void open(juce::Rectangle<int> _frame);
-		void close();
+		void close(bool _under = false);
+		bool isOpen() const { return m_open; }	// still drawn for a moment after closing under the other page
 		std::function<void()> onClose;
 
 		void paint(juce::Graphics& _g) override;
@@ -108,6 +110,7 @@ namespace g1gui
 		g1app::SynthSettings m_known;	// what the OS said last: fields with no control keep theirs
 		uint64_t m_revision = 0;
 		int m_ticks = 0;				// the timer's, since it opened
+		bool m_open = false;
 		bool m_haveSettings = false;
 		SkinImage m_frame;
 
@@ -131,7 +134,8 @@ namespace g1gui
 		PresetsView();
 
 		void open(juce::Rectangle<int> _frame);
-		void close();
+		void close(bool _under = false);
+		bool isOpen() const { return m_open; }	// still drawn for a moment after closing under the other page
 		std::function<void()> onClose;
 
 		void paint(juce::Graphics& _g) override;
@@ -139,5 +143,6 @@ namespace g1gui
 
 	private:
 		SkinImage m_frame;
+		bool m_open = false;
 	};
 }

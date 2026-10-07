@@ -56,6 +56,23 @@ namespace g1gui
 				_img = _img.rescaled(_img.getWidth() / 2, _img.getHeight() / 2, juce::Graphics::highResamplingQuality);
 			return _img.getWidth() == _w && _img.getHeight() == _h ? _img : _img.rescaled(_w, _h, juce::Graphics::highResamplingQuality);
 		}
+
+		// A page closing: faded out to the panel, or, when the other page fades in over it, left as
+		// it is until that one covers it and hidden then, so the panel never shows between the two.
+		// Not hidden if it was opened again meanwhile.
+		template<class Page> void hidePage(Page& _page, const bool _under)
+		{
+			if(!_under)
+			{
+				juce::Desktop::getInstance().getAnimator().fadeOut(&_page, g_fadeMs);	// hidden at once, a picture of it fades
+				return;
+			}
+			juce::Timer::callAfterDelay(g_fadeMs + 40, [page = juce::Component::SafePointer<Page>(&_page)]
+			{
+				if(page != nullptr && !page->isOpen())
+					page->setVisible(false);
+			});
+		}
 	}
 
 	SkinImage::SkinImage(const void* _png, const int _pngSize, const int _frameSize)
@@ -341,6 +358,7 @@ namespace g1gui
 	{
 		m_link.read();
 		setBounds(_frame);
+		m_open = true;
 		juce::Desktop::getInstance().getAnimator().fadeIn(this, g_fadeMs);
 		toFront(true);
 		m_ticks = 0;
@@ -348,11 +366,12 @@ namespace g1gui
 		timerCallback();
 	}
 
-	void SynthSettingsView::close()
+	void SynthSettingsView::close(const bool _under)
 	{
 		apply();	// a name still being typed
 		stopTimer();
-		juce::Desktop::getInstance().getAnimator().fadeOut(this, g_fadeMs);	// hidden at once, a picture of it fades
+		m_open = false;
+		hidePage(*this, _under);
 		if(onClose)
 			onClose();
 	}
@@ -546,13 +565,15 @@ namespace g1gui
 	void PresetsView::open(const juce::Rectangle<int> _frame)
 	{
 		setBounds(_frame);
+		m_open = true;
 		juce::Desktop::getInstance().getAnimator().fadeIn(this, g_fadeMs);
 		toFront(true);
 	}
 
-	void PresetsView::close()
+	void PresetsView::close(const bool _under)
 	{
-		juce::Desktop::getInstance().getAnimator().fadeOut(this, g_fadeMs);
+		m_open = false;
+		hidePage(*this, _under);
 		if(onClose)
 			onClose();
 	}
