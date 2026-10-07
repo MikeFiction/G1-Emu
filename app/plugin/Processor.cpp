@@ -5,6 +5,7 @@
 #include "romfinder.h"
 #include "g1Lib/g1format.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -17,6 +18,7 @@ namespace g1plugin
 	{
 		constexpr const char* g_stateTag = "G1EmuState";
 		constexpr int g_stateVersion = 1;
+		constexpr int g_stereoBuses = 2;	// Out 1/2 and Out 3/4; after them, Out 1..4 mono
 
 		juce::String packBytes(const std::vector<uint8_t>& _data)
 		{
@@ -150,7 +152,13 @@ namespace g1plugin
 		: juce::AudioProcessor(BusesProperties()
 			.withInput("In L/R", juce::AudioChannelSet::stereo(), false)
 			.withOutput("Out 1/2", juce::AudioChannelSet::stereo(), true)
-			.withOutput("Out 3/4", juce::AudioChannelSet::stereo(), true))
+			.withOutput("Out 3/4", juce::AudioChannelSet::stereo(), true)
+			// The same four outputs one by one, for hosts that route mono channels (issue #27).
+			// Off until the host turns them on (Cubase's Activate Outputs).
+			.withOutput("Out 1", juce::AudioChannelSet::mono(), false)
+			.withOutput("Out 2", juce::AudioChannelSet::mono(), false)
+			.withOutput("Out 3", juce::AudioChannelSet::mono(), false)
+			.withOutput("Out 4", juce::AudioChannelSet::mono(), false))
 	{
 		for(int k = 0; k < 18; ++k)
 		{
@@ -486,7 +494,7 @@ namespace g1plugin
 		if(_layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
 			return false;
 		for(int i = 1; i < _layouts.outputBuses.size(); ++i)
-			if(!_layouts.outputBuses[i].isDisabled() && _layouts.outputBuses[i] != juce::AudioChannelSet::stereo())
+			if(!_layouts.outputBuses[i].isDisabled() && _layouts.outputBuses[i] != (i < g_stereoBuses ? juce::AudioChannelSet::stereo() : juce::AudioChannelSet::mono()))
 				return false;
 		for(const auto& in : _layouts.inputBuses)
 			if(!in.isDisabled() && in != juce::AudioChannelSet::stereo())
@@ -537,18 +545,28 @@ namespace g1plugin
 				(m.data[1] == 0 ? p.bankMsb : p.bankLsb).store(m.data[2], std::memory_order_relaxed);
 		}
 
+		// Each output goes to its pair's stereo bus and to its own mono bus, whichever are on: the
+		// G1 writes into the first, and the other gets a copy.
 		float* outs[4] = {};
-		for(int b = 0; b < 2; ++b)
+		float* copies[4] = {};
+		const auto take = [&](const int _c, float* _p) { (outs[_c] ? copies[_c] : outs[_c]) = _p; };
+		for(int b = 0; b < getBusCount(false); ++b)
 		{
 			auto* bus = getBus(false, b);
 			if(!bus || !bus->isEnabled())
 				continue;
 			auto out = getBusBuffer(_buffer, false, b);
-			for(int c = 0; c < 2 && c < out.getNumChannels(); ++c)
-				outs[b * 2 + c] = out.getWritePointer(c);
+			if(b < g_stereoBuses)
+				for(int c = 0; c < 2 && c < out.getNumChannels(); ++c)
+					take(b * 2 + c, out.getWritePointer(c));
+			else if(out.getNumChannels() > 0)
+				take(b - g_stereoBuses, out.getWritePointer(0));
 		}
 		knobsFromHost();
 		runner->process(outs, 4, ins, numIns, static_cast<size_t>(frames), isNonRealtime());
+		for(int c = 0; c < 4; ++c)
+			if(copies[c] && outs[c])
+				std::copy_n(outs[c], frames, copies[c]);
 
 		// Channels that are an input and no output of ours.
 		for(int c = getTotalNumOutputChannels(); c < _buffer.getNumChannels(); ++c)

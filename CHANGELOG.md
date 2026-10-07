@@ -7,6 +7,14 @@ Older entries cite their commit by hand.
 
 ## 2026-10-07
 
+- [New] **Mono outputs in the plugin (Claude, issue #27, asked by psy-dub).** Besides Out 1/2 and
+  Out 3/4, the VST3 and the CLAP now have Out 1, Out 2, Out 3 and Out 4 as mono buses, off until
+  the host turns them on (Cubase and Nuendo: Activate Outputs), so each of the G1's four outputs
+  can go to its own mixer channel. A channel on both a pair and its mono bus gets the same signal
+  on both. Projects saved before keep their two stereo buses. Checked: `g1vst3check` turns every
+  bus on and finds each mono output identical, sample for sample, to its stereo channel (a patch
+  playing at −18.9 dBFS); all tests pass. Not checked in Cubase itself, nor with clap-validator.
+
 - [Fix] **A project saved under one OS opens under another with its banks (Claude, issue #25,
   reported by Garrincha568).** After switching to Clavia's 3.03b update (`os =`), a project saved
   with the factory OS came back with an empty G1: the state carries a hash of the factory flash,

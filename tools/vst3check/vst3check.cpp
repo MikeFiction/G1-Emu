@@ -8,6 +8,7 @@
 // closed when there is a display. While A and B play, each one's PC Port gets the editor's greeting
 // (IAm) through its virtual MIDI port, as Animatek NME sends it, and must answer on its own port and
 // not on the other's (Linux and macOS: on Windows JUCE makes no virtual ports). Needs a ROM where the plugin looks for one: without it, 77.
+// With every bus on, the mono outputs Out 1..4 must carry exactly what the stereo pairs carry (#27).
 //
 // --slots, alone (issue #25, where there are PC Ports): a patch sent to slot A through the PC
 // Port, as an editor sends it and not stored in any bank, must be in the project saved
@@ -607,6 +608,45 @@ int main(int _argc, char** _argv)
 	{
 		std::printf("FAIL: the restored instance does not match or does not play\n");
 		failed = 1;
+	}
+
+	// The mono outputs (issue #27), turned on beside the stereo pairs as Cubase's Activate Outputs
+	// does: Out 1..4 must carry exactly what Out 1/2 and Out 3/4 carry.
+	{
+		Voice m;
+		m.plugin = load(formats, path);
+		auto& mp = *m.plugin;
+		const bool enabled = mp.enableAllBuses();
+		mp.setNonRealtime(true);
+		mp.prepareToPlay(g_rate, g_block);
+		const int channels = mp.getTotalNumOutputChannels();
+		float peak = 0, worst = 0;
+		for(int pos = 0; pos < static_cast<int>(4.0 * g_rate); pos += g_block)
+		{
+			juce::AudioBuffer<float> buffer(std::max(mp.getTotalNumInputChannels(), channels), g_block);
+			buffer.clear();
+			juce::MidiBuffer midi;
+			const int pcAt = static_cast<int>(2.0 * g_rate), onAt = static_cast<int>(3.0 * g_rate);
+			if(pcAt >= pos && pcAt < pos + g_block)
+				midi.addEvent(juce::MidiMessage::programChange(1, 0), pcAt - pos);
+			if(onAt >= pos && onAt < pos + g_block)
+				midi.addEvent(juce::MidiMessage::noteOn(1, 60, static_cast<juce::uint8>(100)), onAt - pos);
+			mp.processBlock(buffer, midi);
+			if(channels < 8)
+				continue;
+			peak = std::max(peak, buffer.getMagnitude(0, 0, g_block));
+			for(int c = 0; c < 4; ++c)
+				for(int i = 0; i < g_block; ++i)
+					worst = std::max(worst, std::abs(buffer.getSample(4 + c, i) - buffer.getSample(c, i)));
+		}
+		mp.releaseResources();
+		std::printf("mono outputs: %d buses, %d channels with all on; out 1 %.1f dBFS, largest difference mono/stereo %g\n",
+			mp.getBusCount(false), channels, db(peak), static_cast<double>(worst));
+		if(!enabled || channels != 8 || peak < 1e-3f || worst != 0.0f)
+		{
+			std::printf("FAIL: the mono outputs\n");
+			failed = 1;
+		}
 	}
 
 	// The 18 knobs as parameters: the host turns knob 1, the G1 keeps it there (nothing turns it

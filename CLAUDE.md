@@ -75,7 +75,8 @@ an instance created after the last one in its process closed has none, because J
 recreates its MIDI endpoints after shutting down). The 18 knobs are `KnobParameter`s, named after
 what they move: the host's changes reach the ADC in `processBlock`, the panel's go to the host from
 a timer, a new engine sets them (`knobsFromEngine`). 128 programs are Program Changes on channel 1,
-since VST3 has no Program Change as MIDI. The same target builds `G1-Emu.clap` when
+since VST3 has no Program Change as MIDI. Outputs: Out 1/2 and Out 3/4 stereo, and the same four as
+mono buses Out 1..4, off until the host turns them on (#27); a channel on both gets a copy. The same target builds `G1-Emu.clap` when
 `G1_CLAP_DIR` (default `~/src/clap-juce-extensions`, not Gearmulator's older copy) has
 clap-juce-extensions; `clap-validator` passes it. The design is
 `docs/instance-hosting.md`; what matters when touching it:
