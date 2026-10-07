@@ -56,6 +56,11 @@ what it carries works.
   - **Not the Micro Modular** (one DSP): decided on 2026-10-07 to leave it out of G1-Emu's models.
     It runs its own OS, not the rack's (which only knows four or eight DSPs), so it becomes its own
     emulation or part of AG1TEK, the one-slot plugin (see "Other G1 models").
+  - **No hardware dumps** (decided 2026-10-07): nobody opens a synth to read its ROM, neither
+    Javier's G1 nor a borrowed Micro. What only the ROM holds (the vectors, the start-up and the
+    small loader that boots the DSPs) is written as G1-Emu's own boot instead, and the OS comes from
+    Clavia's public updaters (#16). Checked against the rack ROM we have: both boots must behave
+    the same. That boot is also the way to the Micro, with the Micro's updater.
 - **alpha.16 = the first beta (beta 1)**, once Presets is done and both models hold: the
   first release meant for everyone, not only testers. Before it: the known issues in the release
   notes solved or explained, the README and the notes written for a new user, and signing looked
@@ -210,7 +215,8 @@ the modules that exist).
 - **Micro Modular:** one DSP, confirmed in its OS (`NOTES.md`, "The official OS update"), which
   makes a simpler engine with no links between DSPs. Open: its boot ROM (not in the update, so it
   needs the same boot replacement as #16) and the ESSI clock towards its codec.
-  Not one of G1-Emu's models (decided 2026-10-07): its own emulation, or part of AG1TEK.
+  Not one of G1-Emu's models (decided 2026-10-07): its own emulation, or part of AG1TEK, booted
+  with G1-Emu's own boot (#16) and the Micro's public updater, not from a dumped ROM.
 
 ### New modules inside the G1 (modified OS)
 

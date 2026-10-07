@@ -7,6 +7,10 @@ Older entries cite their commit by hand.
 
 ## 2026-10-07
 
+- [Docs] **ROADMAP: no hardware dumps (Claude, decided with Javier).** Nobody opens a synth to
+  read its ROM; what only the ROM holds is written as G1-Emu's own boot, with the OS from Clavia's
+  public updaters (#16), checked against the rack ROM we have. That is also the way to the Micro.
+
 - [Docs] **A release plan in `ROADMAP.md` (Claude, decided with Javier).** alpha.14: Presets
   (the synth's banks, read over the PC Port and loaded with a click) and the first test of the
   expanded G1; alpha.15: two models in the settings, Regular and Expanded (eight DSPs, #24), told
