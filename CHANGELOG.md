@@ -7,6 +7,39 @@ Older entries cite their commit by hand.
 
 ## 2026-10-07
 
+- [Imp] **The info display says what the rotary dial will do (Claude, requested by Mike
+  Fiction).** Over the dial it reads "Rotary Dial - " and what a turn does now: Select Patch
+  (the patch display and `Load?`), Voices (with Shift on the patch display), Location (`Store?`),
+  Change Value (Edit mode and the System settings), Morph Value (the morph page) or Morph Range
+  (Shift + Assign held in Edit mode, on a parameter that has a morph); blank where it does
+  nothing: the System menu's top page, CTRL SNAP SHOT (sent with Right, where the info display
+  reads "Nav Right - Send Snapshot"), and Shift + Assign on a parameter with no morph. Every
+  System page was tried for what the dial and Right do (`NOTES.md`, "The System pages").
+  Checked on Windows with `g1patchtest` (each case on the G1's display), and the standalone and the
+  VST3 build.
+
+- [Imp] **Assign/Morph says when it works (Claude, requested by Mike Fiction).** It only works in
+  Edit mode, held: with Assign held a knob turned is assigned the parameter in focus, and with
+  Shift + Assign held the dial sets its morph (`NOTES.md`, which had it as not found yet). The info
+  display now names it only in Edit mode and is blank over it elsewhere; its tooltip says how to
+  use it. Checked on Windows with `g1patchtest` (an assignment made in Edit mode and none in Patch
+  mode; the morph end value changed with the dial), and the standalone and the VST3 build.
+
+- [Imp] **The info display says what the navigator will do (Claude, requested by Mike Fiction).**
+  It names the keys "Nav Up", "Nav Down", "Nav Left" and "Nav Right" instead of "Navigator ...";
+  with Shift held on a module's page in Edit mode it adds " - Next Module", and with Shift held on
+  the morph groups, where the navigator then does nothing, it stays blank. Checked on Windows: the
+  standalone and the VST3 build.
+
+- [Imp] **Tooltips for Shift on the navigator and Store (Claude, requested by Mike Fiction).** In
+  Edit mode on a module's page (P or C in the G1's display), the navigator keys' tooltip adds "Hold
+  Shift: next module" under "Hold: repeats"; on the morph groups, where Shift does nothing to them,
+  and in the other modes it stays as it was. Store's tooltip follows the mode, as the OS does
+  (`NOTES.md`, "Store"): "Store Patch" and "Hold Shift: Save Synth. Settings" in Patch mode, only
+  the second in System mode, and "Use in Patch or System Mode" in Edit mode, where it does
+  nothing. Checked on Windows with `g1patchtest` (Store and Shift + Store in each mode), and the
+  standalone and the VST3 build.
+
 - [Fix] **A project saved under one OS opens under another with its banks (Claude, issue #25,
   reported by Garrincha568).** After switching to Clavia's 3.03b update (`os =`), a project saved
   with the factory OS came back with an empty G1: the state carries a hash of the factory flash,

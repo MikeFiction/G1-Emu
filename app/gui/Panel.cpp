@@ -942,11 +942,13 @@ namespace g1gui
 			m_slotLeds[i] = &addLed(g_slotLeds[i]);
 		}
 		m_assign = &addButton("Assign / Morph", g_btnAssign, PanelButton::Shape::Tilted);
+		m_assign->setTooltip("Right click: hold it down\nUse in Edit Mode\nHeld: Turn a knob to assign it\nShift + Held: Rotary Dial sets the morph range\n(on a parameter in a morph group)");
 		m_shift = &addButton("Shift", g_btnShift);
 		m_shiftNames = {
 			{m_find, [](const bool _shift) { return juce::String(_shift ? "Panic" : "Find"); }},
 			{m_modeButtons[0], [this](const bool _shift) { return storeName(_shift); }},
-			{m_assign, [](const bool _shift) { return juce::String(_shift ? "Morph" : "Assign"); }},
+			// Assign and Morph only do something in Edit mode (NOTES.md): elsewhere, nothing to say.
+			{m_assign, [this](const bool _shift) { return m_mode != Mode::Edit ? juce::String() : juce::String(_shift ? "Morph" : "Assign"); }},
 			{m_modeButtons[3], [](const bool _shift) { return juce::String(_shift ? "Random Knobs" : "Patch/Load"); }}};
 		// Shift + Patch/Load is the extras' Random: the OS has nothing of its own there (it asks
 		// Load? as without Shift), so the G1 does not see that press. Shift stays held, for
@@ -963,10 +965,7 @@ namespace g1gui
 		m_nav[2] = &addButton("Right", g_btnRight);
 		m_nav[3] = &addButton("Down", g_btnDown, PanelButton::Shape::Tall);
 		for(auto* nav : m_nav)
-		{
-			nav->setAutoRepeat(true);
-			setLcdTip(*nav, "Navigator " + nav->getName());
-		}
+			nav->setAutoRepeat(true);	// their texts follow the mode: updateLcdTips
 
 		m_status.setFont(juce::FontOptions(juce::Font::getDefaultMonospacedFontName(), 12.5f, juce::Font::plain));
 		m_status.setColour(juce::Label::textColourId, juce::Colours::white);
@@ -1540,6 +1539,54 @@ namespace g1gui
 		setLcdTip(m_volume, "Master Volume\t" + juce::String(m_mc.adc(VolumeAdc) / 2));
 		for(const auto& s : m_shiftNames)
 			setLcdTip(*s.button, s.name(shift));
+		// Where the G1 is, from its display. In Edit mode the end of the first line says which part
+		// of the patch: P or C a module, T the morph groups.
+		const juce::String top(m_mc.getLcd().line(0, 16));
+		const juce::String bottom(m_mc.getLcd().line(1, 16));
+		const juce::juce_wchar area = top.length() == 16 ? top[15] : 0;
+		const bool inModule = m_mode == Mode::Edit && (area == 'P' || area == 'C');
+		const bool inMorph = m_mode == Mode::Edit && area == 'T';
+		// CTRL SNAP SHOT: the dial does nothing, Right sends the snapshot (the manual, Ctrl Snap Shot).
+		const bool snapshot = m_mode == Mode::System && top.startsWith("CTRL SNAP SHOT");
+		const bool assign = m_assign->isPressed();
+
+		// The rotary dial: what a turn will do now (each checked with g1patchtest, NOTES.md).
+		juce::String dial;
+		if(bottom.startsWith("Store?"))
+			dial = "Location";
+		else if(bottom.startsWith("Load?"))
+			dial = "Select Patch";
+		else if(m_mode == Mode::Edit)
+			// With Shift + Assign the G1 shows the morph's end value, or "| --" where the parameter
+			// is on no morph group: then the dial has nothing to set.
+			dial = inMorph ? "Morph Value" : !(shift && assign) ? "Change Value" : bottom.contains("| --") ? "" : "Morph Range";
+		else if(m_mode == Mode::System)
+			dial = top.startsWith("SYSTEM MENU") || snapshot ? "" : "Change Value";
+		else if(bottom.startsWith("("))	// the patch display: ( 1) --  --  --
+			dial = shift ? "Voices" : "Select Patch";
+		setLcdTip(m_dial, dial.isEmpty() ? juce::String() : "Rotary Dial - " + dial);
+
+		// Store: a patch in Patch mode only; Shift + Store saves the synth settings in Patch and
+		// System mode; in Edit mode neither (NOTES.md, "Store").
+		const juce::String storeTip = m_mode == Mode::Patch ? "Store Patch\nHold Shift: Save Synth. Settings"
+			: m_mode == Mode::System ? "Hold Shift: Save Synth. Settings" : "Use in Patch or System Mode";
+		if(m_modeButtons[0]->getTooltip() != storeTip)
+			m_modeButtons[0]->setTooltip(storeTip);
+
+		// The navigator: on a module's page in Edit mode Shift with it goes to another module (the
+		// manual, Edit); on the morph groups Shift with it does nothing.
+		const juce::String navTip = inModule ? "Hold: repeats\nHold Shift: next module" : "Hold: repeats";
+		for(auto* nav : m_nav)
+		{
+			if(nav->getTooltip() != navTip)
+				nav->setTooltip(navTip);
+			if(shift && inMorph)
+				setLcdTip(*nav, {});	// Shift + the navigator does nothing on the morph groups
+			else if(snapshot && nav == m_nav[2])
+				setLcdTip(*nav, "Nav Right - Send Snapshot");
+			else
+				setLcdTip(*nav, "Nav " + nav->getName() + (inModule && shift ? " - Next Module" : ""));
+		}
 		updateTip();
 	}
 
