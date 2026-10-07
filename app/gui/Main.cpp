@@ -154,6 +154,74 @@ namespace g1gui
 		std::unique_ptr<juce::ResizableCornerComponent> m_grip;
 	};
 
+	// The first component under _root that is a _T (named _name, if one is given), depth first.
+	template<typename T> T* findNamed(juce::Component& _root, const juce::String& _name = {})
+	{
+		for(auto* c : _root.getChildren())
+		{
+			if(auto* t = dynamic_cast<T*>(c); t && (_name.isEmpty() || c->getName() == _name))
+				return t;
+			if(auto* t = findNamed<T>(*c, _name))
+				return t;
+		}
+		return nullptr;
+	}
+
+	// G1_SNAPSHOTS=dir: pictures of the window, for a look at the GUI from somewhere else (a
+	// phone, a pull request). Once the G1 has booted, the panel, the extras drawer, About at its
+	// top and at its end, and the Synth Settings page are saved as PNGs, each after clicking what
+	// a user would click; then G1-Emu quits. With G1_AUDIO=no and G1_RAWMIDI=0 it touches no device.
+	class Snapshots : private juce::Timer
+	{
+	public:
+		Snapshots(juce::Component& _window, const juce::File& _dir) : m_window(_window), m_dir(_dir)
+		{
+			m_dir.createDirectory();
+			startTimer(5000);	// the OS boots and its display shows something
+		}
+	private:
+		void timerCallback() override
+		{
+			auto& w = m_window;
+			const auto click = [&](const juce::String& _name, juce::Component* _within = nullptr)
+			{
+				auto* b = findNamed<juce::Button>(_within ? *_within : w, _name);
+				std::printf("snapshots: click \"%s\"%s\n", _name.toRawUTF8(), b ? "" : ": NOT FOUND");
+				if(b)
+					b->triggerClick();
+			};
+			auto* about = findNamed<AboutView>(w);
+			auto* aboutText = about ? findNamed<juce::TextEditor>(*about) : nullptr;
+			switch(m_step++)
+			{
+			case 0: save("1-panel.png"); click("Extras"); break;
+			case 1: save("2-extras.png"); click("About"); break;
+			case 2: save("3-about.png"); if(aboutText) aboutText->moveCaretToEnd(false); break;
+			case 3: save("4-about-end.png"); if(about) click("Close", about); click("Synth Settings"); break;
+			case 4: save("5-synth-settings.png"); break;
+			default:
+				stopTimer();
+				juce::JUCEApplication::getInstance()->systemRequestedQuit();
+				return;
+			}
+			startTimer(1500);	// clicks are answered, slides and fades finish
+		}
+		void save(const char* _name)
+		{
+			auto* content = dynamic_cast<juce::ResizableWindow&>(m_window).getContentComponent();
+			const auto file = m_dir.getChildFile(_name);
+			file.deleteFile();
+			juce::FileOutputStream out(file);
+			const bool ok = content && out.openedOk()
+				&& juce::PNGImageFormat().writeImageToStream(content->createComponentSnapshot(content->getLocalBounds(), true, 1.0f), out);
+			std::printf("snapshots: %s %s\n", file.getFullPathName().toRawUTF8(), ok ? "saved" : "NOT SAVED");
+			std::fflush(stdout);
+		}
+		juce::Component& m_window;
+		juce::File m_dir;
+		int m_step = 0;
+	};
+
 	class App : public juce::JUCEApplication
 	{
 	public:
@@ -175,6 +243,7 @@ namespace g1gui
 
 		void shutdown() override
 		{
+			m_snapshots.reset();
 			m_window.reset();
 			m_host.stop();	// saves the flash
 		}
@@ -198,6 +267,11 @@ namespace g1gui
 			std::printf("%s", log.c_str());
 			std::fflush(stdout);	// the window has no console reading it as it goes
 			m_window = std::make_unique<MainWindow>(m_host);
+			if(const char* dir = std::getenv("G1_SNAPSHOTS"))
+			{
+				m_snapshots = std::make_unique<Snapshots>(*m_window, juce::File(juce::String(dir)));
+				return;
+			}
 			if(m_firstRun || m_host.options().showDisclaimer)
 				showDisclaimer(m_firstRun);
 		}
@@ -267,6 +341,7 @@ namespace g1gui
 
 		g1app::EmuHost m_host;
 		std::unique_ptr<MainWindow> m_window;
+		std::unique_ptr<Snapshots> m_snapshots;	// G1_SNAPSHOTS
 		std::unique_ptr<juce::FileChooser> m_chooser;
 		juce::String m_rom, m_flash;
 		bool m_firstRun = false;

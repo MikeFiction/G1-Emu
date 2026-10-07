@@ -7,6 +7,13 @@ Older entries cite their commit by hand.
 
 ## 2026-10-07
 
+- [New] **`G1_SNAPSHOTS=dir`: pictures of the window (Claude).** The standalone, once the G1 has
+  booted, saves the panel, the extras drawer, About at its top and at its end, and the Synth
+  Settings page as PNGs, clicking what a user would click, and quits; with `G1_AUDIO=no
+  G1_RAWMIDI=0 G1_DIRECT_LINK=0` and its own `HOME` it touches no device and no settings of the
+  user's. For a look at the GUI from elsewhere (a phone, a pull request). Checked: the five
+  pictures come out as expected.
+
 - [New] **About, in the extras drawer (Claude, requested by Javier).** A card over the panel, like
   Restart's question, with the version, what G1-Emu is, how Animatek NME connects to it by itself
   (with a button to NME and one to the source code), the credits (Mike Fiction's panel skin and GUI
