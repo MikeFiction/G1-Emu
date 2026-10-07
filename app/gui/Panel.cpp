@@ -1106,6 +1106,12 @@ namespace g1gui
 			m_drawer.addAndMakeVisible(m_restart);
 		m_confirm.onClose = [this] { grabKeyboardFocus(); };
 		addChildComponent(m_confirm);
+
+		m_about.setTooltip("About G1-Emu: who made it, its licenses, and Animatek NME");
+		m_about.onClick = [this] { m_aboutView.open(*this, FaceHeight, juce::Rectangle<int>(0, 0, getWidth(), FaceHeight)); };
+		m_drawer.addAndMakeVisible(m_about);
+		m_aboutView.onClose = [this] { grabKeyboardFocus(); };
+		addChildComponent(m_aboutView);
 		m_synthView.onClose = [this]
 		{
 			m_mainLed.setOn(true);
@@ -1302,6 +1308,7 @@ namespace g1gui
 		// At the right: Restart (where there is one).
 		const int right = getWidth() - 12 - 10;	// the tray's edge, less the margin above and below them
 		m_restart.setBounds(right - 28, 15, 28, 28);
+		m_about.setBounds((m_host.canRestart() ? m_restart.getX() - 10 : right) - 80, 15, 80, 28);
 		m_tipsToggle.setBounds(m_followToggle.getRight() + 10, 15, 120, 28);
 		if(m_synthView.isVisible())
 			m_synthView.setBounds(settingsFrame());

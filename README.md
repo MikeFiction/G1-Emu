@@ -195,7 +195,26 @@ VST3 is built.
 
 ## License and credits
 
-GPLv3 (see [`LICENSE`](LICENSE)), because it links Gearmulator. Thanks to The Usual Suspects for
+**Panel skin and GUI design by Mike Fiction.**
+
+The **About** button in the extras drawer shows all of this inside the program.
+
+**Licenses.** G1-Emu's code is GPLv3 (see [`LICENSE`](LICENSE)), because it links Gearmulator. The
+panel artwork in [`app/gui/skin`](app/gui/skin) and the standalone's icon are © 2026 Mike Fiction,
+under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (see
+[`app/gui/skin/LICENSE.md`](app/gui/skin/LICENSE.md)). Inside the program as well: Gearmulator's
+dsp56300 and mc68k (GPLv3), the Musashi 68000 core by Karl Stenerud (MIT), AsmJit (zlib), JUCE 8
+(AGPLv3), the VST 3 SDK by Steinberg (MIT; VST is a trademark of Steinberg Media Technologies GmbH),
+and CLAP with clap-juce-extensions (MIT).
+
+**Credits.** Made by Javier Melgar, Animatek ([animatek.net](https://animatek.net)), who also makes
+[Animatek NME](https://github.com/animatek/Animatek-NME), the editor that connects to G1-Emu by
+itself. Mike Fiction designed the panel skin and the GUI. Thanks to The Usual Suspects for
 [Gearmulator](https://github.com/dsp56300/gearmulator) and to joelanders for the fork with the
-Monomachine and Machinedrum, which this work builds on. Made by Animatek
-([animatek.net](https://animatek.net)).
+Monomachine and Machinedrum, which this work builds on; to Tuth for the Windows fixes in PR #5; to
+Psychlist1972 for the help with Windows MIDI Services; and to everyone who tests and reports:
+AlphasiaIndustries, artqcid, Garrincha568, JuliusLC, masc4ii, ModGod222, msavery123, nirsu1,
+psy-dub and Waltercalling.
+
+Nord and Nord Modular are trademarks of Clavia DMI AB, which neither makes, endorses nor supports
+G1-Emu. G1-Emu ships no ROM.

@@ -7,6 +7,21 @@ Older entries cite their commit by hand.
 
 ## 2026-10-07
 
+- [New] **About, in the extras drawer (Claude, requested by Javier).** A card over the panel, like
+  Restart's question, with the version, what G1-Emu is, how Animatek NME connects to it by itself
+  (with a button to NME and one to the source code), the credits (Mike Fiction's panel skin and GUI
+  design, Gearmulator, contributors and testers) and the license of every part inside the program:
+  GPLv3 for G1-Emu, Gearmulator's dsp56300 and mc68k; CC BY 4.0 for Mike Fiction's artwork; MIT for
+  Musashi, the VST 3 SDK and CLAP; zlib for AsmJit; AGPLv3 for JUCE 8; and that G1-Emu is not
+  Clavia's and ships no ROM. The README's "License and credits" says the same, with the credit line
+  Mike asked for: "Panel skin and GUI design by Mike Fiction". Checked: it builds and the tests
+  pass; the licenses read in each part's own license file.
+- [Merge] **Mike Fiction's pull requests #29 to #35.** Original artwork for the knobs and buttons
+  under CC BY 4.0 (#29), Synth Settings as a page of the panel (#30), the standalone's icon (#31),
+  knob values as the G1 shows them (#32), Shift and the mode keys in Edit mode (#33), tooltips' delay
+  and switch (#34), and the panel saying what each control will do (#35); their entries are below.
+  Only this changelog clashed. Checked: everything builds and all tests pass on Linux.
+
 - [Fix] **`g1vst3check` no longer talks to another G1-Emu (Claude).** It finds the PC Ports by
   name, and a DAW with the plugin open has the same names: with Bitwig running, `--clock` uploaded
   its test patch to that instance's slot A. It now stops at once when a `G1-Emu` MIDI port is
@@ -14,7 +29,7 @@ Older entries cite their commit by hand.
   beyond the reported latency. Checked: it refuses with Bitwig open. Javier checked the tempo
   sync in Bitwig by ear and it follows the metronome.
 
-- [New] **The plugin follows the host's tempo (Claude, issue #20, asked by psy-dub).** A VST3 host
+- [New] **The plugin follows the host's tempo (Claude, issue #20, asked by Waltercalling).** A VST3 host
   sends a plugin no MIDI clock, so with the G1's MIDI clock set to external nothing clocked moved
   in the DAW. The plugin now makes the clock from the host's transport (`app/plugin/hostclock.h`):
   a Start at the song's beginning or a Song Position Pointer and a Continue elsewhere, $F8 at 24
@@ -27,7 +42,7 @@ Older entries cite their commit by hand.
   measures MIDIGlobal's pulses at 48.00 Hz with the host at 120 BPM, 36.00 Hz at 90 and none when
   stopped, where the build before gave none at all; all tests pass.
 
-- [New] **Mono outputs in the plugin (Claude, issue #27, asked by psy-dub).** Besides Out 1/2 and
+- [New] **Mono outputs in the plugin (Claude, issue #27, asked by Waltercalling).** Besides Out 1/2 and
   Out 3/4, the VST3 and the CLAP now have Out 1, Out 2, Out 3 and Out 4 as mono buses, off until
   the host turns them on (Cubase and Nuendo: Activate Outputs), so each of the G1's four outputs
   can go to its own mixer channel. A channel on both a pair and its mono bus gets the same signal

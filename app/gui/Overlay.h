@@ -2,7 +2,7 @@
 
 // What the panel shows over itself, in one look: a card over the synth, what is behind it blurred
 // and showing through, the synth around it darkened. ConfirmView uses it: the panel's own question
-// before something that cannot be undone (Restart).
+// before something that cannot be undone (Restart). AboutView too: the credits and the licenses.
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -53,5 +53,32 @@ namespace g1gui
 		std::function<void()> m_onYes;
 		juce::Label m_text;
 		juce::TextButton m_yes, m_cancel{"Cancel"};
+	};
+
+	// About G1-Emu, over the panel: what it is, how Animatek NME finds it, who made it and the
+	// license of every part in it. Escape, Close or a click beside the card leave it.
+	class AboutView : public juce::Component
+	{
+	public:
+		AboutView();
+
+		// Shows it over _behind (its parent), centred in _space.
+		void open(juce::Component& _behind, int _faceHeight, juce::Rectangle<int> _space);
+		void close();
+		std::function<void()> onClose;
+
+		void paint(juce::Graphics& _g) override;
+		void resized() override;
+		void mouseDown(const juce::MouseEvent& _e) override;
+		bool keyPressed(const juce::KeyPress& _key) override;
+
+	private:
+		juce::Rectangle<int> card() const;
+
+		juce::Image m_backdrop;
+		int m_faceHeight = 0;
+		juce::Rectangle<int> m_space;
+		juce::TextEditor m_text;
+		juce::TextButton m_nme{"Animatek NME"}, m_source{"Source code"}, m_close{"Close"};
 	};
 }
