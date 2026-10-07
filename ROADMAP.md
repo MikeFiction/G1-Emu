@@ -40,8 +40,8 @@ what it carries works.
   `source/midi/NmMessages.cpp`), and loads one into the slot with a click, as Gearmulator's
   plugins do. It talks to the OS like `SynthSettingsLink`, hiding its traffic from the editor.
   Also the **first test of the expanded G1** (below): does the OS boot with eight DSPs?
-- **alpha.15: three models, picked in the settings: Micro, Regular, Expanded.** Not every patch
-  needs the voices, and a modest machine may not afford eight DSPs.
+- **alpha.15: two models, picked in the settings: Regular and Expanded.** Not every patch needs
+  the voices, and a modest machine may not afford eight DSPs.
   - **Expanded** (eight DSPs, the 32-voice expansion board; asked for in #24). What is known
     (`NOTES.md`, "Booting the DSPs"): DSPs 4-7 sit on HI08 ports `$200020`-`$20003F`; the loader
     sends its program to DSPs 3 and 7, and the OS goes to eight DSPs when DSP 7 raises HF2; the OS
@@ -50,16 +50,13 @@ what it carries works.
     codec, or two chains mixed, and which DSP feeds the codec), from the OS's code; and the cost:
     twice the DSPs, about twice the CPU when the voices are used. An afternoon to know whether it
     boots; a couple of sessions for the links and the tests if it does.
-  - **Micro** (one DSP). **Harder than Expanded:** the rack OS only knows four or eight DSPs; one
-    DSP is the **Micro Modular's own OS** (`NOTES.md`, "Micro Modular: the same code base with one
-    DSP"), from its official update, and it needs a boot ROM the update does not carry (the same
-    replacement as #16) and another ESSI clock towards its codec. It overlaps AG1TEK (the
-    one-slot plugin with the editor inside), so the work serves both. If it holds the release up,
-    alpha.15 goes out with Regular and Expanded and Micro follows.
-  - **In Animatek NME:** the editor tells the three apart when it connects (to be found: what the
-    OS says about its DSPs or its model, in the IAm reply or the synth settings) and shows which
-    one each G1-Emu is, with an icon or similar.
-- **alpha.16 = the first beta (beta 1)**, once Presets is done and the three models hold: the
+  - **In Animatek NME:** the editor tells them apart when it connects (to be found: what the OS
+    says about its DSPs, in the IAm reply or the synth settings) and shows which one each G1-Emu
+    is, with an icon or similar.
+  - **Not the Micro Modular** (one DSP): decided on 2026-10-07 to leave it out of G1-Emu's models.
+    It runs its own OS, not the rack's (which only knows four or eight DSPs), so it becomes its own
+    emulation or part of AG1TEK, the one-slot plugin (see "Other G1 models").
+- **alpha.16 = the first beta (beta 1)**, once Presets is done and both models hold: the
   first release meant for everyone, not only testers. Before it: the known issues in the release
   notes solved or explained, the README and the notes written for a new user, and signing looked
   at again.
@@ -213,7 +210,7 @@ the modules that exist).
 - **Micro Modular:** one DSP, confirmed in its OS (`NOTES.md`, "The official OS update"), which
   makes a simpler engine with no links between DSPs. Open: its boot ROM (not in the update, so it
   needs the same boot replacement as #16) and the ESSI clock towards its codec.
-  Planned for alpha.15 as one of three models (see "Release plan").
+  Not one of G1-Emu's models (decided 2026-10-07): its own emulation, or part of AG1TEK.
 
 ### New modules inside the G1 (modified OS)
 

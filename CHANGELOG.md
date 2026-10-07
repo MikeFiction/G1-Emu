@@ -9,9 +9,9 @@ Older entries cite their commit by hand.
 
 - [Docs] **A release plan in `ROADMAP.md` (Claude, decided with Javier).** alpha.14: Presets
   (the synth's banks, read over the PC Port and loaded with a click) and the first test of the
-  expanded G1; alpha.15: three models in the settings, Micro (one DSP, the Micro Modular's own
-  OS), Regular and Expanded (eight DSPs, #24), told apart by Animatek NME; alpha.16: the first
-  beta. With what is known and what is open for each.
+  expanded G1; alpha.15: two models in the settings, Regular and Expanded (eight DSPs, #24), told
+  apart by Animatek NME (the Micro Modular, with its own OS, becomes its own emulation or part of
+  AG1TEK); alpha.16: the first beta. With what is known and what is open for each.
 
 - [Fix] **The host's clock ticks land on the nearest frame (Claude).** `HostClock` truncated each
   tick's offset, so a tick whose arithmetic came out a hair under a whole frame (79999.9999) went
