@@ -7,6 +7,13 @@ Older entries cite their commit by hand.
 
 ## 2026-10-07
 
+- [Fix] **`g1vst3check` no longer talks to another G1-Emu (Claude).** It finds the PC Ports by
+  name, and a DAW with the plugin open has the same names: with Bitwig running, `--clock` uploaded
+  its test patch to that instance's slot A. It now stops at once when a `G1-Emu` MIDI port is
+  already there. `--clock` also prints how late MIDIGlobal's pulses are against the host's beats,
+  beyond the reported latency. Checked: it refuses with Bitwig open. Javier checked the tempo
+  sync in Bitwig by ear and it follows the metronome.
+
 - [New] **The plugin follows the host's tempo (Claude, issue #20, asked by psy-dub).** A VST3 host
   sends a plugin no MIDI clock, so with the G1's MIDI clock set to external nothing clocked moved
   in the DAW. The plugin now makes the clock from the host's transport (`app/plugin/hostclock.h`):

@@ -370,6 +370,31 @@ namespace
 			return edges / (_to - _from);
 		};
 		const double r120 = rate(11.0, 14.0), r90 = rate(15.0, 18.0), stopped = rate(19.0, 20.0);
+
+		// How late each pulse is against its beat, beyond the latency the plugin reports (which the
+		// host makes up for): at 120 BPM, tick k is at 10 s + k * 1000 frames.
+		const auto lag = [&]
+		{
+			const double latency = p.getLatencySamples();
+			const double framesPerTick = g_rate * 60.0 / 120.0 / 24.0;
+			const auto a = static_cast<size_t>(11.0 * g_rate), b = static_cast<size_t>(14.0 * g_rate);
+			float peak = 0;
+			for(size_t i = a; i < b; ++i)
+				peak = std::max(peak, std::abs(out[i]));
+			double sum = 0, lo = 1e9, hi = -1e9;
+			int n = 0;
+			for(size_t i = a + 1; i < b; ++i)
+				if(out[i - 1] <= peak * 0.5f && out[i] > peak * 0.5f)
+				{
+					const double since = static_cast<double>(i) - 10.0 * g_rate - latency;
+					const double tick = std::round(since / framesPerTick - 0.5);	// the tick before it
+					const double ms = (since - tick * framesPerTick) * 1000.0 / g_rate;
+					sum += ms; lo = std::min(lo, ms); hi = std::max(hi, ms); ++n;
+				}
+			std::printf("issue #20: pulses at 120 BPM are %.2f ms after their tick on average (%.2f to %.2f), beyond the %d frames of latency\n",
+				n ? sum / n : 0.0, n ? lo : 0.0, n ? hi : 0.0, p.getLatencySamples());
+		};
+		lag();
 		std::printf("issue #20: %zu of %zu packets sent, %d ACKs; output 1: %.2f Hz at 120 BPM, %.2f Hz at 90 BPM, %.2f Hz stopped\n",
 			sent, upload.size(), sender.acks(), r120, r90, stopped);
 		if(!open || sent != upload.size() || std::abs(r120 - 48.0) > 0.5 || std::abs(r90 - 36.0) > 0.5 || stopped != 0.0)
@@ -613,6 +638,14 @@ int main(int _argc, char** _argv)
 	formats.addFormat(new juce::VST3PluginFormat());
 	const juce::String path(_argv[1]);
 	int failed = 0;
+	// The PC Ports are found by name, and another G1-Emu (a DAW with the plugin open) has the same
+	// names: the check would greet that one and upload patches to its slot A.
+	for(const auto& d : juce::MidiOutput::getAvailableDevices())
+		if(d.name.startsWith("G1-Emu"))
+		{
+			std::printf("another G1-Emu is running (\"%s\"): close it first, or this check would talk to it\n", d.name.toRawUTF8());
+			return 2;
+		}
 	if(_argc > 2 && juce::String(_argv[2]) == "--slots")
 	{
 		failed = checkSlots(formats, path);
