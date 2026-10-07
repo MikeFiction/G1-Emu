@@ -1,54 +1,62 @@
-# G1-Emu v0.1.0-alpha.12
+# G1-Emu v0.1.0-alpha.13
 
-**This pre-release makes G1-Emu behave more like the real synth, and safer in a DAW.** The plugin
-now keeps what each slot holds in your project, the internal clock runs at the right tempo, a JIT
-failure no longer takes the DAW down, and you can optionally install the OS a real G1 runs, with
-Clavia's own updater. Please try it and report what you find with the **Report issue** button.
+**This pre-release gives G1-Emu a new face, and makes the plugin play along with your DAW.** The
+panel is now Mike Fiction's artwork: a real-looking G1 rack, resizable, with knob displays, the
+synth's settings on a page of their own and a display that says what each control does. The plugin
+follows your DAW's tempo, has a mono output for each of the G1's four, and keeps its patches when
+you switch OS. Please try it and report what you find with the **Report issue** button.
+
+## A new panel, by Mike Fiction
+
+**Panel skin and GUI design by Mike Fiction**, drawn from photographs of real hardware and
+published under CC BY 4.0. Thank you, Mike.
+
+- **Resizable**, in the window and in the plugin, and it remembers its size.
+- **Parameter displays** above the knobs say what each one moves, with the value as the editor
+  shows it (extras drawer). **Master volume** goes 0 to 127, and the DAW can automate it.
+- **An info display** under the panel says what the control under the mouse will do now: the dial,
+  the navigator, Store, Assign/Morph. **Tooltips** wait the same each time and can be turned off.
+- **Presets and Settings**, two more keys right of slot D. **Settings** shows the synth's settings
+  (the slots' MIDI channels, the clock, velocity, master tune...) over the knobs; press it again to
+  go back. **Presets** will list the synth's banks and programs to load with a click: it is **in
+  development**, coming next.
+- **Shift works as on the hardware**: it lets go after the next key, and stays held for the
+  navigator in Edit mode. **Shift + Patch/Load is Random**; right-click a knob to keep it out of
+  Random (a padlock shows it).
+- **Restart** switches the G1 off and on without closing G1-Emu (extras drawer).
+- **About** (extras drawer): who made G1-Emu, the license of every part in it, and Animatek NME.
+- The standalone has an **icon**, and the dial turns with a thumb indent.
 
 ## In your DAW
 
-- **The plugin keeps each slot's patch in the project** (#25). Until now a project kept the banks,
-  the knobs and the last Program Change: a patch sent from an editor, loaded from the panel, or
-  edited since came back as `Empty patch`. The plugin now reads each slot from the G1 whenever it
-  changes and puts it back when the project opens, with no editor needed. An edit made less than
-  about 1.5 seconds before saving may not be in it yet. Projects saved with alpha.11 still open;
-  their slots are read again from what loads.
-- **A DSP JIT failure no longer crashes the DAW** (#17). If the DSP code generator runs out of
-  memory (more likely with several instances), the DSP empties its cache and goes on; if it keeps
-  failing, that DSP goes silent and the status bar shows it (`x` and the reason), instead of the
-  host crashing.
-
-## The emulation
-
-- **The internal master clock runs at the synth's tempo** (#22). With the clock set to internal,
-  MIDIGlobal's clock, and every sequencer, arpeggio or clock divider following it, ran **4 times
-  too fast**; MIDI clock was always right. Two faults in the emulated 68331's timer, both fixed:
-  MIDIGlobal now gives 24 pulses per beat at the synth's tempo. **Clocked patches now play slower
-  than in earlier builds: that is the right speed.**
-- **A kept flash is no longer formatted again at start.** (A fault introduced and fixed while this
-  release was made; no earlier release had it.)
+- **The plugin follows your DAW's tempo** (#20). With the G1's MIDI clock set to external (the
+  Settings page: MIDI clock source), MIDIGlobal and everything clocked by it play at the host's
+  tempo and start and stop with its transport, loops included.
+- **Mono outputs** (#27): besides Out 1/2 and Out 3/4, Out 1, Out 2, Out 3 and Out 4 one by one.
+  They start off; in Cubase and Nuendo turn them on with **Activate Outputs**.
+- **A project saved under one OS opens under another** (#25). After installing Clavia's 3.03b
+  update, projects saved with the factory OS came back empty. Now their banks and settings load,
+  with the OS in use.
+- **The direct link with Animatek NME** (#8): NME finds every G1-Emu, window or plugin instance,
+  and connects with no MIDI port to set up, also on Windows. It needs the next Animatek NME release.
 
 ## Optional: the OS a real G1 runs
 
 The ROM carries a factory OS, and G1-Emu runs it unless told otherwise: everything works with it.
-But it is not the OS an updated G1 runs from its flash, Clavia's 3.03b update, and it does not read
-the stored synth settings at power-on: **Shift+Store's slots do not come back** when G1-Emu starts
-again, where a real G1 starts with them. You can now install the real one into G1-Emu the way you
-would into the hardware, with **Clavia's free Windows updater** (`Nord Modular OS v3.03b
-Update.exe`, which you find and download yourself; the Mac version is for Mac OS 8/9 and runs on no
-current Mac) and, on Linux or macOS, **Wine**:
+An updated G1 runs Clavia's 3.03b instead, which also brings back **Shift+Store's synth settings**
+at power-on. You can install it into G1-Emu the way you would into the hardware, with **Clavia's
+free Windows updater** (`Nord Modular OS v3.03b Update.exe`, which you find and download yourself)
+and, on Linux or macOS, **Wine**:
 
 1. Start G1-Emu in update mode: `G1_UPDATE=1 ./G1-Emu` (Linux and macOS; on Windows set
    `G1_UPDATE=1` in the environment first). The display shows `Update utility`; your banks are not
    touched.
 2. Run the updater and choose **G1-Emu's PC Port** as its MIDI output and input. Follow its steps
-   until the G1's display says `Update completed` (if the updater complains first, let the G1
-   finish).
+   until the G1's display says `Update completed`.
 3. Close G1-Emu. The OS is kept in the data folder and set as `os =` in the settings; the window,
    the console and the plugin all run it from then on. Empty `os =` to go back.
 
-It is optional and done once per machine. A DAW project saved under one OS keeps, but does not
-apply, its G1 state under the other. The OS is Clavia's, like the ROM: keep it to yourself.
+The OS is Clavia's, like the ROM: keep it to yourself.
 
 ## The plugin (VST3 and CLAP)
 
@@ -68,8 +76,9 @@ On macOS the plugin is not signed: if the DAW refuses it, run
 ## Known issues
 
 - **macOS:** patch uploads from Animatek NME can time out (#3).
-- **Windows:** the plugin has no PC Port; a direct link between NME and the emulator, with no MIDI
-  port, is planned (#8).
+- **Windows:** the plugin has no PC Port of its own (Windows makes no virtual MIDI ports). The
+  direct link reaches it with no port at all, from the next Animatek NME release on; until then,
+  use the standalone with loopMIDI (below).
 - **CLAP:** if you remove every G1-Emu instance and then add a new one, that new one may have no PC
   Port until the DAW reloads the plugin; its Settings say so.
 - **After the OS update:** the window crashed twice in the DSP code generator right after one

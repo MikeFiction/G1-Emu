@@ -7,6 +7,11 @@ Older entries cite their commit by hand.
 
 ## 2026-10-07
 
+- [Docs] **Release notes for v0.1.0-alpha.13 (Claude).** Mike Fiction's new panel, the plugin
+  following the host's tempo (#20), mono outputs (#27), projects across OSes (#25), the direct
+  link (#8, with the next Animatek NME), Presets (in development) and Settings, About; the Windows
+  known issue now points to the direct link.
+
 - [Imp] **Presets and Settings, two more keys in the slots' row (Claude, requested by Javier).**
   The page buttons Mike Fiction put under the display (Main Panel and Synth Settings) are gone;
   instead, right of slot D, **Presets** and **Settings** sit as the slots do, the LED above at the
