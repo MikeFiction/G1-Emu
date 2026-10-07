@@ -20,6 +20,6 @@ namespace g1
 	// The coarse pitch of the seven oscillators whose display box in the editor switches between
 	// notes and Hz (the manual): OscA, OscB, OscC, MasterOsc, SpectralOsc, FormantOsc, PercOsc.
 	bool hasHzReading(uint8_t _type, uint8_t _param);
-	// That pitch in Hz, as the editor's display box shows it ("130.8 Hz").
+	// That pitch in Hz, as the editor's display box shows it ("65.4 Hz", "1.05 kHz").
 	std::string formatHz(int _value);
 }

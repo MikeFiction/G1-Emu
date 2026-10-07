@@ -564,7 +564,7 @@ namespace g1
 			{106, 21, fmtOffOn},	// OscSineBank: osc4 mute
 			{106, 22, fmtOffOn},	// OscSineBank: osc5 mute
 			{106, 23, fmtOffOn},	// OscSineBank: osc6 mute
-			{107, 0, fmtNote},	// SpectralOsc: freq coarse (the OS reads it as a note; NME reads Hz)
+			{107, 0, fmtNote},	// SpectralOsc: freq coarse (the OS reads it as a note; NME shows Hz until clicked)
 			{107, 1, fmtMinus64},	// SpectralOsc: freq fine
 			{107, 3, fmtPartials},	// SpectralOsc: partials
 			{107, 8, fmtOffOn},	// SpectralOsc: kbt
