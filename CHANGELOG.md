@@ -7,6 +7,25 @@ Older entries cite their commit by hand.
 
 ## 2026-10-07
 
+- [Imp] **The knob menu says what a click will do (Claude, requested by Mike Fiction).** On a knob
+  excluded from Random its item now reads "Include in Random", where it read "Exclude from Random"
+  either way; and "Include all knobs in Random" is only there when at least one knob is excluded,
+  instead of greyed out. Checked on Windows: Mike tried both in the standalone.
+
+- [New] **Right-click menus on glass, and a menu for the panel (Claude, requested by Mike
+  Fiction).** A right click on the panel, or on anything with no right click of its own (the
+  displays, the LEDs, the keys that do not latch), opens a menu with **GUI Scale** (75% to 250%,
+  the current one ticked), **Settings** (the gear's: audio, MIDI...) and **Info** (About). The knobs
+  keep their own menu, and the keys that latch and JUCE's own controls (the drawer's buttons, the
+  master volume, the Settings page's boxes) keep their right click. The menus are drawn on the
+  tooltips' glass, whose blur is now much stronger for both (one blur, at a quarter size, so it
+  stays quick), in the tooltips' text, with a light band under the mouse, thin rules between
+  groups and the knob menu's heading in capitals on a darker band. They open right of the pointer
+  with the first item level with it, or above it near the bottom. Only `app/gui` changes; in the
+  plugin a new scale resizes the editor as dragging its corner does. Checked on Windows: the
+  standalone and the VST3 build, and Mike tried the menus in the standalone and in the VST3 in
+  Bitwig.
+
 - [Docs] **ROADMAP: running without a ROM (#16) is a goal around the beta, with no date (Claude,
   decided with Javier).**
 
