@@ -292,7 +292,8 @@ namespace g1
 
 		// ____________________________________________________________________________________
 		// Which parameter reads which way: module type, parameter index, formatter. Generated
-		// from NME's data/modules.xml (each <parameter class="parameter"> with a formatter).
+		// from NME's data/modules.xml (each <parameter class="parameter"> with a formatter), plus
+		// the few the G1's display reads where NME has no formatter (marked as such).
 
 		using Fn = std::string (*)(int);
 		struct Entry { uint8_t type, param; Fn fn; };
@@ -391,6 +392,7 @@ namespace g1
 			{18, 1, fmtMinus64},	// X-Fade: crossfade
 			{20, 1, fmtAdsrTime},	// ADSR: attack
 			{20, 2, fmtAdsrTime},	// ADSR: decay
+			{20, 3, fmtEnvelopeLevelDivider},	// ADSR: sustain (the OS reads it as 0-64; NME gives no formatter)
 			{20, 4, fmtAdsrTime},	// ADSR: release
 			{20, 5, fmtOffOn},	// ADSR: invert
 			{21, 0, fmtEnvelopeAttack},	// Compressor: attack
@@ -405,6 +407,7 @@ namespace g1
 			{22, 0, fmtPartialGen},	// PartialGen: partials
 			{23, 0, fmtAdsrTime},	// Mod-Env: attack
 			{23, 1, fmtAdsrTime},	// Mod-Env: decay
+			{23, 2, fmtEnvelopeLevelDivider},	// Mod-Env: sustain (the OS reads it as 0-64; NME gives no formatter)
 			{23, 3, fmtAdsrTime},	// Mod-Env: release
 			{23, 8, fmtOffOn},	// Mod-Env: invert
 			{24, 0, fmtLFOHz},	// LFOA: rate

@@ -22,7 +22,7 @@ namespace g1
 		uint8_t module = 0;			// module index in the patch (from 1)
 		uint8_t param = 0;
 		uint8_t type = 0;			// module type (7 = OscA...)
-		uint8_t value = 0;			// current value, 0..max (not for morph)
+		uint8_t value = 0;			// current value, 0..max
 		uint8_t max = 0;
 		std::string moduleName;		// the name given in the patch ("Mod"), or "Morph"
 		std::string paramName;		// the OS's short name ("Freq coars")
@@ -34,6 +34,7 @@ namespace g1
 		static constexpr uint32_t SlotBase = 0x1ab988;		// slot A; each next slot $6000 further
 		static constexpr uint32_t SlotStride = 0x6000;
 		static constexpr uint32_t KnobTable = 0x5c36;		// per slot: 23 x {section, module, param, -}
+		static constexpr uint32_t MorphValues = 0x5d64;		// per slot: the four morph groups' values, 0-127
 		static constexpr uint32_t CommonModules = 0x467a;	// per slot: a pointer per module index
 		static constexpr uint32_t PolyModules = 0x4c66;
 		static constexpr uint32_t ModuleType = 0x0e, ModuleName = 0x13, ModuleParams = 0x25;	// in a module
@@ -90,6 +91,8 @@ namespace g1
 					return k;
 				k.moduleName = readString(MorphName + os, 6);
 				k.paramName = readString(MorphParams + os + k.param * MorphStride, MorphStride);
+				k.value = m_mc.read8(base + MorphValues + k.param);
+				k.max = 127;
 				k.assigned = !k.paramName.empty();
 				return k;
 			}

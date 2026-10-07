@@ -7,6 +7,20 @@ Older entries cite their commit by hand.
 
 ## 2026-10-06
 
+- [Fix] **A knob on a morph group shows its value (Claude, reported by Mike Fiction).** The knob
+  display and the tooltips' display showed only the group's name; they now show its value, 0 to
+  127, as the G1's display does in Edit mode. The OS keeps the four values in the slot's block
+  (`NOTES.md`, "The knob assignments"). The knobs themselves still keep to their own position on a
+  morph group, with Knob Follows Patch on or not. Checked on Windows with `g1patchtest`: the four
+  values read are the patch's, they follow a morph knob as it turns, and the G1's display shows the
+  same; the standalone and the VST3 build.
+
+- [Fix] **ADSR and Mod-Env sustain read 0 to 64, as on the G1 (Claude, reported by Mike Fiction).**
+  The knob displays showed the raw 0 to 127; the G1's display shows half that, in steps of 0.5,
+  with the top value as 64. NME gives these two no reading of their own, so they now use the one
+  Multi-Env's levels already had. Checked against the G1's display in Edit mode and with
+  `g1formattest`.
+
 - [Imp] **Mike Fiction's panel skin merged with the direct link (Claude, requested by Javier).**
   Mike's `panel-skin` branch and the direct link (#8) both added a PC Port talker beside the editor's
   (the synth settings and the link): the runner and `EmuHost` now take both, and an editor's bytes

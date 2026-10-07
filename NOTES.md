@@ -628,7 +628,9 @@ Both pass since the fix ([CI run 35570337853](https://github.com/animatek/G1-Emu
   - **Parameter names:** `$1C3B1C + type × 48` holds a pointer to the type's list, 12 bytes per
     parameter: 11 characters (`Freq coars`, `Pitch MA 1`) and the maximum value. The OS builds it in
     RAM at boot from the ROM, so the names come from the user's ROM, not from us. Morph (section 2)
-    is named `Morph` (`$15BDD8`) with its groups at `$15BDDE + group × 8`.
+    is named `Morph` (`$15BDD8`) with its groups at `$15BDDE + group × 8`. **The four morph
+    values** (0–127) are at `+$5D64` in the slot's block, and again at `+$5D68`; both follow a
+    morph knob as it turns.
   - The active slot is `$1C3ABE`; with Panel Split on, the two tables at `$145A94` / `$145AA6` say
     which slot and which of its knobs each panel knob is.
   - **A knob's position to a value:** value = position × (max + 1) / 256 (measured: 100 → 50, 254 →

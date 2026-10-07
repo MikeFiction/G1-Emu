@@ -843,7 +843,7 @@ namespace g1gui
 		const juce::String top = _info.assigned ? juce::String(_info.moduleName) : juce::String();
 		juce::String bottom = _info.assigned ? juce::String(_info.paramName) : juce::String();
 		// The value as the editor reads it ("Sine", "1.25kHz"), without spaces: there are 11 characters.
-		juce::String value = _info.assigned && _info.section != 2 ? juce::String(g1::formatValue(_info.type, _info.param, _info.value)).removeCharacters(" ") : juce::String();
+		juce::String value = _info.assigned ? juce::String(g1::formatValue(_info.type, _info.param, _info.value)).removeCharacters(" ") : juce::String();
 		const auto t = value.isEmpty() ? top : top.substring(0, 10 - value.length()).paddedRight(' ', 11 - value.length()) + value;
 		if(t == m_top && bottom == m_bottom && _info.assigned == m_assigned)
 			return;
@@ -1323,8 +1323,8 @@ namespace g1gui
 			k.setValue(1 + m_rng.nextInt(254), juce::sendNotificationSync);	// 0 and 255 the OS ignores
 	}
 
-	// Only where the knob still moves the same parameter, and not the morph groups, whose value
-	// the snapshot does not have.
+	// Only where the knob still moves the same parameter, and not the morph groups (left to their
+	// own positions for now).
 	void Panel::restoreKnobs()
 	{
 		if(!m_haveSnapshot)
@@ -1414,7 +1414,7 @@ namespace g1gui
 	// host automation), except the one being turned by hand. Following the patch, a knob shows
 	// instead where its parameter's value would put it, as a patch loaded on the hardware leaves
 	// its knobs where they were; turning it starts from there. A knob with nothing assigned, or on
-	// a morph group (no value to read), shows its position.
+	// a morph group (left to its own position for now), shows its position.
 	void Panel::updateKnobs(const std::array<g1::KnobInfo, 18>& _info)
 	{
 		const bool follow = m_followToggle.getToggleState();
@@ -1445,8 +1445,6 @@ namespace g1gui
 			if(!_k.assigned)
 				return "Nothing assigned";
 			const auto name = juce::String(_k.moduleName) + ", " + juce::String(_k.paramName);
-			if(_k.section == 2)
-				return name;	// a morph group: no value to read
 			return name + "\t" + juce::String(g1::formatValue(_k.type, _k.param, _k.value));
 		}
 	}
