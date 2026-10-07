@@ -7,6 +7,9 @@ Older entries cite their commit by hand.
 
 ## 2026-10-07
 
+- [Docs] **ROADMAP: running without a ROM (#16) is a goal around the beta, with no date (Claude,
+  decided with Javier).**
+
 - [Docs] **ROADMAP: no hardware dumps (Claude, decided with Javier).** Nobody opens a synth to
   read its ROM; what only the ROM holds is written as G1-Emu's own boot, with the OS from Clavia's
   public updaters (#16), checked against the rack ROM we have. That is also the way to the Micro.

@@ -65,6 +65,9 @@ what it carries works.
   first release meant for everyone, not only testers. Before it: the known issues in the release
   notes solved or explained, the README and the notes written for a new user, and signing looked
   at again.
+- **Without a ROM (#16), no date:** a goal for around the beta, not tied to a release. G1-Emu's
+  own boot with the OS from Clavia's public updater would spare a new user the hardest step, finding
+  a ROM. It goes slowly and is done when it is done.
 
 ## Next
 
