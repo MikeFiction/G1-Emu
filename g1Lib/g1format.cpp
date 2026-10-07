@@ -143,15 +143,6 @@ namespace g1
 
 		std::string fmtOffset64_2(const int _v) { return _v == 127 ? "64" : str(_v - 64); }
 
-		std::string fmtOscHz(const int _v)
-		{
-			const double f = 440.0 * std::pow(2.0, (_v - 69) / 12.0);
-			if(f < 10)		return num(f, 2) + " Hz";
-			if(f < 100)		return num(f, 1) + " Hz";
-			if(f < 1000)	return num(f, 0) + " Hz";
-			return num(f / 1000.0, 2) + " kHz";
-		}
-
 		std::string fmtPartials(const int _v)
 		{
 			static const char* const fractions[] = {"1:32", "1:16", "1:8", "1:4", "1:2", "1:1", "2:1", "4:1", "8:1", "16:1", "32:1"};
@@ -502,13 +493,16 @@ namespace g1
 			{92, 0, fmtFilterHz2},	// FilterF: frequency
 			{92, 6, fmtOffOn},	// FilterF: bypass
 			{94, 2, fmtOffOn},	// StereoChorus: bypass
+			{95, 0, fmtNote},	// PercOsc: pitch (the OS reads it as a note; NME gives no formatter)
 			{95, 3, fmtOffOn},	// PercOsc: punch
 			{95, 5, fmtMinus64},	// PercOsc: pitchfine
 			{95, 6, fmtOffOn},	// PercOsc: mute
+			{96, 0, fmtNote},	// FormantOsc: pitch (the OS reads it as a note; NME gives no formatter)
 			{96, 1, fmtMinus64},	// FormantOsc: pitch fine
 			{96, 2, fmtOffOn},	// FormantOsc: kbt
 			{96, 3, fmtOffOn},	// FormantOsc: mute
 			{96, 4, fmtTimbre},	// FormantOsc: timbre
+			{97, 0, fmtNote},	// MasterOsc: pitch (the OS reads it as a note; NME gives no formatter)
 			{97, 1, fmtMinus64},	// MasterOsc: pitch fine
 			{97, 2, fmtOffOn},	// MasterOsc: kbt
 			{98, 1, fmtOffOn},	// KeyQuant: cont
@@ -570,7 +564,7 @@ namespace g1
 			{106, 21, fmtOffOn},	// OscSineBank: osc4 mute
 			{106, 22, fmtOffOn},	// OscSineBank: osc5 mute
 			{106, 23, fmtOffOn},	// OscSineBank: osc6 mute
-			{107, 0, fmtOscHz},	// SpectralOsc: freq coarse
+			{107, 0, fmtNote},	// SpectralOsc: freq coarse (the OS reads it as a note; NME reads Hz)
 			{107, 1, fmtMinus64},	// SpectralOsc: freq fine
 			{107, 3, fmtPartials},	// SpectralOsc: partials
 			{107, 8, fmtOffOn},	// SpectralOsc: kbt
@@ -606,5 +600,25 @@ namespace g1
 		const auto& t = table();
 		const auto it = t.find({_type, _param});
 		return it == t.end() ? str(_value) : it->second(_value);
+	}
+
+	bool hasHzReading(const uint8_t _type, const uint8_t _param)
+	{
+		switch(_type)
+		{
+		case 7: case 8: case 9: case 95: case 96: case 97: case 107:	// OscA, OscB, OscC, PercOsc, FormantOsc, MasterOsc, SpectralOsc
+			return _param == 0;
+		default:
+			return false;
+		}
+	}
+
+	std::string formatHz(const int _value)
+	{
+		const double f = 440.0 * std::pow(2.0, (_value - 69) / 12.0);
+		if(f < 10)		return num(f, 2) + " Hz";
+		if(f < 100)		return num(f, 1) + " Hz";
+		if(f < 1000)	return num(f, 0) + " Hz";
+		return num(f / 1000.0, 2) + " kHz";
 	}
 }

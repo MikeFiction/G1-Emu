@@ -14,6 +14,12 @@ namespace g1gui
 	{
 		constexpr const auto& g_knobAdc = g1::KnobMap::KnobAdc;
 
+		// A knob's value as the editor reads it; _hz: a pitch with a Hz reading in Hz, not as a note.
+		std::string knobValue(const g1::KnobInfo& _k, const bool _hz)
+		{
+			return _hz && g1::hasHzReading(_k.type, _k.param) ? g1::formatHz(_k.value) : g1::formatValue(_k.type, _k.param, _k.value);
+		}
+
 		// Buttons (matrix row.bit), identified by pressing them one by one with g1patchtest.
 		constexpr MatrixBit g_btnA{0, 2}, g_btnB{0, 3}, g_btnC{0, 4}, g_btnD{0, 5};
 		constexpr MatrixBit g_btnStore{0, 6}, g_btnSystem{0, 7}, g_btnEdit{1, 2}, g_btnPatchLoad{1, 3};
@@ -898,19 +904,31 @@ namespace g1gui
 		drawLcdText(_g, line(), r.getCentreX() - cell * g_tipCols * 0.5f, r.getCentreY() - dot * 3.5f, cell, dot);
 	}
 
-	void KnobDisplay::set(const g1::KnobInfo& _info)
+	void KnobDisplay::set(const g1::KnobInfo& _info, const bool _hz)
 	{
 		const juce::String top = _info.assigned ? juce::String(_info.moduleName) : juce::String();
 		juce::String bottom = _info.assigned ? juce::String(_info.paramName) : juce::String();
 		// The value as the editor reads it ("Sine", "1.25kHz"), without spaces: there are 11 characters.
-		juce::String value = _info.assigned ? juce::String(g1::formatValue(_info.type, _info.param, _info.value)).removeCharacters(" ") : juce::String();
+		juce::String value = _info.assigned ? juce::String(knobValue(_info, _hz)).removeCharacters(" ") : juce::String();
 		const auto t = value.isEmpty() ? top : top.substring(0, 10 - value.length()).paddedRight(' ', 11 - value.length()) + value;
+		const bool switchable = _info.assigned && g1::hasHzReading(_info.type, _info.param);
+		if(switchable != m_switchable)
+		{
+			m_switchable = switchable;
+			setTooltip(switchable ? "Click: Toggle Pitch / Hz" : juce::String());
+		}
 		if(t == m_top && bottom == m_bottom && _info.assigned == m_assigned)
 			return;
 		m_top = t;
 		m_bottom = bottom;
 		m_assigned = _info.assigned;
 		repaint();
+	}
+
+	void KnobDisplay::mouseUp(const juce::MouseEvent& _e)
+	{
+		if(m_switchable && onClick && !_e.mods.isPopupMenu() && getLocalBounds().contains(_e.getPosition()))
+			onClick();
 	}
 
 	void KnobDisplay::paint(juce::Graphics& _g)
@@ -1058,8 +1076,20 @@ namespace g1gui
 			m_host.setKnobDisplays(m_displaysToggle.getToggleState());
 		};
 		m_drawer.addAndMakeVisible(m_displaysToggle);
-		for(auto& d : m_knobDisplays)
-			addChildComponent(d);
+		for(uint32_t k = 0; k < 18; ++k)
+		{
+			// A click switches a pitch between a note and Hz, as the editor's display box does;
+			// every knob on the same module's pitch follows.
+			m_knobDisplays[k].onClick = [this, k]
+			{
+				const auto info = m_knobMap.read(k);
+				const auto key = pitchKey(info);
+				if(!m_hzPitches.erase(key))
+					m_hzPitches.insert(key);
+				m_knobDisplays[k].set(info, showsHz(info));
+			};
+			addChildComponent(m_knobDisplays[k]);
+		}
 		setKnobDisplays(m_host.knobDisplays());
 
 		m_tipsToggle.setTooltip("What each control can do, beside the mouse");
@@ -1619,7 +1649,7 @@ namespace g1gui
 			m_volume.setValue(m_mc.adc(VolumeAdc), juce::dontSendNotification);
 		if(m_knobDisplays[0].isVisible())
 			for(uint32_t k = 0; k < 18; ++k)
-				m_knobDisplays[k].set(_info[k]);
+				m_knobDisplays[k].set(_info[k], showsHz(_info[k]));
 	}
 
 	namespace
@@ -1627,22 +1657,32 @@ namespace g1gui
 		// What a knob moves, for the tooltips' display, as its display says it: with the displays
 		// off, hovering a knob still tells. The value after a tab, at the right. Its number is on
 		// the panel already.
-		juce::String knobTip(const g1::KnobInfo& _k)
+		juce::String knobTip(const g1::KnobInfo& _k, const bool _hz)
 		{
 			if(!_k.assigned)
 				return "Nothing assigned";
 			const auto name = juce::String(_k.moduleName) + ", " + juce::String(_k.paramName);
-			return name + "\t" + juce::String(g1::formatValue(_k.type, _k.param, _k.value));
+			return name + "\t" + juce::String(knobValue(_k, _hz));
 		}
 	}
 
 	juce::String Panel::shiftedKnobTip(const g1::KnobInfo& _k) const
 	{
 		if(m_mode == Mode::Edit)
-			return _k.assigned ? "Clear Knob" : knobTip(_k);
+			return _k.assigned ? "Clear Knob" : knobTip(_k, showsHz(_k));
 		if(m_mode == Mode::Patch || m_mode == Mode::System)
 			return {};
-		return knobTip(_k);
+		return knobTip(_k, showsHz(_k));
+	}
+
+	std::array<uint8_t, 4> Panel::pitchKey(const g1::KnobInfo& _k)
+	{
+		return {_k.slot, _k.section, _k.module, _k.type};
+	}
+
+	bool Panel::showsHz(const g1::KnobInfo& _k) const
+	{
+		return _k.assigned && g1::hasHzReading(_k.type, _k.param) && m_hzPitches.count(pitchKey(_k)) > 0;
 	}
 
 	// What the tooltips' display says for the controls whose text changes: the knobs, the master
@@ -1655,7 +1695,7 @@ namespace g1gui
 		// With Shift down, a turn changes nothing (the OS ignores it), except in Edit mode, where it
 		// takes an assigned knob's assignment away (the manual, Assign/Morph).
 		for(size_t i = 0; i < m_knobs.size(); ++i)
-			setLcdTip(m_knobs[i], shift ? shiftedKnobTip(_info[i]) : knobTip(_info[i]));
+			setLcdTip(m_knobs[i], shift ? shiftedKnobTip(_info[i]) : knobTip(_info[i], showsHz(_info[i])));
 		setLcdTip(m_volume, "Master Volume\t" + juce::String(m_mc.adc(VolumeAdc) / 2));
 		for(const auto& s : m_shiftNames)
 			setLcdTip(*s.button, s.name(shift));

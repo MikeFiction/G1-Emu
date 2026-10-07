@@ -7,6 +7,22 @@ Older entries cite their commit by hand.
 
 ## 2026-10-07
 
+- [New] **A click on an oscillator's pitch display toggles Hz (Claude, requested by Mike Fiction).**
+  Found while fixing the entry below: in the editor, the display box of seven oscillators switches
+  between Hz and notes with a click (the coarse pitch of OscA, OscB, OscC and the Master, Spectral,
+  Formant and Percussion oscillators). Their knob displays now do the same: they start as notes,
+  as the G1's own display, and a click toggles Hz (tooltip "Click: Toggle Pitch / Hz"); every
+  knob on the same module's pitch follows, and so does the info display. NME's own choice never
+  reaches the G1, so the panel keeps its own until the window closes. Checked on Windows:
+  `g1formattest` passes with the Hz readings, and Mike switched them in the standalone.
+
+- [Fix] **The oscillators' coarse pitch reads as a note on the knob displays (Claude, issue #38,
+  reported by Waltercalling).** The Master, Formant and Percussion oscillators' Pitch knob showed
+  its plain value (36), and the Spectral Oscillator's showed Hz, where the G1's own display reads
+  a note (C2). All four now read as notes, as OscA/B/C already did, with 60 = C4. Checked on
+  Windows: `g1formattest` passes with four new cases, and Mike compared each knob display with the
+  G1's display in the standalone.
+
 - [Docs] **ROADMAP: running without a ROM (#16) is a goal around the beta, with no date (Claude,
   decided with Javier).**
 

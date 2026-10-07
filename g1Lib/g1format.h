@@ -16,4 +16,10 @@ namespace g1
 	// _type is the module type (7 = OscA, as KnobInfo::type), _param its parameter's index. A
 	// parameter with no particular reading is its number.
 	std::string formatValue(uint8_t _type, uint8_t _param, int _value);
+
+	// The coarse pitch of the seven oscillators whose display box in the editor switches between
+	// notes and Hz (the manual): OscA, OscB, OscC, MasterOsc, SpectralOsc, FormantOsc, PercOsc.
+	bool hasHzReading(uint8_t _type, uint8_t _param);
+	// That pitch in Hz, as the editor's display box shows it ("130.8 Hz").
+	std::string formatHz(int _value);
 }
