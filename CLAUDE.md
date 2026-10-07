@@ -76,7 +76,13 @@ recreates its MIDI endpoints after shutting down). The 18 knobs are `KnobParamet
 what they move: the host's changes reach the ADC in `processBlock`, the panel's go to the host from
 a timer, a new engine sets them (`knobsFromEngine`). 128 programs are Program Changes on channel 1,
 since VST3 has no Program Change as MIDI. Outputs: Out 1/2 and Out 3/4 stereo, and the same four as
-mono buses Out 1..4, off until the host turns them on (#27); a channel on both gets a copy. The same target builds `G1-Emu.clap` when
+mono buses Out 1..4, off until the host turns them on (#27); a channel on both gets a copy.
+The host's transport reaches the G1 as MIDI clock (`app/plugin/hostclock.h`, #20): Start or Song
+Position + Continue, $F8 at 24 per beat and Stop, merged in frame order with the track's MIDI,
+whose own clock bytes are dropped while the host gives a transport. It moves the G1 only with its
+MIDI clock set to external. `g1hostclocktest` tests the clock alone; `g1vst3check plugin.vst3
+--clock dir` (dir: `g1patchtest ... tools/patches/ClockTest.pch --dump-packets dir`) measures
+MIDIGlobal following the host at 120 and 90 BPM. The same target builds `G1-Emu.clap` when
 `G1_CLAP_DIR` (default `~/src/clap-juce-extensions`, not Gearmulator's older copy) has
 clap-juce-extensions; `clap-validator` passes it. The design is
 `docs/instance-hosting.md`; what matters when touching it:

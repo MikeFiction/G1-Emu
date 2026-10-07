@@ -15,6 +15,7 @@
 // when there is one, so the banks and the patches in the slots are the ones already there. It is
 // a copy: the standalone's file is never written from here.
 
+#include "hostclock.h"
 #include "runner.h"
 #include "jucemidi.h"
 #include "g1Lib/g1knobs.h"
@@ -220,6 +221,9 @@ namespace g1plugin
 		bool m_unstarted = false;				// a new instance's G1 that has not run yet (settingsOnlyState)
 		bool m_engineFresh = false;				// created and not started yet: replay the programs
 		std::atomic<int> m_hostProgram{-1};		// set by the host's program parameter, sent by processBlock
+		// The host's transport as MIDI clock for the G1 (issue #20); audio thread only.
+		g1app::HostClock m_hostClock;
+		g1app::HostClock::Block m_clockBlock;
 		void replayPrograms();
 		std::string programsToString() const;
 		void programsFromString(const juce::String& _text);

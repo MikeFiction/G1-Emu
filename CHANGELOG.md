@@ -7,6 +7,19 @@ Older entries cite their commit by hand.
 
 ## 2026-10-07
 
+- [New] **The plugin follows the host's tempo (Claude, issue #20, asked by psy-dub).** A VST3 host
+  sends a plugin no MIDI clock, so with the G1's MIDI clock set to external nothing clocked moved
+  in the DAW. The plugin now makes the clock from the host's transport (`app/plugin/hostclock.h`):
+  a Start at the song's beginning or a Song Position Pointer and a Continue elsewhere, $F8 at 24
+  per beat on the frame where each falls, and a Stop when the transport stops; a loop's jump just
+  carries on from the new place. It goes in with the track's MIDI in frame order, and the track's
+  own clock bytes are left out while the host gives a transport, so the G1 never gets two clocks.
+  With the clock set to internal the G1 ignores it, as the hardware does. Checked:
+  `g1hostclocktest` (new: ticks on their frames in blocks of 1 frame to 2048, Start, Song Position,
+  Continue, Stop, loops); `g1vst3check --clock` (new) uploads `ClockTest.pch` over the PC Port and
+  measures MIDIGlobal's pulses at 48.00 Hz with the host at 120 BPM, 36.00 Hz at 90 and none when
+  stopped, where the build before gave none at all; all tests pass.
+
 - [New] **Mono outputs in the plugin (Claude, issue #27, asked by psy-dub).** Besides Out 1/2 and
   Out 3/4, the VST3 and the CLAP now have Out 1, Out 2, Out 3 and Out 4 as mono buses, off until
   the host turns them on (Cubase and Nuendo: Activate Outputs), so each of the G1's four outputs

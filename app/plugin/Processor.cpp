@@ -534,8 +534,32 @@ namespace g1plugin
 			const uint8_t msg[2] = {0xc0, static_cast<uint8_t>(program)};
 			runner->queueMidi(0, msg, 2);
 		}
+		// The host's transport as MIDI clock (issue #20): a VST3 host sends a plugin none, so it
+		// is made here, and goes in with the track's MIDI in frame order (the runner's queue is
+		// first in, first out). While the transport gives one, the track's own clock, start, stop
+		// and song position are left out, so the G1 never gets two clocks.
+		bool transport = false;
+		if(auto* head = getPlayHead())
+			if(const auto pos = head->getPosition())
+				if(const auto bpm = pos->getBpm(), ppq = pos->getPpqPosition(); bpm && ppq)
+				{
+					transport = true;
+					m_hostClock.process(pos->getIsPlaying(), *bpm, *ppq, static_cast<uint32_t>(frames), m_rate, m_clockBlock);
+				}
+		if(!transport)
+			m_hostClock.process(false, 0, 0, static_cast<uint32_t>(frames), m_rate, m_clockBlock);	// a Stop if it was playing
+		size_t clockAt = 0;
+		const auto clockUpTo = [&](const uint32_t _offset)
+		{
+			for(; clockAt < m_clockBlock.count && m_clockBlock.events[clockAt].offset <= _offset; ++clockAt)
+				runner->queueMidi(m_clockBlock.events[clockAt].offset, m_clockBlock.events[clockAt].bytes, m_clockBlock.events[clockAt].size);
+		};
+
 		for(const auto m : _midi)
 		{
+			if(transport && m.numBytes > 0 && (m.data[0] == 0xf8 || m.data[0] == 0xfa || m.data[0] == 0xfb || m.data[0] == 0xfc || m.data[0] == 0xf2))
+				continue;
+			clockUpTo(static_cast<uint32_t>(std::max(m.samplePosition, 0)));
 			runner->queueMidi(static_cast<uint32_t>(m.samplePosition), m.data, static_cast<size_t>(m.numBytes));
 			const auto status = m.data[0] & 0xf0;
 			auto& p = m_programs[static_cast<size_t>(m.data[0] & 0x0f)];
@@ -544,6 +568,7 @@ namespace g1plugin
 			else if(status == 0xb0 && m.numBytes >= 3 && (m.data[1] == 0 || m.data[1] == 32))
 				(m.data[1] == 0 ? p.bankMsb : p.bankLsb).store(m.data[2], std::memory_order_relaxed);
 		}
+		clockUpTo(static_cast<uint32_t>(frames));
 
 		// Each output goes to its pair's stereo bus and to its own mono bus, whichever are on: the
 		// G1 writes into the first, and the other gets a copy.

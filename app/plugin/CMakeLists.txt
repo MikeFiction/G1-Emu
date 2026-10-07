@@ -35,6 +35,12 @@ if(G1_HAVE_CLAP)
 		CLAP_MANUAL_URL "https://github.com/animatek/G1-Emu")
 endif()
 
+# The host's transport as MIDI clock (issue #20): no ROM, no DAW.
+add_executable(g1hostclocktest hostclocktest.cpp hostclock.h)
+target_include_directories(g1hostclocktest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME g1hostclocktest COMMAND g1hostclocktest)
+set_tests_properties(g1hostclocktest PROPERTIES TIMEOUT 60 LABELS g1)
+
 # The runner without a DAW: blocks of any size, notes at exact frames, offline and in real time.
 # Needs a ROM, so without one it reports itself skipped.
 add_executable(g1runnertest runnertest.cpp runner.cpp runner.h)

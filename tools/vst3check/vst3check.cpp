@@ -1,6 +1,6 @@
 // g1vst3check: loads the built G1-Emu.vst3 through JUCE's VST3 host, as a DAW would, and plays it.
 //
-//   g1vst3check path/to/G1-Emu.vst3 [--slots]
+//   g1vst3check path/to/G1-Emu.vst3 [--slots | --window | --clock packets-dir]
 //
 // Two instances at once in one process, each with its own Program Change and a note, rendered
 // offline block by block and interleaved; then the first one's state goes into a third instance,
@@ -9,6 +9,8 @@
 // (IAm) through its virtual MIDI port, as Animatek NME sends it, and must answer on its own port and
 // not on the other's (Linux and macOS: on Windows JUCE makes no virtual ports). Needs a ROM where the plugin looks for one: without it, 77.
 // With every bus on, the mono outputs Out 1..4 must carry exactly what the stereo pairs carry (#27).
+//
+// --clock, alone (issue #20): the host's transport clocks the G1 (checkClock).
 //
 // --slots, alone (issue #25, where there are PC Ports): a patch sent to slot A through the PC
 // Port, as an editor sends it and not stored in any bank, must be in the project saved
@@ -286,6 +288,97 @@ namespace
 		return failed;
 	}
 
+	// A host's transport, as JUCE's VST3 host hands it to the plugin (ProcessContext).
+	struct Transport final : juce::AudioPlayHead
+	{
+		double bpm = 120.0, ppq = 0.0;
+		bool playing = false;
+		juce::Optional<PositionInfo> getPosition() const override
+		{
+			PositionInfo p;
+			p.setBpm(bpm);
+			p.setPpqPosition(ppq);
+			p.setIsPlaying(playing);
+			return p;
+		}
+	};
+
+	// Issue #20 (--clock dir), in a process of its own: the host's transport must reach the G1 as
+	// MIDI clock. ClockTest.pch (MIDIGlobal's clock to output 1; the packets as g1patchtest
+	// --dump-packets writes them, in dir) goes to slot A over the PC Port while the transport is
+	// stopped; then the transport plays 4 s at 120 BPM and 4 s at 90 BPM, and stops. MIDIGlobal
+	// gives 24 pulses a beat when the G1's clock is external, which a new flash's is: 48 Hz, then
+	// 36 Hz, then nothing.
+	int checkClock(juce::AudioPluginFormatManager& _formats, const juce::String& _path, const juce::File& _packets)
+	{
+		std::vector<std::vector<uint8_t>> upload;
+		for(const auto& f : _packets.findChildFiles(juce::File::findFiles, false, "packet-*.syx"))
+		{
+			juce::MemoryBlock data;
+			f.loadFileAsData(data);
+			upload.emplace_back(static_cast<const uint8_t*>(data.getData()), static_cast<const uint8_t*>(data.getData()) + data.getSize());
+		}
+		Voice v;
+		v.plugin = load(_formats, _path);
+		auto& p = *v.plugin;
+		Transport transport;
+		p.setPlayHead(&transport);
+		const juce::String port = "G1-Emu PC Port";
+		Editor sender;
+		const bool open = !upload.empty() && sender.open(port);
+		std::printf("issue #20: %zu packets, editor on \"%s\": %s\n", upload.size(), port.toRawUTF8(), open ? "open" : "NOT THERE");
+
+		p.setNonRealtime(true);
+		p.prepareToPlay(g_rate, g_block);
+		const int total = static_cast<int>(20.0 * g_rate);
+		std::vector<float> out(static_cast<size_t>(total), 0.0f);
+		size_t sent = 0;
+		for(int pos = 0; pos < total; pos += g_block)
+		{
+			if(open && pos >= static_cast<int>(6.0 * g_rate) && sent < upload.size() && sender.acks() >= static_cast<int>(sent))
+			{
+				sender.send(port, upload[sent++]);
+				for(int i = 0; i < 50 && sender.acks() < static_cast<int>(sent); ++i)
+					juce::Thread::sleep(2);
+			}
+			const double t = pos / g_rate;
+			transport.playing = t >= 10.0 && t < 18.0;
+			transport.bpm = t < 14.0 ? 120.0 : 90.0;
+			juce::AudioBuffer<float> buffer(std::max(p.getTotalNumInputChannels(), p.getTotalNumOutputChannels()), g_block);
+			buffer.clear();
+			juce::MidiBuffer midi;
+			p.processBlock(buffer, midi);
+			for(int i = 0; i < g_block && pos + i < total; ++i)
+				out[static_cast<size_t>(pos + i)] = buffer.getSample(0, i);
+			if(transport.playing)
+				transport.ppq += transport.bpm / 60.0 / g_rate * g_block;
+		}
+		p.releaseResources();
+
+		// Pulses a second between _from and _to: rising edges through half the loudest sample.
+		const auto rate = [&](const double _from, const double _to)
+		{
+			const auto a = static_cast<size_t>(_from * g_rate), b = static_cast<size_t>(_to * g_rate);
+			float peak = 0;
+			for(size_t i = a; i < b; ++i)
+				peak = std::max(peak, std::abs(out[i]));
+			if(peak < 1e-3f)
+				return 0.0;
+			int edges = 0;
+			for(size_t i = a + 1; i < b; ++i)
+				edges += out[i - 1] <= peak * 0.5f && out[i] > peak * 0.5f;
+			return edges / (_to - _from);
+		};
+		const double r120 = rate(11.0, 14.0), r90 = rate(15.0, 18.0), stopped = rate(19.0, 20.0);
+		std::printf("issue #20: %zu of %zu packets sent, %d ACKs; output 1: %.2f Hz at 120 BPM, %.2f Hz at 90 BPM, %.2f Hz stopped\n",
+			sent, upload.size(), sender.acks(), r120, r90, stopped);
+		if(!open || sent != upload.size() || std::abs(r120 - 48.0) > 0.5 || std::abs(r90 - 36.0) > 0.5 || stopped != 0.0)
+		{
+			std::printf("FAIL: the host's transport does not clock the G1\n");
+			return 1;
+		}
+		return 0;
+	}
 }
 
 namespace
@@ -523,6 +616,12 @@ int main(int _argc, char** _argv)
 	if(_argc > 2 && juce::String(_argv[2]) == "--slots")
 	{
 		failed = checkSlots(formats, path);
+		std::printf("%s\n", failed ? "FAILED" : "all good");
+		return failed;
+	}
+	if(_argc > 3 && juce::String(_argv[2]) == "--clock")
+	{
+		failed = checkClock(formats, path, juce::File(juce::String(_argv[3])));
 		std::printf("%s\n", failed ? "FAILED" : "all good");
 		return failed;
 	}
