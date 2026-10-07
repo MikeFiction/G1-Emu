@@ -71,11 +71,15 @@ namespace g1app
 			else if(std::abs(first - static_cast<double>(m_nextTick)) > 1.0)
 				m_nextTick = static_cast<int64_t>(std::ceil(first - 1e-6));
 
+			// Each tick on the frame nearest to it: truncating put one a frame early wherever the
+			// arithmetic came out a hair under a whole frame (79999.9999), which depends on the
+			// compiler. One that rounds up to the next block's first frame goes there.
 			while(static_cast<double>(m_nextTick) < end - 1e-9)
 			{
-				const double at = (static_cast<double>(m_nextTick) - first) / ticksPerFrame;
-				const auto offset = static_cast<uint32_t>(std::fmin(std::fmax(at, 0.0), static_cast<double>(_frames - 1)));
-				if(!add(_block, offset, {0xf8}, 1))
+				const double at = std::round((static_cast<double>(m_nextTick) - first) / ticksPerFrame);
+				if(at >= static_cast<double>(_frames))
+					break;
+				if(!add(_block, static_cast<uint32_t>(std::fmax(at, 0.0)), {0xf8}, 1))
 					break;
 				++m_nextTick;
 			}

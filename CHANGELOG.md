@@ -7,6 +7,13 @@ Older entries cite their commit by hand.
 
 ## 2026-10-07
 
+- [Fix] **The host's clock ticks land on the nearest frame (Claude).** `HostClock` truncated each
+  tick's offset, so a tick whose arithmetic came out a hair under a whole frame (79999.9999) went
+  one frame early. Which ticks did depends on the compiler: CI failed `g1hostclocktest` on Windows
+  and macOS and not on Linux. Now each tick goes to the nearest frame, or to the next block's first
+  one. The test now allows half a frame instead of one, and `G1_SEED` gives it other block sizes.
+  Checked: it passes, and with 2000 other seeds.
+
 - [Docs] **Release notes for v0.1.0-alpha.13 (Claude).** Mike Fiction's new panel, the plugin
   following the host's tempo (#20), mono outputs (#27), projects across OSes (#25), the direct
   link (#8, with the next Animatek NME), Presets (in development) and Settings, About; the Windows

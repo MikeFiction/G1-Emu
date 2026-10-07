@@ -74,7 +74,7 @@ namespace
 			if(s.b0 != 0xf8)
 				continue;
 			const double want = static_cast<double>(_start) + (static_cast<double>(k) - _startPpq * 24.0) * framesPerTick;
-			if(std::abs(static_cast<double>(s.frame) - want) > 1.0)
+			if(std::abs(static_cast<double>(s.frame) - want) > 0.5 + 1e-6)	// the nearest frame
 			{
 				std::printf("    tick %lld at frame %llu, expected %.1f\n", static_cast<long long>(k),
 					static_cast<unsigned long long>(s.frame), want);
@@ -88,7 +88,7 @@ namespace
 
 int main()
 {
-	std::mt19937 rng(20261007);
+	std::mt19937 rng(std::getenv("G1_SEED") ? static_cast<unsigned>(std::atoi(std::getenv("G1_SEED"))) : 20261007u);	// G1_SEED: other blocks
 
 	// From the beginning, at 120 BPM: a Start, then 48 ticks a second.
 	{
