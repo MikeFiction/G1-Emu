@@ -16,7 +16,8 @@ Older entries cite their commit by hand.
 
 - [New] **About, in the extras drawer (Claude, requested by Javier).** A card over the panel, like
   Restart's question, with the version, what G1-Emu is, how Animatek NME connects to it by itself
-  (with a button to NME and one to the source code), the credits (Mike Fiction's panel skin and GUI
+  (with a button to NME and one to the source code; any Nord Modular editor, new or old, connects through
+  the PC Port), the credits (Mike Fiction's panel skin and GUI
   design, Gearmulator, contributors and testers) and the license of every part inside the program:
   GPLv3 for G1-Emu, Gearmulator's dsp56300 and mc68k; CC BY 4.0 for Mike Fiction's artwork; MIT for
   Musashi, the VST 3 SDK and CLAP; zlib for AsmJit; AGPLv3 for JUCE 8; and that G1-Emu is not

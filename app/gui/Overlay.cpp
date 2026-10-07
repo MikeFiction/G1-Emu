@@ -159,10 +159,10 @@ namespace g1gui
 				{"", juce::String("Version ") + G1_BUILD_VERSION + "\n\n"
 					"The Nord Modular G1 rack, emulated: its own OS running on an emulated 68331 and four emulated "
 					"DSP56303s, as a standalone program and as a VST3 and CLAP plugin. Free and open source."},
-				{"Works with Animatek NME",
-					"Animatek NME, the modern editor for the G1, finds G1-Emu by itself and connects with no MIDI port to "
-					"set up (the direct link): open both, and edit G1-Emu as if it were the real synth. NME also connects "
-					"through the PC Port, as with the hardware, and so does Clavia's original editor."},
+				{"Works with any Nord Modular editor",
+					"G1-Emu answers on its PC Port like the real synth, so any Nord Modular editor connects to it, new or "
+					"old. Animatek NME, the modern editor for the G1, goes further: it finds G1-Emu by itself and connects "
+					"with no MIDI port to set up (the direct link). Open both, and edit G1-Emu as if it were the real synth."},
 				{"Credits",
 					"Javier Melgar (Animatek): G1-Emu and Animatek NME.\n"
 					"Mike Fiction: panel skin and GUI design.\n"
