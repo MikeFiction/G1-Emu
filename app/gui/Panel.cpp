@@ -986,7 +986,8 @@ namespace g1gui
 	void MenuLook::drawPopupMenuSectionHeaderWithOptions(juce::Graphics& _g, const juce::Rectangle<int>& _area,
 		const juce::String& _name, const juce::PopupMenu::Options&)
 	{
-		// On a darker band, so it reads over a busy panel: the menu's top, so its top corners are the glass's.
+		// On a darker band, so it reads over a busy panel. It is the menu's top: its top corners
+		// are the glass's.
 		const auto band = _area.toFloat();
 		juce::Path shade;
 		shade.addRoundedRectangle(band.getX(), band.getY(), band.getWidth(), band.getHeight(), g_tipCorner, g_tipCorner, true, true, false, false);
@@ -1696,7 +1697,8 @@ namespace g1gui
 		juce::PopupMenu menu;
 		menu.addSubMenu("GUI Scale", sizes);
 		menu.addSeparator();
-		// The emulator's settings (the gear: audio, MIDI...) and About (the extras drawer's): the same as pressing them.
+		// The emulator's settings (the gear: audio, MIDI...) and About (the extras drawer's): the
+		// same as pressing them.
 		menu.addItem("Settings", [this] { m_settings.onClick(); });
 		menu.addItem("Info", [this] { m_about.onClick(); });
 		showMenu(menu);

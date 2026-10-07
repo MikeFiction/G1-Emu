@@ -352,8 +352,8 @@ namespace g1gui
 		void placeDrawer();
 		void shiftAsideForKnobs();
 		void randomizeKnobs();
-		void showKnobMenu(size_t _knob);	// right click: Exclude from Random
-		void showPanelMenu();				// right click anywhere else: the window's size
+		void showKnobMenu(size_t _knob);	// right click: Exclude from Random, or Include
+		void showPanelMenu();				// right click anywhere else: GUI Scale, Settings, Info
 		bool hasOwnRightClick(const juce::Component* _c) const;	// a control that answers a right click itself
 		void showMenu(juce::PopupMenu& _menu);		// on the glass, at the mouse
 		void updateRandomExcluded();		// the knobs' marks and hover tooltips, from the host
