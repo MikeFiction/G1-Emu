@@ -58,6 +58,14 @@ Older entries cite their commit by hand.
 - [Imp] **The notice in Settings folds away (Claude, requested by Javier).** Its text is hidden
   until "Read the notice" opens it, and the window is shorter while it is folded; the startup switch
   stays where it was ("Show the notice at startup"). Checked: it builds.
+- [Change] **Original artwork for the knobs and buttons, and a license for the skin art (Mike
+  Fiction).** The small knob, the black buttons (wide, tall, tilted) and the red held buttons are
+  redrawn from Mike's own photographs of real hardware, replacing the few pictures that were based
+  on other skins, so every image in `app/gui/skin` is now Mike's original work. The new
+  `app/gui/skin/LICENSE.md` publishes that artwork under CC BY 4.0 (credit: Mike Fiction); the code
+  stays GPLv3. Same file names, frame sizes and knob travel (−120° to +120° over 128 frames), so no
+  code changes. Checked on Windows: everything builds, the nine `g1` tests pass, and the panel shows
+  the new art in the standalone and the VST3.
 
 - [Imp] **Mike Fiction's panel skin merged with the direct link (Claude, requested by Javier).**
   Mike's `panel-skin` branch and the direct link (#8) both added a PC Port talker beside the editor's
