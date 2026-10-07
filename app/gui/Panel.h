@@ -45,6 +45,8 @@ namespace g1gui
 		virtual void setKnobDisplays(bool _on) = 0;
 		virtual bool knobFollowsPatch() const = 0;		// a knob shows its parameter's value, not where it was turned
 		virtual void setKnobFollowsPatch(bool _on) = 0;
+		virtual uint32_t randomExcluded() const = 0;	// the knobs Random leaves alone: bit k for knob k + 1
+		virtual void setRandomExcluded(uint32_t _knobs) = 0;
 		virtual float panelScale() const = 0;			// the window's size, as PanelView keeps it
 		virtual void setPanelScale(float _scale) = 0;
 		virtual juce::String settingsTooltip() const = 0;
@@ -290,6 +292,8 @@ namespace g1gui
 		void placeDrawer();
 		void shiftAsideForKnobs();
 		void randomizeKnobs();
+		void showKnobMenu(size_t _knob);	// right click: Exclude from Random
+		void updateRandomExcluded();		// the knobs' marks and hover tooltips, from the host
 		void restoreKnobs();
 		void setKnobDisplays(bool _on);
 		void updateTip();
@@ -366,6 +370,15 @@ namespace g1gui
 		SynthSettingsView m_synthView;	// over everything while open
 		ConfirmView m_confirm;			// the same, for a question (Restart)
 		juce::Random m_rng;
+		// A right click on a knob opens its menu; the slider still gets the click, which does not
+		// turn it.
+		struct KnobMenuListener : juce::MouseListener
+		{
+			explicit KnobMenuListener(Panel& _panel) : panel(_panel) {}
+			void mouseDown(const juce::MouseEvent& _e) override;
+			Panel& panel;
+		};
+		KnobMenuListener m_knobMenu{*this};
 
 		// What each knob is assigned to, from the OS's tables (g1knobs.h), and the displays.
 		g1::KnobMap m_knobMap;

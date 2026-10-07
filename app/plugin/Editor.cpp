@@ -128,6 +128,8 @@ namespace g1plugin
 	void Editor::setKnobDisplays(const bool _on) { m_processor.setKnobDisplays(_on); }
 	bool Editor::knobFollowsPatch() const { return m_processor.knobFollowsPatch(); }
 	void Editor::setKnobFollowsPatch(const bool _on) { m_processor.setKnobFollowsPatch(_on); }
+	uint32_t Editor::randomExcluded() const { return m_processor.randomExcluded(); }
+	void Editor::setRandomExcluded(const uint32_t _knobs) { m_processor.setRandomExcluded(_knobs); }
 	float Editor::panelScale() const { return m_processor.panelScale(); }
 	void Editor::setPanelScale(const float _scale) { m_processor.setPanelScale(_scale); }
 

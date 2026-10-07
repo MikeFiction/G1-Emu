@@ -7,6 +7,17 @@ Older entries cite their commit by hand.
 
 ## 2026-10-06
 
+- [New] **Exclude a knob from Random (Claude, requested by Javier).** A right click on any of the
+  18 knobs opens a menu with "Exclude from Random" (ticked when it is) and "Include all knobs in
+  Random". Shift + Patch/Load then leaves those knobs where they are: an output level, say, which
+  many patches put on a knob. An excluded knob carries a small padlock at its lower right, and every
+  knob's hover tooltip says what a right click does. The window keeps the list in `settings.conf`,
+  the plugin in the project and in `plugin.conf` (`randomExclude = 1 7 18`, the knobs' numbers).
+  Checked: it builds, the `g1` tests pass, and Javier tried it in the window.
+- [Imp] **The notice in Settings folds away (Claude, requested by Javier).** Its text is hidden
+  until "Read the notice" opens it, and the window is shorter while it is folded; the startup switch
+  stays where it was ("Show the notice at startup"). Checked: it builds.
+
 - [Imp] **Mike Fiction's panel skin merged with the direct link (Claude, requested by Javier).**
   Mike's `panel-skin` branch and the direct link (#8) both added a PC Port talker beside the editor's
   (the synth settings and the link): the runner and `EmuHost` now take both, and an editor's bytes

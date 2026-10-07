@@ -675,7 +675,24 @@ namespace g1gui
 	{
 		const auto& knob = skin().knob;
 		const int frame = juce::roundToInt(_pos * static_cast<float>(knob.count() - 1));
-		knob.draw(_g, frame, _slider.getProperties().contains("spriteW") ? spriteArea(_slider) : juce::Rectangle<int>(_x, _y, _w, _h).toFloat());
+		const auto area = _slider.getProperties().contains("spriteW") ? spriteArea(_slider) : juce::Rectangle<int>(_x, _y, _w, _h).toFloat();
+		knob.draw(_g, frame, area);
+
+		// Excluded from Random: a small padlock at the knob's lower right.
+		if(_slider.getProperties()["randomExcluded"])
+		{
+			const float r = area.getWidth() * 0.13f;
+			const auto badge = juce::Rectangle<float>(2 * r, 2 * r).withCentre({area.getRight() - r, area.getBottom() - r});
+			_g.setColour(juce::Colours::black.withAlpha(0.7f));
+			_g.fillEllipse(badge);
+			const auto body = juce::Rectangle<float>(r * 0.9f, r * 0.7f).withCentre(badge.getCentre().translated(0, r * 0.22f));
+			juce::Path shackle;
+			shackle.addCentredArc(body.getCentreX(), body.getY(), r * 0.3f, r * 0.36f, 0, -juce::MathConstants<float>::halfPi,
+				juce::MathConstants<float>::halfPi, true);
+			_g.setColour(juce::Colours::white.withAlpha(0.9f));
+			_g.strokePath(shackle, juce::PathStrokeType(r * 0.16f));
+			_g.fillRoundedRectangle(body, r * 0.12f);
+		}
 	}
 
 	// ________________________________________________________________________
@@ -899,6 +916,7 @@ namespace g1gui
 		for(size_t i = 0; i < m_knobs.size(); ++i)
 		{
 			setupKnob(m_knobs[i], g_knobAdc[i], "Knob " + juce::String(static_cast<int>(i + 1)), &m_knobTurnedAt[i]);
+			m_knobs[i].addMouseListener(&m_knobMenu, false);
 			m_knobLeds[i] = &addLed({static_cast<int>(i % 3), 1 + static_cast<int>(i / 3)});
 		}
 
@@ -998,6 +1016,7 @@ namespace g1gui
 		for(auto& d : m_knobDisplays)
 			addChildComponent(d);
 		setKnobDisplays(m_host.knobDisplays());
+		updateRandomExcluded();
 
 		m_followToggle.setTooltip("Show each knob where the patch's value puts it, instead of where it was last turned");
 		m_followToggle.setColour(juce::ToggleButton::textColourId, g_textLight);
@@ -1038,7 +1057,10 @@ namespace g1gui
 		m_tooltips.setLookAndFeel(nullptr);
 		m_volume.setLookAndFeel(nullptr);
 		for(auto& k : m_knobs)
+		{
 			k.setLookAndFeel(nullptr);
+			k.removeMouseListener(&m_knobMenu);
+		}
 	}
 
 	PanelButton& Panel::addButton(const juce::String& _name, const MatrixBit _bit, const PanelButton::Shape _shape)
@@ -1319,8 +1341,52 @@ namespace g1gui
 			m_snapshot = now;
 			m_haveSnapshot = true;
 		}
-		for(auto& k : m_knobs)
-			k.setValue(1 + m_rng.nextInt(254), juce::sendNotificationSync);	// 0 and 255 the OS ignores
+		const auto excluded = m_host.randomExcluded();
+		for(size_t k = 0; k < m_knobs.size(); ++k)
+			if(!(excluded & (1u << k)))
+				m_knobs[k].setValue(1 + m_rng.nextInt(254), juce::sendNotificationSync);	// 0 and 255 the OS ignores
+	}
+
+	void Panel::KnobMenuListener::mouseDown(const juce::MouseEvent& _e)
+	{
+		if(!_e.mods.isPopupMenu())
+			return;
+		for(size_t k = 0; k < panel.m_knobs.size(); ++k)
+			if(_e.eventComponent == &panel.m_knobs[k])
+				panel.showKnobMenu(k);
+	}
+
+	// Some knobs are better left where they are when the rest go random: an output level, say.
+	// Which ones is the host's to keep (a project keeps its own in the plugin).
+	void Panel::showKnobMenu(const size_t _knob)
+	{
+		const auto excluded = m_host.randomExcluded();
+		const auto bit = 1u << _knob;
+		juce::PopupMenu menu;
+		menu.addSectionHeader("Knob " + juce::String(static_cast<int>(_knob + 1)));
+		menu.addItem("Exclude from Random", true, (excluded & bit) != 0, [this, bit]
+		{
+			m_host.setRandomExcluded(m_host.randomExcluded() ^ bit);
+			updateRandomExcluded();
+		});
+		menu.addItem("Include all knobs in Random", excluded != 0, false, [this]
+		{
+			m_host.setRandomExcluded(0);
+			updateRandomExcluded();
+		});
+		menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&m_knobs[_knob]));
+	}
+
+	void Panel::updateRandomExcluded()
+	{
+		const auto excluded = m_host.randomExcluded();
+		for(size_t k = 0; k < m_knobs.size(); ++k)
+		{
+			const bool out = (excluded & (1u << k)) != 0;
+			m_knobs[k].getProperties().set("randomExcluded", out);
+			m_knobs[k].setTooltip(out ? "Excluded from Random (right click to include it)" : "Right click: exclude from Random");
+			m_knobs[k].repaint();
+		}
 	}
 
 	// Only where the knob still moves the same parameter, and not the morph groups, whose value

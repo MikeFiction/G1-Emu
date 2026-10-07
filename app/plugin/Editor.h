@@ -41,6 +41,8 @@ namespace g1plugin
 		void setKnobDisplays(bool _on) override;
 		bool knobFollowsPatch() const override;
 		void setKnobFollowsPatch(bool _on) override;
+		uint32_t randomExcluded() const override;
+		void setRandomExcluded(uint32_t _knobs) override;
 		float panelScale() const override;
 		void setPanelScale(float _scale) override;
 		void fitTo(double _aspect);

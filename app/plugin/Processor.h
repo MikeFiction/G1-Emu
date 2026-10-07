@@ -128,6 +128,8 @@ namespace g1plugin
 		void setKnobDisplays(bool _on) { if(std::exchange(m_knobDisplays, _on) != _on) { stateChanged(); savePreferences(); } }
 		bool knobFollowsPatch() const { return m_knobFollowsPatch; }
 		void setKnobFollowsPatch(bool _on) { if(std::exchange(m_knobFollowsPatch, _on) != _on) { stateChanged(); savePreferences(); } }
+		uint32_t randomExcluded() const { return m_randomExclude; }
+		void setRandomExcluded(uint32_t _knobs) { if(std::exchange(m_randomExclude, _knobs) != _knobs) { stateChanged(); savePreferences(); } }
 		float panelScale() const { return m_panelScale; }
 		void setPanelScale(float _scale) { if(std::abs(std::exchange(m_panelScale, _scale) - _scale) > 0.002f) stateChanged(); }
 		void savePreferences() const;
@@ -207,6 +209,7 @@ namespace g1plugin
 		juce::AudioBuffer<float> m_inputs;		// the inputs, copied before the outputs overwrite them
 
 		bool m_extrasOpen = false, m_knobDisplays = false, m_knobFollowsPatch = false;
+		uint32_t m_randomExclude = 0;			// the knobs Random leaves alone: bit k for knob k + 1
 		float m_panelScale = 1.25f;				// the editor's size: 1 is the panel's 1200 pixels wide; 1.25 is half the skin's
 
 		// The last Bank Select (CC 0 and 32) and Program Change the track sent on each channel.

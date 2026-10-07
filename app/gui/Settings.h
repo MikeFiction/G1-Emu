@@ -70,8 +70,12 @@ namespace g1gui
 		juce::ToggleButton m_jackConnect{"Connect outputs 1/2 to the sound card"};
 		juce::ToggleButton m_rawEnabled{"Take over a card, so raw MIDI programs see the G1"};
 		juce::TextEditor m_rawCard;
-		juce::ToggleButton m_disclaimer{"Show the notice below at startup"};
+		juce::ToggleButton m_disclaimer{"Show the notice at startup"};
+		juce::TextButton m_noticeToggle;	// folds the notice's text away; folded, the window is shorter
 		juce::TextEditor m_notice;
+		bool m_noticeOpen = false;
+		int noticeShift() const;			// how far up what is below the notice moves while it is folded
+		void setNoticeOpen(bool _open);
 		juce::Label m_running, m_note;
 		juce::TextButton m_close{"Close"};
 	};

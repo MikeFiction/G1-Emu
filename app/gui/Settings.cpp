@@ -53,6 +53,7 @@ namespace g1gui
 		constexpr int g_midiRowsH = g_manualMidiUi ? 4 * (g_rowH + g_gap) : 0;
 		constexpr int g_midiExtra = (g_midiInfoH - 76) + g_midiRowsH + (g_manualMidiUi ? 10 : 0);
 		constexpr int g_width = 560, g_height = 790 + g_midiExtra;
+		constexpr int g_noticeH = 128;	// the notice's text and the gap above it, folded away by default
 
 		// The window holding one SettingsView. There is at most one, kept here so a second
 		// click brings the same one to the front instead of opening another.
@@ -279,7 +280,9 @@ namespace g1gui
 		m_notice.setColour(juce::TextEditor::outlineColourId, juce::Colour(0xff35353c));
 		m_notice.setColour(juce::TextEditor::textColourId, juce::Colour(0xffc8ccd0));
 		m_notice.setText(disclaimerText(), false);
-		addAndMakeVisible(m_notice);
+		addChildComponent(m_notice);
+		m_noticeToggle.onClick = [this] { setNoticeOpen(!m_noticeOpen); };
+		addAndMakeVisible(m_noticeToggle);
 
 		for(auto* l : {&m_running, &m_note})
 		{
@@ -298,7 +301,22 @@ namespace g1gui
 		updateEnabled();
 		timerCallback();
 		startTimerHz(4);
-		setSize(g_width, g_height);
+		setNoticeOpen(false);
+	}
+
+	int SettingsView::noticeShift() const { return m_noticeOpen ? 0 : g_noticeH; }
+
+	// The notice about Clavia, ROMs and support is there to be read once, not every time the
+	// settings open: its text folds away, and the window shrinks to fit (its DocumentWindow
+	// follows the content's size).
+	void SettingsView::setNoticeOpen(const bool _open)
+	{
+		m_noticeOpen = _open;
+		m_notice.setVisible(_open);
+		m_noticeToggle.setButtonText(_open ? "Hide the notice" : "Read the notice");
+		setSize(g_width, g_height - noticeShift());
+		resized();
+		repaint();
 	}
 
 	// Picking a ROM only writes it down: the emulator is already running on the old one, and
@@ -423,7 +441,8 @@ namespace g1gui
 	{
 		_g.fillAll(juce::Colour(0xff1c1c20));
 		_g.setColour(juce::Colour(0xff35353c));
-		for(const float y : {100.0f, 286.0f, 400.0f + g_midiExtra, 600.0f + g_midiExtra})
+		const auto below = static_cast<float>(g_midiExtra - noticeShift());
+		for(const float y : {100.0f, 286.0f, 400.0f + g_midiExtra, 600.0f + below})
 			_g.drawLine(static_cast<float>(g_margin), y, static_cast<float>(g_width - g_margin), y);
 		_g.setColour(juce::Colours::white);
 		_g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
@@ -435,7 +454,7 @@ namespace g1gui
 		_g.drawText("Raw MIDI", g_margin, 294, 200, 20, juce::Justification::centredLeft);
 #endif
 		_g.drawText("Notice", g_margin, 408 + g_midiExtra, 200, 20, juce::Justification::centredLeft);
-		_g.drawText("In use now", g_margin, 608 + g_midiExtra, 200, 20, juce::Justification::centredLeft);
+		_g.drawText("In use now", g_margin, 608 + g_midiExtra - noticeShift(), 200, 20, juce::Justification::centredLeft);
 	}
 
 	void SettingsView::resized()
@@ -470,11 +489,13 @@ namespace g1gui
 		row(m_midiInLabel, m_midiInDeviceBox, g_width - g_margin * 2 - g_labelW - g_gap);
 #endif
 
-		m_disclaimer.setBounds(g_margin, 432 + g_midiExtra, g_width - g_margin * 2, g_rowH);
+		m_disclaimer.setBounds(g_margin, 432 + g_midiExtra, g_width - g_margin * 2 - 150, g_rowH);
+		m_noticeToggle.setBounds(g_width - g_margin - 140, 432 + g_midiExtra + 1, 140, 26);
 		m_notice.setBounds(g_margin, 432 + g_midiExtra + g_rowH + 4, g_width - g_margin * 2, 124);
 
-		m_running.setBounds(g_margin, 632 + g_midiExtra, g_width - g_margin * 2, 68);
-		m_note.setBounds(g_margin, 704 + g_midiExtra, g_width - g_margin * 2 - 110, 52);
-		m_close.setBounds(g_width - g_margin - 90, 728 + g_midiExtra, 90, 26);
+		const int below = g_midiExtra - noticeShift();
+		m_running.setBounds(g_margin, 632 + below, g_width - g_margin * 2, 68);
+		m_note.setBounds(g_margin, 704 + below, g_width - g_margin * 2 - 110, 52);
+		m_close.setBounds(g_width - g_margin - 90, 728 + below, 90, 26);
 	}
 }

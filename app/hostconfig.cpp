@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <sstream>
 
 namespace g1app
 {
@@ -58,6 +59,7 @@ namespace g1app
 			else if(key == "extrasOpen")	extrasOpen = value != "0";
 			else if(key == "knobDisplays")	knobDisplays = value != "0";
 			else if(key == "knobFollowsPatch") knobFollowsPatch = value != "0";
+			else if(key == "randomExclude")	randomExclude = knobListFromString(value);
 			else if(key == "masterVolume")	masterVolume = std::atoi(value.c_str());
 			else if(key == "panelScale")	panelScale = static_cast<float>(std::atof(value.c_str()));
 			else if(key == "pcPortOutDevice") pcPortOutDevice = value;
@@ -66,6 +68,29 @@ namespace g1app
 			else if(key == "midiInDevice")    midiInDevice = value;
 		}
 		return true;
+	}
+
+	std::string knobListToString(const uint32_t _knobs)
+	{
+		std::string text;
+		for(uint32_t k = 0; k < 18; ++k)
+			if(_knobs & (1u << k))
+				text += (text.empty() ? "" : " ") + std::to_string(k + 1);
+		return text;
+	}
+
+	uint32_t knobListFromString(const std::string& _text)
+	{
+		uint32_t knobs = 0;
+		std::istringstream in(_text);
+		std::string word;
+		while(in >> word)
+		{
+			const int n = std::atoi(word.c_str());
+			if(n >= 1 && n <= 18)
+				knobs |= 1u << (n - 1);
+		}
+		return knobs;
 	}
 
 	std::vector<uint8_t> HostOptions::loadOs(std::string& _note) const
@@ -107,6 +132,7 @@ namespace g1app
 		  << "extrasOpen = " << (extrasOpen ? 1 : 0) << "\n"
 		  << "knobDisplays = " << (knobDisplays ? 1 : 0) << "\n"
 		  << "knobFollowsPatch = " << (knobFollowsPatch ? 1 : 0) << "\n"
+		  << "randomExclude = " << knobListToString(randomExclude) << "\n"
 		  << "masterVolume = " << masterVolume << "\n"
 		  << "panelScale = " << panelScale << "\n"
 		  << "pcPortOutDevice = " << pcPortOutDevice << "\n"

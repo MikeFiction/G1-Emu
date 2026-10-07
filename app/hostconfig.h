@@ -18,6 +18,11 @@ namespace g1app
 	std::string defaultFlashPath();
 	std::string defaultSettingsPath();
 
+	// The knobs Random leaves alone, as the settings files write them: their numbers, 1-18,
+	// separated by spaces ("1 7 18"). Anything else in the text is skipped.
+	std::string knobListToString(uint32_t _knobs);
+	uint32_t knobListFromString(const std::string& _text);
+
 	// What the user gets to choose. The window sets them from its settings panel and g1run leaves
 	// them at their defaults; EmuHost lets the G1_* variables win over both.
 	struct HostOptions
@@ -33,6 +38,7 @@ namespace g1app
 		bool extrasOpen = false;			// the window's extras drawer (Random...) was left open
 		bool knobDisplays = false;			// a display above each knob with what it is assigned to
 		bool knobFollowsPatch = false;		// the knobs show the patch's values, not where they were turned
+		uint32_t randomExclude = 0;			// the knobs Random leaves alone: bit k for knob k + 1
 		int masterVolume = -1;				// the window's master volume knob as it was left (0-255; -1: not yet)
 		float panelScale = 1.25f;			// the window's size: 1 is the panel's 1200 pixels wide; 1.25 is half the skin's
 

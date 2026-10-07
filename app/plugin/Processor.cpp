@@ -192,6 +192,7 @@ namespace g1plugin
 			if(key == "extrasOpen")				m_extrasOpen = value != "0";
 			else if(key == "knobDisplays")		m_knobDisplays = value != "0";
 			else if(key == "knobFollowsPatch")	m_knobFollowsPatch = value != "0";
+			else if(key == "randomExclude")		m_randomExclude = g1app::knobListFromString(value.toStdString());
 			else if(key == "panelScale")		m_panelScale = juce::jlimit(g1gui::PanelView::MinScale, g1gui::PanelView::MaxScale, value.getFloatValue());
 		}
 	}
@@ -205,6 +206,7 @@ namespace g1plugin
 		  << "extrasOpen = " << (m_extrasOpen ? 1 : 0) << "\n"
 		  << "knobDisplays = " << (m_knobDisplays ? 1 : 0) << "\n"
 		  << "knobFollowsPatch = " << (m_knobFollowsPatch ? 1 : 0) << "\n"
+		  << "randomExclude = " << g1app::knobListToString(m_randomExclude) << "\n"
 		  << "panelScale = " << m_panelScale << "\n";
 	}
 
@@ -567,6 +569,7 @@ namespace g1plugin
 		xml.setAttribute("knobDisplays", m_knobDisplays);
 		xml.setAttribute("panelScale", static_cast<double>(m_panelScale));
 		xml.setAttribute("knobFollowsPatch", m_knobFollowsPatch);
+		xml.setAttribute("randomExclude", juce::String(g1app::knobListToString(m_randomExclude)));
 		xml.setAttribute("programs", juce::String(programsToString()));
 		return xml;
 	}
@@ -577,6 +580,8 @@ namespace g1plugin
 		m_knobDisplays = _xml.getBoolAttribute("knobDisplays", m_knobDisplays);
 		m_panelScale = static_cast<float>(_xml.getDoubleAttribute("panelScale", m_panelScale));
 		m_knobFollowsPatch = _xml.getBoolAttribute("knobFollowsPatch", m_knobFollowsPatch);
+		if(_xml.hasAttribute("randomExclude"))
+			m_randomExclude = g1app::knobListFromString(_xml.getStringAttribute("randomExclude").toStdString());
 	}
 
 	juce::MemoryBlock Processor::settingsOnlyState()
