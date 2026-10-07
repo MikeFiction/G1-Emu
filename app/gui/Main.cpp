@@ -35,6 +35,8 @@ namespace g1gui
 		void setKnobFollowsPatch(const bool _on) override { m_host.options().knobFollowsPatch = _on; save(); }
 		uint32_t randomExcluded() const override { return m_host.options().randomExclude; }
 		void setRandomExcluded(const uint32_t _knobs) override { m_host.options().randomExclude = _knobs; save(); }
+		bool tooltips() const override { return m_host.options().tooltips; }
+		void setTooltips(const bool _on) override { m_host.options().tooltips = _on; save(); }
 		float panelScale() const override { return m_host.options().panelScale; }
 		void setPanelScale(const float _scale) override { m_host.options().panelScale = _scale; }	// saved when the window closes
 		juce::String settingsTooltip() const override { return "Audio driver, output level and raw MIDI"; }

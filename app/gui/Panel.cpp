@@ -738,6 +738,19 @@ namespace g1gui
 		}
 	}
 
+	juce::String DelayedTooltips::getTipFor(juce::Component& _c)
+	{
+		const auto now = juce::Time::getMillisecondCounter();
+		if(&_c != m_over)
+		{
+			m_over = &_c;
+			m_overSince = now;
+		}
+		if(!enabled || now - m_overSince < DelayMs)
+			return {};
+		return juce::TooltipWindow::getTipFor(_c);
+	}
+
 	// As JUCE's own: beside the pointer, towards the middle of the panel.
 	juce::Rectangle<int> TooltipLook::getTooltipBounds(const juce::String& _tip, const juce::Point<int> _pos, const juce::Rectangle<int> _parentArea)
 	{
@@ -1016,6 +1029,19 @@ namespace g1gui
 		for(auto& d : m_knobDisplays)
 			addChildComponent(d);
 		setKnobDisplays(m_host.knobDisplays());
+
+		m_tipsToggle.setTooltip("What each control can do, beside the mouse");
+		m_tipsToggle.setColour(juce::ToggleButton::textColourId, g_textLight);
+		m_tipsToggle.setToggleState(m_host.tooltips(), juce::dontSendNotification);
+		m_tooltips.enabled = m_host.tooltips();
+		m_tipsToggle.onClick = [this]
+		{
+			m_tooltips.enabled = m_tipsToggle.getToggleState();
+			if(!m_tooltips.enabled)
+				m_tooltips.hideTip();
+			m_host.setTooltips(m_tooltips.enabled);
+		};
+		m_drawer.addAndMakeVisible(m_tipsToggle);
 		updateRandomExcluded();
 
 		m_followToggle.setTooltip("Show each knob where the patch's value puts it, instead of where it was last turned");
@@ -1221,6 +1247,7 @@ namespace g1gui
 		// At the right: Restart (where there is one).
 		const int right = getWidth() - 12 - 10;	// the tray's edge, less the margin above and below them
 		m_restart.setBounds(right - 28, 15, 28, 28);
+		m_tipsToggle.setBounds(m_followToggle.getRight() + 10, 15, 120, 28);
 		if(m_synthView.isVisible())
 			m_synthView.setBounds(getLocalBounds());
 		placeDrawer();

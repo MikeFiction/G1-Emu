@@ -7,6 +7,12 @@ Older entries cite their commit by hand.
 
 ## 2026-10-07
 
+- [Imp] **Tooltips wait the same each time, and can be turned off (Claude, requested by Mike
+  Fiction).** A tooltip came after half a second the first time, then at once over the next
+  controls (JUCE's way); now each waits for the mouse to rest half a second on its control. The
+  extras have a Tooltips switch, on by default. The standalone keeps it in its settings file
+  (`tooltips =`); the plugin starts with it on each time, since keeping it there is a change to
+  the plugin's state. Checked on Windows: the standalone and the VST3 build.
 - [Fix] **A project saved under one OS opens under another with its banks (Claude, issue #25,
   reported by Garrincha568).** After switching to Clavia's 3.03b update (`os =`), a project saved
   with the factory OS came back with an empty G1: the state carries a hash of the factory flash,
