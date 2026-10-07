@@ -7,12 +7,17 @@
 // erased the "formatted" mark at +0 and made every start format the flash, banks and all.
 // With the OS image of the settings or G1_OS if there is one, else the ROM's. Exit code 77
 // (skipped) without a ROM, 1 on failure.
+//
+// With an OS image, also a plugin's state across OSes (issue #25): made under the ROM's OS and
+// restored under the image, and the other way round. The banks and settings must come back as
+// they were, unformatted; setUserState once refused it and the plugin started empty.
 
 #include "engine.h"
 #include "hostconfig.h"
 #include "romfinder.h"
 
 #include <cstdio>
+#include <algorithm>
 #include <cstdlib>
 #include <string>
 
@@ -66,7 +71,32 @@ int main()
 	auto& f = second.mc().getFlash();
 	std::printf("second boot on the kept flash: %u sectors erased, %u bytes programmed, mark at +0 %02x%02x%02x%02x\n",
 		f.erasedSectors(), f.programmedBytes(), f.data()[0], f.data()[1], f.data()[2], f.data()[3]);
-	const bool ok = loaded && f.erasedSectors() == 0 && f.data()[0] == kept[0] && f.data()[3] == kept[3] && kept[3] != 0xff;
+	bool ok = loaded && f.erasedSectors() == 0 && f.data()[0] == kept[0] && f.data()[3] == kept[3] && kept[3] != 0xff;
+
+	if(os.empty())
+		std::printf("state across OSes: skipped, no OS image\n");
+	for(const bool toImage : {true, false})
+	{
+		if(os.empty())
+			break;
+		g1app::Engine from(rom, toImage ? std::vector<uint8_t>{} : os);
+		from.loadFlash(kept);
+		run(from, 8000);
+		const auto state = from.userState();
+		g1app::Engine to(rom, toImage ? os : std::vector<uint8_t>{});
+		std::string error;
+		bool otherOs = false;
+		const bool restored = to.setUserState(state, error, &otherOs);
+		run(to, 8000);
+		const auto& a = from.mc().getFlash().data();
+		auto& t = to.mc().getFlash();
+		const bool same = std::equal(a.begin() + g1app::Engine::OsBytes, a.end(), t.data().begin() + g1app::Engine::OsBytes);
+		const bool pass = restored && otherOs && t.erasedSectors() == 0 && same && t.data()[0] == a[0] && t.data()[3] == a[3];
+		std::printf("state from the %s restored under the %s: %s%s, %u sectors erased, patch storage %s: %s\n",
+			toImage ? "ROM's OS" : "OS image", toImage ? "OS image" : "ROM's OS", restored ? "taken" : "refused, ", error.c_str(),
+			t.erasedSectors(), same ? "the same" : "DIFFERENT", pass ? "ok" : "FAILED");
+		ok = ok && pass;
+	}
 	std::printf("%s\n", ok ? "passed" : "FAILED");
 	return ok ? 0 : 1;
 }

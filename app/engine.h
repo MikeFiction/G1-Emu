@@ -9,7 +9,8 @@
 // The flash holds the installed OS, which is the ROM's code, and the user's patches and settings.
 // A plugin keeps its G1 inside the DAW project, which may travel, so what it saves is userState():
 // only the bytes that differ from the factory flash this ROM produces. The OS never leaves the
-// machine that has the ROM; restoring needs the same ROM, which the state names by a hash.
+// machine that has the ROM. The state names its OS by a hash; restored under another OS, the
+// banks and settings still go in and the OS is the one in use.
 
 #include "g1Lib/g1mc.h"
 
@@ -50,18 +51,21 @@ namespace g1app
 		bool loadFlash(const std::vector<uint8_t>& _image);
 
 		// The flash as a difference against the factory one (patches, synth settings), and back.
-		// setUserState() refuses a state made with another ROM and leaves the flash untouched;
-		// _error says why. Also before the first exec().
+		// setUserState() takes a state made with another OS too (the ROM's or an OS image): its
+		// banks and settings go in and the OS stays this engine's; _otherOs says so. A state it
+		// cannot read leaves the flash untouched, and _error says why. Also before the first exec().
 		std::vector<uint8_t> userState() const;
-		bool setUserState(const std::vector<uint8_t>& _state, std::string& _error);
+		bool setUserState(const std::vector<uint8_t>& _state, std::string& _error, bool* _otherOs = nullptr);
 
-		// Identifies the factory flash, and so the ROM's OS, without carrying any of it.
+		// Identifies the factory flash, and so the OS in use, without carrying any of it.
 		uint32_t factoryHash() const { return m_factoryHash; }
 
 	private:
 		std::unique_ptr<g1::Microcontroller> m_mc;
 		std::vector<uint8_t> m_factory;
 		uint32_t m_factoryHash = 0;
+
+		void useOwnOs(std::vector<uint8_t>& _flash) const;
 		bool m_customOs = false;
 	};
 }

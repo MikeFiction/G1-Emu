@@ -5,6 +5,18 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-07
+
+- [Fix] **A project saved under one OS opens under another with its banks (Claude, issue #25,
+  reported by Garrincha568).** After switching to Clavia's 3.03b update (`os =`), a project saved
+  with the factory OS came back with an empty G1: the state carries a hash of the factory flash,
+  and since that flash is blank outside the OS, the hash only names the OS, so a new OS refused
+  every older project. `Engine::setUserState` now takes such a state: its banks and synth settings
+  go in and the OS stays the one in use, as `loadFlash` already does with the standalone's
+  `flash.bin`. The plugin says so where it tells where its banks came from. Checked:
+  `g1flashkeeptest` restores a state from the ROM's OS under the 3.03b image and back, with no
+  sector erased and the patch storage identical; all tests pass; `g1vst3check` passes with 3.03b.
+
 ## 2026-10-06
 
 - [New] **Exclude a knob from Random (Claude, requested by Javier).** A right click on any of the

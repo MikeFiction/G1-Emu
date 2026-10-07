@@ -89,7 +89,8 @@ clap-juce-extensions; `clap-validator` passes it. The design is
   the emulator nor locks; offline it waits for the worker. Underruns are paid back by dropping
   the late frames, so timing stays locked.
 - **State:** `Engine::userState()` (runs of bytes differing from the factory flash, with a hash of
-  the factory flash so another ROM is refused), gzip + base64 in XML, plus the 256 ADC values, the
+  the factory flash, which only names the OS: a state saved under another OS still loads its banks
+  and settings, with the OS in use, #25), gzip + base64 in XML, plus the 256 ADC values, the
   panel's two preferences, the last Bank Select/Program Change per channel (replayed at boot), and
   **what each slot holds** (`<Slots>`, issue #25). A state that cannot be applied is handed back
   untouched. A new instance copies the standalone's `flash.bin` (read only).

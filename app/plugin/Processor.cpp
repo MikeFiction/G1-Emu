@@ -649,7 +649,8 @@ namespace g1plugin
 				_engine.mc().setAdc(g1::g_adcVolume, static_cast<uint8_t>(juce::jlimit(0, 255, xml->getIntAttribute("volume"))));
 			return true;
 		}
-		if( !unpackBytes(flashXml->getAllSubText(), flash) || !_engine.setUserState(flash, error))
+		bool otherOs = false;
+		if( !unpackBytes(flashXml->getAllSubText(), flash) || !_engine.setUserState(flash, error, &otherOs))
 		{
 			// Kept as it came, and handed back as it came: saving the project again must not
 			// replace the user's banks with an empty G1 just because this ROM is not that one.
@@ -668,7 +669,7 @@ namespace g1plugin
 		if(const auto* slotsXml = xml->getChildByName("Slots"); m_keeper && slotsXml
 			&& unpackBytes(slotsXml->getAllSubText(), slotBytes) && g1app::SlotKeeper::unpack(slotBytes, slots))
 			m_keeper->restore(slots);
-		m_origin = "this project";
+		m_origin = otherOs ? "this project, saved with another OS: its banks and settings, with the OS in use" : "this project";
 		return true;
 	}
 

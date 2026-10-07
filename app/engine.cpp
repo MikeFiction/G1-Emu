@@ -56,15 +56,19 @@ namespace g1app
 		if(_image.size() != g1::Flash::Size)
 			return false;
 		m_mc->getFlash().data() = _image;
-		// The OS is this engine's, whatever the file had: its length (at +8) and its image (from
-		// +$20). Only those: the OS keeps its own marks in the first bytes ($0000000C at +0 says
-		// the patch storage is formatted), and without them it formats the flash, banks and all.
-		auto& flash = m_mc->getFlash().data();
-		std::copy_n(m_factory.begin() + 8, 4, flash.begin() + 8);
+		useOwnOs(m_mc->getFlash().data());
+		return true;
+	}
+
+	// The OS is this engine's, whatever the flash had: its length (at +8) and its image (from
+	// +$20). Only those: the OS keeps its own marks in the first bytes ($0000000C at +0 says the
+	// patch storage is formatted), and without them it formats the flash, banks and all.
+	void Engine::useOwnOs(std::vector<uint8_t>& _flash) const
+	{
+		std::copy_n(m_factory.begin() + 8, 4, _flash.begin() + 8);
 		const size_t len = (static_cast<size_t>(m_factory[8]) << 24 | static_cast<size_t>(m_factory[9]) << 16
 			| static_cast<size_t>(m_factory[10]) << 8 | m_factory[11]) + 4;
-		std::copy_n(m_factory.begin() + 0x20, std::min(len, OsBytes - 0x20), flash.begin() + 0x20);
-		return true;
+		std::copy_n(m_factory.begin() + 0x20, std::min(len, OsBytes - 0x20), _flash.begin() + 0x20);
 	}
 
 	std::vector<uint8_t> Engine::userState() const
@@ -102,7 +106,7 @@ namespace g1app
 		return out;
 	}
 
-	bool Engine::setUserState(const std::vector<uint8_t>& _state, std::string& _error)
+	bool Engine::setUserState(const std::vector<uint8_t>& _state, std::string& _error, bool* _otherOs)
 	{
 		size_t pos = 0;
 		uint32_t magic = 0, version = 0, hash = 0, count = 0;
@@ -116,11 +120,13 @@ namespace g1app
 			_error = "made by a newer G1-Emu (state version " + std::to_string(version) + ")";
 			return false;
 		}
-		if(hash != m_factoryHash)
-		{
-			_error = "made with another ROM or OS version";
-			return false;
-		}
+		// Another hash is another OS: the ROM's factory one, or an OS image such as Clavia's 3.03b
+		// update (issue #25: projects saved before switching to it came back empty). Outside the
+		// OS a factory flash is blank whatever the OS, so the runs mean the same: they go in, and
+		// the OS is then this engine's, as loadFlash does with the standalone's flash.
+		const bool otherOs = hash != m_factoryHash;
+		if(_otherOs)
+			*_otherOs = otherOs;
 
 		// Checked in full before anything is written, so a damaged state changes nothing.
 		auto flash = m_factory;
@@ -135,6 +141,8 @@ namespace g1app
 			std::copy_n(_state.begin() + static_cast<std::ptrdiff_t>(pos), length, flash.begin() + offset);
 			pos += length;
 		}
+		if(otherOs)
+			useOwnOs(flash);
 		m_mc->getFlash().data() = std::move(flash);
 		return true;
 	}
