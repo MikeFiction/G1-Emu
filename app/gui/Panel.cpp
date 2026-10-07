@@ -933,6 +933,9 @@ namespace g1gui
 			m_modeButtons[i] = &addButton(modes[i], modeBits[i]);
 			m_modeLeds[i] = &addLed(g_modeLeds[i]);
 		}
+		// The mode keys act on the press: held, they change nothing (the manual, NOTES.md)
+		for(auto* b : m_modeButtons)
+			b->setLatchable(false);
 		const char* slots[] = {"A", "B", "C", "D"};
 		const MatrixBit slotBits[] = {g_btnA, g_btnB, g_btnC, g_btnD};
 		for(size_t i = 0; i < 4; ++i)
@@ -1115,6 +1118,11 @@ namespace g1gui
 	void Panel::buttonReleased(PanelButton& _b)
 	{
 		if(&_b == m_shift || !std::exchange(m_shiftUsed, false))
+			return;
+		// In Edit mode Shift with the navigator walks from module to module, as many steps as
+		// wanted with Shift held all along (NOTES.md, "The panel"): it stays down.
+		updateMode();
+		if(m_mode == Mode::Edit && std::find(m_nav.begin(), m_nav.end(), &_b) != m_nav.end())
 			return;
 		// The slot buttons take Shift one after the other (Shift, A, B: both slots' voices), so it
 		// stays down for them. The OS still wants it pressed again for the next key: it gets that.

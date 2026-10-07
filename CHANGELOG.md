@@ -35,6 +35,16 @@ Older entries cite their commit by hand.
   bus on and finds each mono output identical, sample for sample, to its stereo channel (a patch
   playing at −18.9 dBFS); all tests pass; Javier saw the six outputs in Bitwig, as CLAP and as VST3
   (`docs/images/mono-outputs-bitwig-*.png`). Not checked in Cubase itself, nor with clap-validator.
+- [Imp] **The mode keys do not latch (Claude, requested by Mike Fiction).** A right click no longer
+  holds Store, System, Edit or Patch/Load down: the OS acts on the press, held they change
+  nothing, and the manual never holds them. Checked on Windows with `g1patchtest`: each held
+  through the other keys ends on the same displays as pressed once.
+
+- [Fix] **Shift stays held for the navigator in Edit mode (Claude, reported by Mike Fiction).** In
+  Edit mode, Shift with the navigator walks from module to module, as many steps as wanted with
+  Shift held, but the panel let a latched or keyboard Shift go after the first navigator key. In
+  Edit mode it now stays down for them; elsewhere Shift still counts for the next key only.
+  Checked on Windows with `g1patchtest` (Shift held + Right, three times: three modules on).
 
 - [Fix] **A project saved under one OS opens under another with its banks (Claude, issue #25,
   reported by Garrincha568).** After switching to Clavia's 3.03b update (`os =`), a project saved
