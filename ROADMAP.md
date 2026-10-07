@@ -26,6 +26,44 @@ recover until a restart. Then the plugin and the first public beta (#7), the dir
 Animatek-NME#84), and the window: a report button (#10), no Oct Shift (#11), an extras drawer with
 Random (#12), parameter names above the knobs (#13) and mappable knobs (#14).
 
+## Release plan (from 2026-10-07)
+
+Decided with Javier on 2026-10-07. Each line is a target, not a promise: a release goes out when
+what it carries works.
+
+- **alpha.13 (2026-10-07):** Mike Fiction's panel, Presets (a page that says "in development") and
+  Settings keys right of slot D, About, the host's tempo as MIDI clock (#20), mono outputs (#27),
+  projects across OSes (#25), the direct link with NME (#8).
+- **alpha.14: Presets.** The Presets page lists the synth's banks and programs, read from the OS
+  over the PC Port the way Animatek NME reads them (PatchHandling `$17`, GetPatchList `$41 $14`,
+  section and position; the reply's names, as `PatchListResponseMessage` decodes them in NME's
+  `source/midi/NmMessages.cpp`), and loads one into the slot with a click, as Gearmulator's
+  plugins do. It talks to the OS like `SynthSettingsLink`, hiding its traffic from the editor.
+  Also the **first test of the expanded G1** (below): does the OS boot with eight DSPs?
+- **alpha.15: three models, picked in the settings: Micro, Regular, Expanded.** Not every patch
+  needs the voices, and a modest machine may not afford eight DSPs.
+  - **Expanded** (eight DSPs, the 32-voice expansion board; asked for in #24). What is known
+    (`NOTES.md`, "Booting the DSPs"): DSPs 4-7 sit on HI08 ports `$200020`-`$20003F`; the loader
+    sends its program to DSPs 3 and 7, and the OS goes to eight DSPs when DSP 7 raises HF2; the OS
+    carries the programs for all of them. The first test: create DSPs 4-7, let DSP 7 answer, and
+    see whether the OS boots them. **Open:** how the links run with eight (one chain 0-7 to the
+    codec, or two chains mixed, and which DSP feeds the codec), from the OS's code; and the cost:
+    twice the DSPs, about twice the CPU when the voices are used. An afternoon to know whether it
+    boots; a couple of sessions for the links and the tests if it does.
+  - **Micro** (one DSP). **Harder than Expanded:** the rack OS only knows four or eight DSPs; one
+    DSP is the **Micro Modular's own OS** (`NOTES.md`, "Micro Modular: the same code base with one
+    DSP"), from its official update, and it needs a boot ROM the update does not carry (the same
+    replacement as #16) and another ESSI clock towards its codec. It overlaps AG1TEK (the
+    one-slot plugin with the editor inside), so the work serves both. If it holds the release up,
+    alpha.15 goes out with Regular and Expanded and Micro follows.
+  - **In Animatek NME:** the editor tells the three apart when it connects (to be found: what the
+    OS says about its DSPs or its model, in the IAm reply or the synth settings) and shows which
+    one each G1-Emu is, with an icon or similar.
+- **alpha.16 = the first beta (beta 1)**, once Presets is done and the three models hold: the
+  first release meant for everyone, not only testers. Before it: the known issues in the release
+  notes solved or explained, the README and the notes written for a new user, and signing looked
+  at again.
+
 ## Next
 
 **Product direction: standalone and VST3 share one engine.** Javier asked for one
@@ -175,6 +213,7 @@ the modules that exist).
 - **Micro Modular:** one DSP, confirmed in its OS (`NOTES.md`, "The official OS update"), which
   makes a simpler engine with no links between DSPs. Open: its boot ROM (not in the update, so it
   needs the same boot replacement as #16) and the ESSI clock towards its codec.
+  Planned for alpha.15 as one of three models (see "Release plan").
 
 ### New modules inside the G1 (modified OS)
 
