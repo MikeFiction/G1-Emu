@@ -236,8 +236,8 @@ namespace g1gui
 		// The page buttons (by their tops left, as wideAt), under the tooltips' display and centred on
 		// it, half into its purple frame (which ends at 976), as on the Nord Lead 2x skin. Their labels
 		// are the background's, centred under them; each LED at its label's left, level with its middle.
-		constexpr float g_pageX[2] = {1318.5f, 1499.5f}, g_pageY = 976 - 61 / 2.0f;	// 61: the button's height
-		constexpr float g_pageLedX[2] = {1348 - 24, 1512 - 24}, g_pageLedY = 1034.5f;	// 24 left of the labels' text
+		// Presets and Settings: two more keys in the slots' row, right of D, at the same spacing.
+		constexpr float g_pageX[2] = {2277.5f, 2397.5f};
 		// The Synth Settings over the knobs' four sections, where Mike Fiction's frame fits them.
 		juce::Rectangle<int> settingsFrame() { return sk(344, 130, 1343, 707); }
 		constexpr float g_assignX = 2388, g_assignY = 453.5f;	// the tilted button's centre: as far from "Assign" as from "Morph"
@@ -1082,17 +1082,14 @@ namespace g1gui
 		m_followToggle.onClick = [this] { m_host.setKnobFollowsPatch(m_followToggle.getToggleState()); };
 		m_drawer.addAndMakeVisible(m_followToggle);
 
-		m_mainPage.setTooltip("The synth's panel");
-		m_mainPage.onClick = [this] { showSynthSettings(false); };
-		setLcdTip(m_mainPage, "Main Panel");
-		m_settingsPage.setTooltip("The slots' MIDI channels, the clock and the other settings of the whole G1");
-		m_settingsPage.onClick = [this] { showSynthSettings(true); };
-		setLcdTip(m_settingsPage, "Synth Settings");
-		addAndMakeVisible(m_mainPage);
-		addAndMakeVisible(m_settingsPage);
-		addAndMakeVisible(m_mainLed);
-		addAndMakeVisible(m_settingsLed);
-		m_mainLed.setOn(true);
+		m_presetsPage.setTooltip("The synth's banks and programs (in development); press again for the panel");
+		m_presetsPage.onClick = [this] { showPresets(!m_presetsView.isVisible()); };
+		setLcdTip(m_presetsPage, "Presets");
+		m_settingsPage.setTooltip("The slots' MIDI channels, the clock and the other settings of the whole G1; press again for the panel");
+		m_settingsPage.onClick = [this] { showSynthSettings(!m_synthView.isVisible()); };
+		setLcdTip(m_settingsPage, "Settings");
+		for(auto* c : std::initializer_list<juce::Component*>{&m_presetsPage, &m_settingsPage, &m_presetsLed, &m_settingsLed})
+			addAndMakeVisible(*c);
 
 		// The power switch, where the host can work it: a G1 that hangs comes back without
 		// closing G1-Emu. Asked first, since what is in the slots and not stored is lost.
@@ -1114,11 +1111,16 @@ namespace g1gui
 		addChildComponent(m_aboutView);
 		m_synthView.onClose = [this]
 		{
-			m_mainLed.setOn(true);
 			m_settingsLed.setOn(false);
 			grabKeyboardFocus();
 		};
 		addChildComponent(m_synthView);
+		m_presetsView.onClose = [this]
+		{
+			m_presetsLed.setOn(false);
+			grabKeyboardFocus();
+		};
+		addChildComponent(m_presetsView);
 
 		setExtrasOpen(m_host.extrasOpen());
 
@@ -1251,12 +1253,6 @@ namespace g1gui
 		auto wideAt = [](const float _x, const float _y) { return skf(_x - 36, _y - 23, 180, 90); };	// by the button's top left
 		auto tallAt = [](const float _x, const float _y) { return skf(_x - 21, _y - 36, 90, 180); };
 
-		// The page buttons under the tooltips' display, and their LEDs (g_pageX).
-		place(m_mainPage, wideAt(g_pageX[0], g_pageY));
-		place(m_settingsPage, wideAt(g_pageX[1], g_pageY));
-		place(m_mainLed, ledAt(g_pageLedX[0], g_pageLedY));
-		place(m_settingsLed, ledAt(g_pageLedX[1], g_pageLedY));
-
 		// Left column
 		place(m_volume, knobAt(g_masterKnob));
 		place(*m_panelSplitLed, ledAt(142, 401));
@@ -1282,6 +1278,10 @@ namespace g1gui
 			place(*m_slotLeds[i], ledAt(g_modeX[i], 705.5f));
 			place(*m_slotButtons[i], wideAt(g_modeX[i] - 13.5f, 727));
 		}
+		place(m_presetsLed, ledAt(g_pageX[0], 705.5f));
+		place(m_presetsPage, wideAt(g_pageX[0] - 13.5f, 727));
+		place(m_settingsLed, ledAt(g_pageX[1], 705.5f));
+		place(m_settingsPage, wideAt(g_pageX[1] - 13.5f, 727));
 		// Up and down as far apart as the slot buttons (their pitch less the 114 of a button:
 		// 5.67), the gap on the middle of left and right (281 + 61 / 2).
 		constexpr float navGap = 119.67f - 114.0f, navMiddle = 281.0f + 61.0f / 2.0f;
@@ -1312,6 +1312,8 @@ namespace g1gui
 		m_tipsToggle.setBounds(m_followToggle.getRight() + 10, 15, 120, 28);
 		if(m_synthView.isVisible())
 			m_synthView.setBounds(settingsFrame());
+		if(m_presetsView.isVisible())
+			m_presetsView.setBounds(settingsFrame());
 		placeDrawer();
 	}
 
@@ -1385,12 +1387,27 @@ namespace g1gui
 			return;
 		if(!_show)
 		{
-			m_synthView.close();	// its onClose lights Main's LED
+			m_synthView.close();	// its onClose puts its LED out
 			return;
 		}
+		showPresets(false);
 		m_synthView.open(settingsFrame());
-		m_mainLed.setOn(false);
 		m_settingsLed.setOn(true);
+	}
+
+	// The same for the Presets page; one page at a time.
+	void Panel::showPresets(const bool _show)
+	{
+		if(_show == m_presetsView.isVisible())
+			return;
+		if(!_show)
+		{
+			m_presetsView.close();
+			return;
+		}
+		showSynthSettings(false);
+		m_presetsView.open(settingsFrame());
+		m_presetsLed.setOn(true);
 	}
 
 	// The synth's control under the mouse, on the tooltips' display: at once, and also while it is

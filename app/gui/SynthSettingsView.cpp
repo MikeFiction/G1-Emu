@@ -534,4 +534,71 @@ namespace g1gui
 		m_known = s;
 		m_link.write(s);
 	}
+
+	// ____________________________________________________________________________________________
+	// Presets
+
+	PresetsView::PresetsView() : m_frame(G1Skin::settings_panel_png, G1Skin::settings_panel_pngSize)
+	{
+		setWantsKeyboardFocus(true);
+	}
+
+	void PresetsView::open(const juce::Rectangle<int> _frame)
+	{
+		setBounds(_frame);
+		juce::Desktop::getInstance().getAnimator().fadeIn(this, g_fadeMs);
+		toFront(true);
+	}
+
+	void PresetsView::close()
+	{
+		juce::Desktop::getInstance().getAnimator().fadeOut(this, g_fadeMs);
+		if(onClose)
+			onClose();
+	}
+
+	// Mike Fiction's frame with its inside blanked (it carries the Synth Settings' own lettering),
+	// the title and the rules as that page has them, and the note in the middle.
+	void PresetsView::paint(juce::Graphics& _g)
+	{
+		const auto c = getLocalBounds();
+		m_frame.draw(_g, c.toFloat());
+		const auto inside = c.reduced(g_frameEdge + 2);
+		_g.setColour(juce::Colour(0xff9ea1b2));		// the frame's own grey
+		_g.fillRect(inside);
+
+		_g.setColour(g_heading);
+		_g.setFont(juce::FontOptions(15.0f, juce::Font::bold).withHorizontalScale(g_condensed));
+		_g.drawText("PRESETS", c.getX() + g_margin, c.getY() + g_titleY, 200, g_titleRuleY - g_titleY - 4, juce::Justification::centredLeft, false);
+
+		for(const int y : {g_titleRuleY, g_footerY})
+		{
+			const auto rule = juce::Rectangle<int>(c.getX() + g_frameEdge, c.getY() + y - 1, c.getWidth() - 2 * g_frameEdge, 3);
+			_g.setColour(g_rule);
+			_g.fillRect(rule);
+			_g.setColour(g_ruleLight);
+			_g.fillRect(rule.withY(rule.getBottom()).withHeight(1));
+		}
+
+		const auto body = juce::Rectangle<int>(c.getX(), c.getY() + g_titleRuleY + 2, c.getWidth(), g_footerY - g_titleRuleY - 4);
+		_g.setColour(g_heading);
+		_g.setFont(juce::FontOptions(22.0f, juce::Font::bold).withHorizontalScale(g_condensed));
+		_g.drawText("IN DEVELOPMENT", body.withTrimmedBottom(body.getHeight() / 2 - 6), juce::Justification::centredBottom, false);
+		_g.setColour(g_label);
+		_g.setFont(juce::FontOptions(g_textSize + 1.0f));
+		_g.drawFittedText("The synth's banks and programs, listed here to load with a click,\ncome in the next release.",
+			body.withTrimmedTop(body.getHeight() / 2 + 8).reduced(g_margin, 0), juce::Justification::centredTop, 2);
+
+		_g.setFont(juce::FontOptions(g_textSize));
+		_g.drawText("Press Presets again to go back to the panel.", c.getX() + g_margin, c.getY() + g_footerY + 4,
+			c.getWidth() - 2 * g_margin, c.getHeight() - g_footerY - 8, juce::Justification::centredLeft, false);
+	}
+
+	bool PresetsView::keyPressed(const juce::KeyPress& _key)
+	{
+		if(_key != juce::KeyPress::escapeKey)
+			return false;
+		close();
+		return true;
+	}
 }

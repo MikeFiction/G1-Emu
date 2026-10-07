@@ -19,3 +19,10 @@ Skins derived from this artwork should keep this notice, or a credit line such a
 This license covers the artwork in this folder only. The G1-Emu source code is licensed
 separately under the GNU General Public License v3 (see the LICENSE file at the root of the
 repository).
+
+## Changes
+
+- 2026-10-07, Animatek: in `background.png`, the "Main Panel" and "Synth Settings" labels under the
+  display are gone; the page buttons are now two more keys in the slots' row, right of D, labelled
+  "Presets" (new, set in DejaVu Sans Condensed Bold to stand in for Mike Fiction's lettering) and
+  "Settings" (the second line of Mike Fiction's own "Synth Settings" label, at 88 %).

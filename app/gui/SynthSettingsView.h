@@ -121,4 +121,23 @@ namespace g1gui
 		ValueBox m_velMin{0, 127}, m_velMax{0, 127};
 		juce::Label m_note;
 	};
+
+	// The Presets page, in the same frame and place as the Synth Settings: the synth's banks and
+	// programs, to be listed and loaded from here. Not done yet (the next release): for now it
+	// says so.
+	class PresetsView : public juce::Component
+	{
+	public:
+		PresetsView();
+
+		void open(juce::Rectangle<int> _frame);
+		void close();
+		std::function<void()> onClose;
+
+		void paint(juce::Graphics& _g) override;
+		bool keyPressed(const juce::KeyPress& _key) override;
+
+	private:
+		SkinImage m_frame;
+	};
 }

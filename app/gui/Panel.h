@@ -327,6 +327,7 @@ namespace g1gui
 		void setKnobDisplays(bool _on);
 		void updateTip();
 		void showSynthSettings(bool _show);	// the Synth Settings page, or the main one
+		void showPresets(bool _show);		// the Presets page, or the main one
 
 		juce::SharedResourcePointer<Skin> m_skin;	// keeps the images while a panel is open
 		PanelHost& m_host;
@@ -398,10 +399,12 @@ namespace g1gui
 		juce::ToggleButton m_followToggle{"Knob Follows Patch"};
 		IconButton m_restart{"Restart", IconButton::Icon::Restart};	// where the host can (canRestart)
 		juce::TextButton m_about{"About"};		// the credits, the licenses and Animatek NME (AboutView)
-		// The pages: the synth's panel, or its settings over the knobs; each button's LED lit for the one shown.
-		PageButton m_mainPage{"Main"}, m_settingsPage{"Synth Settings"};
-		LedView m_mainLed, m_settingsLed;
+		// The pages over the knobs, each button a switch with its LED lit while its page shows; with
+		// neither, the synth's panel.
+		PageButton m_presetsPage{"Presets"}, m_settingsPage{"Settings"};
+		LedView m_presetsLed, m_settingsLed;
 		SynthSettingsView m_synthView;	// over the knobs while open
+		PresetsView m_presetsView;		// the same place
 		ConfirmView m_confirm;			// the same, for a question (Restart)
 		AboutView m_aboutView;			// and for About
 		juce::Random m_rng;

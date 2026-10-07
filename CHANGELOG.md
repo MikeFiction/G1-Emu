@@ -7,6 +7,18 @@ Older entries cite their commit by hand.
 
 ## 2026-10-07
 
+- [Imp] **Presets and Settings, two more keys in the slots' row (Claude, requested by Javier).**
+  The page buttons Mike Fiction put under the display (Main Panel and Synth Settings) are gone;
+  instead, right of slot D, **Presets** and **Settings** sit as the slots do, the LED above at the
+  left and the label at its right. Each is a switch: a press shows its page over the knobs, another
+  goes back to the panel, and one page closes the other (Escape too). **Settings** is Mike's Synth
+  Settings page. **Presets** will list the synth's banks and programs to load with a click; it is
+  not done yet (next release), and its page says so ("In development"), in the same frame. The
+  background (`skin/background.png`) loses the old labels and gains the new ones: "Settings" is
+  Mike's own lettering, "Presets" is set to match; the change is noted in `skin/LICENSE.md`, as
+  CC BY asks. `G1_SNAPSHOTS` also takes the Presets page and the way back. Checked: it builds,
+  the tests pass, and the snapshots show both pages and the panel again.
+
 - [New] **`G1_SNAPSHOTS=dir`: pictures of the window (Claude).** The standalone, once the G1 has
   booted, saves the panel, the extras drawer, About at its top and at its end, and the Synth
   Settings page as PNGs, clicking what a user would click, and quits; with `G1_AUDIO=no

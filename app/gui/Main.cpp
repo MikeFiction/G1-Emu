@@ -169,7 +169,7 @@ namespace g1gui
 
 	// G1_SNAPSHOTS=dir: pictures of the window, for a look at the GUI from somewhere else (a
 	// phone, a pull request). Once the G1 has booted, the panel, the extras drawer, About at its
-	// top and at its end, and the Synth Settings page are saved as PNGs, each after clicking what
+	// top and at its end, the Synth Settings and Presets pages and the panel again are saved as PNGs, each after clicking what
 	// a user would click; then G1-Emu quits. With G1_AUDIO=no and G1_RAWMIDI=0 it touches no device.
 	class Snapshots : private juce::Timer
 	{
@@ -183,9 +183,12 @@ namespace g1gui
 		void timerCallback() override
 		{
 			auto& w = m_window;
+			// The page keys by their type: the status bar's gear is a "Settings" too.
 			const auto click = [&](const juce::String& _name, juce::Component* _within = nullptr)
 			{
-				auto* b = findNamed<juce::Button>(_within ? *_within : w, _name);
+				juce::Button* b = findNamed<PageButton>(_within ? *_within : w, _name);
+				if(!b)
+					b = findNamed<juce::Button>(_within ? *_within : w, _name);
 				std::printf("snapshots: click \"%s\"%s\n", _name.toRawUTF8(), b ? "" : ": NOT FOUND");
 				if(b)
 					b->triggerClick();
@@ -197,8 +200,11 @@ namespace g1gui
 			case 0: save("1-panel.png"); click("Extras"); break;
 			case 1: save("2-extras.png"); click("About"); break;
 			case 2: save("3-about.png"); if(aboutText) aboutText->moveCaretToEnd(false); break;
-			case 3: save("4-about-end.png"); if(about) click("Close", about); click("Synth Settings"); break;
-			case 4: save("5-synth-settings.png"); break;
+			case 3: save("4-about-end.png"); if(about) click("Close", about); break;
+			case 4: click("Settings"); break;
+			case 5: save("5-synth-settings.png"); click("Presets"); break;
+			case 6: save("6-presets.png"); click("Presets"); break;
+			case 7: save("7-back-to-panel.png"); break;
 			default:
 				stopTimer();
 				juce::JUCEApplication::getInstance()->systemRequestedQuit();
