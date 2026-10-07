@@ -1,5 +1,5 @@
 # g1gui: the window with the G1 panel.
-juce_add_gui_app(g1gui PRODUCT_NAME "G1-Emu")
+juce_add_gui_app(g1gui PRODUCT_NAME "G1-Emu" ICON_BIG ${CMAKE_CURRENT_SOURCE_DIR}/icon.png)	# Mike Fiction's, the standalone's only (not the plugin's)
 target_sources(g1gui PRIVATE Main.cpp Panel.cpp Panel.h SynthSettingsView.cpp SynthSettingsView.h Overlay.cpp Overlay.h Settings.cpp Settings.h LcdFont.h)
 target_compile_definitions(g1gui PRIVATE
 	G1_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
