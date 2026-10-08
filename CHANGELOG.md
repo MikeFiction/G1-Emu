@@ -7,6 +7,21 @@ Older entries cite their commit by hand.
 
 ## 2026-10-08
 
+- [Fix] **Knobs turned on the panel reach the host as real gestures, and never under a lock
+  (Claude, issue #42, reported by Waltercalling).** Nuendo crashed when one of its modulators was
+  set to learn a parameter ("Acquisition") and a knob was turned in G1-Emu's window. Two things of
+  ours could do it: the plugin told the host of a turn as a whole begin-value-end at every tick of
+  its timer, thirty touches a second to a host learning a parameter; and it called the host while
+  holding two of its own mutexes, so a host calling back into the plugin from inside (to learn the
+  parameter, to keep an undo step) met a mutex already held. Now a turn is one gesture: a begin
+  when the knob starts to move, its values, an end once it has rested for 300 ms (`HostGestures`,
+  `app/plugin/hostgestures.h`); the host is told after the locks are let go, and a knob on its way
+  to the host is left alone by the audio thread until the host has its value; a turn still open
+  when the plugin goes is ended. The same gestures make automation in Touch mode record a turn as
+  one. Checked: `g1hostgesturestest` (new: one begin and one end per turn at any timer pace, two
+  turns two gestures, knobs apart, an open turn closed); all tests pass. Not checked in Nuendo
+  (nobody here has it), nor with `g1vst3check` (Bitwig was open with the plugin).
+
 - [New] **Load .pch on the Presets page (Claude, requested by Javier; Mike Fiction's idea).** A
   **Load .pch...** button sends a patch file to the synth with no editor: it is read and made into
   the G1's upload with Animatek NME's own code, copied into `app/nme` (its README says from which

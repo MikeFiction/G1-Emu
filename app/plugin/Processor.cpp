@@ -222,6 +222,12 @@ namespace g1plugin
 	{
 		stopTimer();
 		cancelPendingUpdate();
+		// A turn still open ends, or the host keeps the parameter touched.
+		std::vector<HostGestures<19>::Event> open;
+		m_gestures.closeAll(open);
+		for(const auto& e : open)
+			(e.index == VolumeIndex ? static_cast<juce::RangedAudioParameter&>(*m_volumeParam)
+				: static_cast<juce::RangedAudioParameter&>(*m_knobParams[e.index])).endChangeGesture();
 		{
 			std::lock_guard<std::mutex> lock(m_lifecycle);
 			m_runner.reset();
@@ -805,6 +811,8 @@ namespace g1plugin
 		auto& mc = m_engine->mc();
 		for(size_t k = 0; k < 18; ++k)
 		{
+			if(m_toHost[k].load(std::memory_order_acquire))
+				continue;	// the panel's value is on its way to the host
 			const float v = m_knobParams[k]->get();
 			if(v == m_lastParam[k])
 				continue;
@@ -813,7 +821,7 @@ namespace g1plugin
 			mc.setAdc(g1::KnobMap::KnobAdc[k], adc);
 			m_lastAdc[k] = adc;
 		}
-		if(const int v = m_volumeParam->get(); v != m_lastVolumeParam)
+		if(const int v = m_volumeParam->get(); v != m_lastVolumeParam && !m_toHost[VolumeIndex].load(std::memory_order_acquire))
 		{
 			m_lastVolumeParam = v;
 			m_lastVolumeAdc = VolumeParameter::toAdc(v);
@@ -826,39 +834,39 @@ namespace g1plugin
 	void Processor::timerCallback()
 	{
 		bool renamed = false;
+		std::vector<std::pair<size_t, float>> edits;
 		{
 			std::lock_guard<std::mutex> lifecycle(m_lifecycle);
-			if(!m_engine)
-				return;
-			auto& mc = m_engine->mc();
-			knobsToHost(mc);
-			g1::KnobMap map(mc);
-			for(uint32_t k = 0; k < 18; ++k)
-				renamed = m_knobParams[k]->setInfo(map.read(k)) || renamed;
+			if(m_engine)
+			{
+				auto& mc = m_engine->mc();
+				knobsToHost(mc, edits);
+				g1::KnobMap map(mc);
+				for(uint32_t k = 0; k < 18; ++k)
+					renamed = m_knobParams[k]->setInfo(map.read(k)) || renamed;
+			}
 		}
-		// Outside the locks: the host asks for the new names right away.
+		// Outside the locks: the host may call back into the plugin from inside these calls (to
+		// learn the parameter, to keep an undo step, to ask for the new names).
+		tellHost(edits);
 		if(renamed)
 			updateHostDisplay(ChangeDetails().withParameterInfoChanged(true));
 	}
 
-	// Each knob that something other than the host turned, to its parameter, as a gesture.
-	void Processor::knobsToHost(g1::Microcontroller& _mc)
+	// Each knob that something other than the host turned, with the value its parameter takes.
+	void Processor::knobsToHost(g1::Microcontroller& _mc, std::vector<std::pair<size_t, float>>& _edits)
 	{
 		std::lock_guard<std::mutex> lock(m_knobMutex);
-		const auto gesture = [](juce::RangedAudioParameter& _p, const float _value)
-		{
-			_p.beginChangeGesture();
-			_p.setValueNotifyingHost(_value);
-			_p.endChangeGesture();
-		};
 		for(size_t k = 0; k < 18; ++k)
 		{
 			const int adc = _mc.adc(g1::KnobMap::KnobAdc[k]);
 			if(adc == m_lastAdc[k])
 				continue;
 			m_lastAdc[k] = adc;
-			gesture(*m_knobParams[k], KnobParameter::toParam(static_cast<uint8_t>(adc)));
-			m_lastParam[k] = m_knobParams[k]->get();
+			const float v = KnobParameter::toParam(static_cast<uint8_t>(adc));
+			m_lastParam[k] = m_knobParams[k]->convertFrom0to1(m_knobParams[k]->convertTo0to1(v));	// as the parameter will hold it
+			m_toHost[k].store(true, std::memory_order_release);
+			_edits.emplace_back(k, v);
 		}
 		// The volume's parameter moves by whole steps: a position that keeps the step tells nothing.
 		const int adc = _mc.adc(g1::g_adcVolume);
@@ -866,8 +874,36 @@ namespace g1plugin
 			return;
 		m_lastVolumeAdc = adc;
 		if(const int v = VolumeParameter::fromAdc(adc); v != m_volumeParam->get())
-			gesture(*m_volumeParam, m_volumeParam->convertTo0to1(static_cast<float>(v)));
-		m_lastVolumeParam = m_volumeParam->get();
+		{
+			m_lastVolumeParam = v;
+			m_toHost[VolumeIndex].store(true, std::memory_order_release);
+			_edits.emplace_back(VolumeIndex, m_volumeParam->convertTo0to1(static_cast<float>(v)));
+		}
+	}
+
+	// Message thread, no lock held: the edits as gestures, one per turn (HostGestures), and the
+	// turns that have stopped, ended.
+	void Processor::tellHost(const std::vector<std::pair<size_t, float>>& _edits)
+	{
+		const auto now = juce::Time::getMillisecondCounter();
+		std::vector<HostGestures<19>::Event> events;
+		for(const auto& [index, value] : _edits)
+			m_gestures.changed(index, value, now, events);
+		m_gestures.idle(now, events);
+		for(const auto& e : events)
+		{
+			juce::RangedAudioParameter& p = e.index == VolumeIndex ? static_cast<juce::RangedAudioParameter&>(*m_volumeParam)
+				: static_cast<juce::RangedAudioParameter&>(*m_knobParams[e.index]);
+			switch(e.kind)
+			{
+			case HostGestures<19>::Kind::Begin:	p.beginChangeGesture(); break;
+			case HostGestures<19>::Kind::Value:
+				p.setValueNotifyingHost(e.value);
+				m_toHost[e.index].store(false, std::memory_order_release);
+				break;
+			case HostGestures<19>::Kind::End:	p.endChangeGesture(); break;
+			}
+		}
 	}
 
 	// ____________________________________________________________________________________________

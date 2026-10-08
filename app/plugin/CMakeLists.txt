@@ -37,6 +37,12 @@ if(G1_HAVE_CLAP)
 		CLAP_MANUAL_URL "https://github.com/animatek/G1-Emu")
 endif()
 
+# Knobs turned on the panel, told to the host as gestures (issue #42): no ROM, no DAW.
+add_executable(g1hostgesturestest hostgesturestest.cpp hostgestures.h)
+target_include_directories(g1hostgesturestest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+add_test(NAME g1hostgesturestest COMMAND g1hostgesturestest)
+set_tests_properties(g1hostgesturestest PROPERTIES TIMEOUT 60 LABELS g1)
+
 # The host's transport as MIDI clock (issue #20): no ROM, no DAW.
 add_executable(g1hostclocktest hostclocktest.cpp hostclock.h)
 target_include_directories(g1hostclocktest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

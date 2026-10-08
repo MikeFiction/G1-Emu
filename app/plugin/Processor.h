@@ -16,6 +16,7 @@
 // a copy: the standalone's file is never written from here.
 
 #include "hostclock.h"
+#include "hostgestures.h"
 #include "runner.h"
 #include "jucemidi.h"
 #include "g1Lib/g1knobs.h"
@@ -145,7 +146,9 @@ namespace g1plugin
 		// (processBlock), and what turns them otherwise (the panel, Random, a project's state) is
 		// passed to the host (the timer).
 		// m_knobMutex keeps the two apart; processBlock only tries it, and if the timer has it,
-		// leaves the knobs for the next block.
+		// leaves the knobs for the next block. The host is told outside every lock, as gestures
+		// (HostGestures, #42), and a knob on its way to the host (m_toHost) is left alone by
+		// processBlock until the host has its value.
 		void timerCallback() override;
 		void knobsFromHost();
 		void knobsFromEngine();
@@ -156,6 +159,9 @@ namespace g1plugin
 		int m_lastVolumeAdc = -1, m_lastVolumeParam = -1;
 		std::mutex m_knobMutex;
 		int m_knobGeneration = -1;
+		static constexpr size_t VolumeIndex = 18;		// after the knobs, in m_gestures and m_toHost
+		HostGestures<19> m_gestures;					// message thread only
+		std::array<std::atomic<bool>, 19> m_toHost{};
 		void findRom();
 		// Makes the engine from the state (or, with none, from the standalone's flash) and starts
 		// it if the host is playing. Message thread, or before anything runs.
@@ -167,7 +173,10 @@ namespace g1plugin
 		juce::MemoryBlock settingsOnlyState();
 		juce::XmlElement stateXml() const;					// the tag, the panel's preferences and the programs
 		void readPreferences(const juce::XmlElement& _xml);	// the panel's preferences out of a state
-		void knobsToHost(g1::Microcontroller& _mc);
+		// The knobs something other than the host turned: (index, value) for the host, VolumeIndex
+		// for the volume. Under m_lifecycle; the host is told after (tellHost).
+		void knobsToHost(g1::Microcontroller& _mc, std::vector<std::pair<size_t, float>>& _edits);
+		void tellHost(const std::vector<std::pair<size_t, float>>& _edits);
 		void startFromStandalone(g1app::Engine& _engine);
 
 		// The PC Port's virtual MIDI port. Declared before the engine and the runner so it goes after them.
