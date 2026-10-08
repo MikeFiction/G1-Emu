@@ -42,7 +42,7 @@ what it carries works.
   Also the **first test of the expanded G1** (below): does the OS boot with eight DSPs?
 - **alpha.15: two models, picked in the settings: Regular and Expanded.** Not every patch needs
   the voices, and a modest machine may not afford eight DSPs.
-  - **Expanded** (eight DSPs, the 32-voice expansion board; asked for in #24). What is known
+  - **Expanded** (eight DSPs, the 32-voice expansion board; tracked in #39, asked for in #24 and #39). What is known
     (`NOTES.md`, "Booting the DSPs"): DSPs 4-7 sit on HI08 ports `$200020`-`$20003F`; the loader
     sends its program to DSPs 3 and 7, and the OS goes to eight DSPs when DSP 7 raises HF2; the OS
     carries the programs for all of them. The first test: create DSPs 4-7, let DSP 7 answer, and

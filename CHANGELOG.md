@@ -7,6 +7,8 @@ Older entries cite their commit by hand.
 
 ## 2026-10-08
 
+- [Docs] **ROADMAP: the expanded G1 is tracked in #39 (Claude).**
+
 - [Merge] **Mike Fiction's pull requests #36, #40, #41 and #43 (Claude, requested by Javier).**
   Presets and Settings lettered in the panel's own font (#36), switching pages without the panel
   showing in between (#40), oscillator pitch as a note with a click for Hz (#41, fixes #38), and
