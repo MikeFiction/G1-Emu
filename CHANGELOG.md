@@ -7,6 +7,13 @@ Older entries cite their commit by hand.
 
 ## 2026-10-07
 
+- [Imp] **Presets and Settings lettered in the panel's own font (Mike Fiction).** The two labels
+  right of slot D in `skin/background.png` are redrawn from Mike's master artwork in the font of
+  the rest of the panel, in place of the stand-in lettering; the master now carries both keys, so
+  later art updates keep them. Nothing else in the image changes. Saved as 8-bit RGB, like the
+  previous file. Checked on Windows: it builds, and the PNG matches the master export pixel for
+  pixel.
+
 - [Docs] **ROADMAP: running without a ROM (#16) is a goal around the beta, with no date (Claude,
   decided with Javier).**
 
