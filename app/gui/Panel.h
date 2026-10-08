@@ -20,6 +20,7 @@
 #include <utility>
 #include <memory>
 #include <optional>
+#include <set>
 #include <vector>
 
 namespace g1gui
@@ -192,14 +193,16 @@ namespace g1gui
 
 	// A small display above a knob, in the colours of the G1's own: the module and value on
 	// top, the parameter below, as the OS names them. Blank when the knob has nothing.
-	class KnobDisplay : public juce::Component
+	class KnobDisplay : public juce::Component, public juce::SettableTooltipClient
 	{
 	public:
-		void set(const g1::KnobInfo& _info);
+		void set(const g1::KnobInfo& _info, bool _hz);	// _hz: a pitch with a Hz reading shows it
 		void paint(juce::Graphics& _g) override;
+		void mouseUp(const juce::MouseEvent& _e) override;
+		std::function<void()> onClick;	// a click on a pitch that reads as a note or in Hz
 	private:
 		juce::String m_top, m_bottom;
-		bool m_assigned = false;
+		bool m_assigned = false, m_switchable = false;
 	};
 
 	// A button that also answers a double click (Random: back to the patch's values). The double
@@ -365,6 +368,8 @@ namespace g1gui
 		void updateMode();
 		juce::String storeName(bool _shift) const;
 		juce::String shiftedKnobTip(const g1::KnobInfo& _k) const;	// what a knob does with Shift down
+		bool showsHz(const g1::KnobInfo& _k) const;				// its pitch in Hz, not as a note
+		static std::array<uint8_t, 4> pitchKey(const g1::KnobInfo& _k);
 		bool ledLit(MatrixBit _bit) const;
 		bool m_shiftKey = false;	// Shift on the computer's keyboard, held
 		// Shift is for the next key only, as on the hardware: the OS sees it no more past that key
@@ -421,6 +426,9 @@ namespace g1gui
 		// What each knob is assigned to, from the OS's tables (g1knobs.h), and the displays.
 		g1::KnobMap m_knobMap;
 		std::array<KnobDisplay, 18> m_knobDisplays;
+		// The pitches shown in Hz after a click on their display (slot, section, module, type), until
+		// the window closes. Not sent to the G1: its own display always reads them as notes.
+		std::set<std::array<uint8_t, 4>> m_hzPitches;
 		// The patch's values, taken before the first Random, so a double click can put them
 		// back. Dropped when the knobs' assignments change (another patch).
 		std::array<g1::KnobInfo, 18> m_snapshot{};
