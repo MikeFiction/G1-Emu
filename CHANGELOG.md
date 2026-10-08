@@ -20,8 +20,8 @@ Older entries cite their commit by hand.
   standalone may now start a second window for `G1_SNAPSHOTS`, which touches no device. Checked:
   `g1presetstest` (new) decodes hand-made answers, reads bank 1 from an emulated G1 (98 of 99 used)
   under the factory OS and under 3.03b, and loading its first patch into slot A puts its name on
-  the G1's display; all tests pass; the snapshots show the page with the bank's names. Not done
-  yet: Load .pch and Edit in NME.
+  the G1's display; all tests pass; the snapshots show the page with the bank's names; Javier
+  tried it in the window and it works. Not done yet: Load .pch and Edit in NME.
 
 - [Docs] **ROADMAP: the expanded G1 is tracked in #39 (Claude).**
 
