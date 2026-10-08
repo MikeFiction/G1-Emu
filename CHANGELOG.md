@@ -20,7 +20,7 @@ Older entries cite their commit by hand.
   never left waiting for the rest. Checked: `g1pchtest` (new) uploads `ClockTest.pch` (one packet),
   `future303.pch` (17) and others into slot A, stores them in bank 9 at 99, and finds them there
   and on the display; all tests pass; the snapshots show the card, before and after the bank is
-  read. Found on the way, not ours: one patch comes back named by its first six letters, through
+  read; Javier loaded and stored patches with it in the window. Found on the way, not ours: one patch comes back named by its first six letters, through
   NME's upload too (`NOTES.md`, "A patch's name cut short").
 
 - [New] **The Presets page lists the synth's banks, and a click loads one (Claude, requested by
