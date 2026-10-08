@@ -760,8 +760,51 @@ namespace g1gui
 		constexpr int g_flashOnSteps = 2, g_flashPeriod = 3, g_flashSteps = 2 * g_flashPeriod;
 
 		// The floating tooltips' look.
-		constexpr float g_tipFontHeight = 12.0f, g_tipCorner = 5.0f, g_tipBlur = 6.0f;
+		constexpr float g_tipFontHeight = 12.0f, g_tipCorner = 5.0f;
 		constexpr int g_tipPadX = 8, g_tipPadY = 5;
+
+		// The glass of the tooltips and the menus: what is behind them, this blurred (in the
+		// panel's units), at a quarter of its size and drawn stretched: a blur this wide at full
+		// size would keep them from showing at once.
+		constexpr float g_glassBlur = 16.0f;
+		constexpr int g_glassDown = 4;
+
+		// _area of _picture blurred, the rest of _picture taken in at its edges. _scale: the
+		// picture's pixels to a panel unit. Null when _area is not on it.
+		juce::Image blurredGlass(const juce::Image& _picture, const juce::Rectangle<int> _area, const float _scale)
+		{
+			const float radius = g_glassBlur * _scale;
+			const int pad = static_cast<int>(std::ceil(radius)) + 1;
+			const auto grab = _area.expanded(pad).getIntersection(_picture.getBounds());
+			const auto keep = _area.getIntersection(grab).translated(-grab.getX(), -grab.getY());
+			const int w = grab.getWidth() / g_glassDown, h = grab.getHeight() / g_glassDown;
+			if(keep.isEmpty() || w <= 0 || h <= 0)
+				return {};
+			const auto small = _picture.getClippedImage(grab).rescaled(w, h, juce::Graphics::mediumResamplingQuality);
+			auto soft = small.createCopy();
+			const float r = radius / static_cast<float>(g_glassDown);
+			juce::ImageConvolutionKernel blur(2 * static_cast<int>(std::ceil(r)) + 1);
+			blur.createGaussianBlur(r);
+			blur.applyToImage(soft, small, soft.getBounds());
+			const auto k = (keep.toFloat() / static_cast<float>(g_glassDown)).getSmallestIntegerContainer().getIntersection(soft.getBounds());
+			return soft.getClippedImage(k);
+		}
+
+		// The glass over _area: the blurred picture, then the darkening, in rounded corners.
+		void drawGlass(juce::Graphics& _g, const juce::Image& _blurred, const juce::Rectangle<float> _area)
+		{
+			juce::Path glass;
+			glass.addRoundedRectangle(_area, g_tipCorner);
+			if(_blurred.isValid())
+			{
+				juce::Graphics::ScopedSaveState state(_g);
+				_g.reduceClipRegion(glass);
+				_g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
+				_g.drawImage(_blurred, _area);
+			}
+			_g.setColour(juce::Colours::black.withAlpha(0.4f));
+			_g.fillPath(glass);
+		}
 
 		juce::TextLayout tipLayout(const juce::String& _tip)
 		{
@@ -802,30 +845,163 @@ namespace g1gui
 		if(m_snapshotting)
 			return;
 		const juce::Rectangle<float> area(0.0f, 0.0f, static_cast<float>(_w), static_cast<float>(_h));
-		juce::Path glass;
-		glass.addRoundedRectangle(area, g_tipCorner);
 
-		// What is behind it, blurred: the panel drawn without the tooltip, in the screen's pixels.
+		// What is behind it, blurred: the panel drawn without the tooltip, in the screen's pixels,
+		// with a margin for the blur to take in at the edges.
+		juce::Image blurred;
 		if(auto* panel = m_window.getParentComponent())
 		{
 			const float scale = _g.getInternalContext().getPhysicalPixelScaleFactor();
+			const int margin = static_cast<int>(std::ceil(g_glassBlur)) + 1;
+			const auto around = m_window.getBoundsInParent().expanded(margin).getIntersection(panel->getLocalBounds());
 			juce::Image behind;
 			{
 				const juce::ScopedValueSetter<bool> hidden(m_snapshotting, true);
-				behind = panel->createComponentSnapshot(m_window.getBoundsInParent(), true, scale);
+				behind = panel->createComponentSnapshot(around, true, scale);
 			}
-			const float radius = g_tipBlur * scale;
-			juce::ImageConvolutionKernel blur(2 * static_cast<int>(std::ceil(radius)) + 1);
-			blur.createGaussianBlur(radius);
-			const auto sharp = behind.createCopy();
-			blur.applyToImage(behind, sharp, behind.getBounds());
-			juce::Graphics::ScopedSaveState state(_g);
-			_g.reduceClipRegion(glass);
-			_g.drawImage(behind, area);
+			const auto inside = m_window.getBoundsInParent().translated(-around.getX(), -around.getY()).toFloat() * scale;
+			blurred = blurredGlass(behind, inside.getSmallestIntegerContainer(), scale);
 		}
-		_g.setColour(juce::Colours::black.withAlpha(0.4f));
-		_g.fillPath(glass);
+		drawGlass(_g, blurred, area);
 		tipLayout(_tip).draw(_g, area.reduced(static_cast<float>(g_tipPadX), static_cast<float>(g_tipPadY)));
+	}
+
+	// ________________________________________________________________________
+	// Menus
+
+	namespace
+	{
+		constexpr int g_menuItemH = 22, g_menuHeaderH = 18, g_menuSeparatorH = 9, g_menuPadX = 10, g_menuMarkW = 16;
+	}
+
+	// Behind a menu window's items, the first of its children: the panel as it was when the
+	// menu opened, blurred, darkened as the tooltips' glass. Clicks go through to the items.
+	class MenuLook::Glass : public juce::Component
+	{
+	public:
+		Glass(MenuLook& _look) : m_look(_look) { setInterceptsMouseClicks(false, false); }
+		void parentSizeChanged() override
+		{
+			if(auto* p = getParentComponent())
+				setBounds(p->getLocalBounds());
+		}
+		void resized() override { m_blurred = {}; }
+		void paint(juce::Graphics& _g) override
+		{
+			// Its place on the panel, in the picture's pixels; blurred once, the picture stays.
+			if(m_blurred.isNull() && m_look.m_behind.isValid())
+			{
+				const float s = m_look.m_behindScale;
+				const auto onPanel = m_look.m_panel.getLocalArea(this, getLocalBounds());
+				m_blurred = blurredGlass(m_look.m_behind, (onPanel.toFloat() * s).getSmallestIntegerContainer(), s);
+			}
+			drawGlass(_g, m_blurred, getLocalBounds().toFloat());
+		}
+	private:
+		MenuLook& m_look;
+		juce::Image m_blurred;
+	};
+
+	MenuLook::MenuLook(juce::Component& _panel) : m_panel(_panel)
+	{
+		// See-through windows, so the glass shows; the items draw their own text.
+		setColour(juce::PopupMenu::backgroundColourId, juce::Colours::transparentBlack);
+		setColour(juce::PopupMenu::textColourId, juce::Colours::white);
+	}
+
+	MenuLook::~MenuLook() = default;
+
+	void MenuLook::capture()
+	{
+		m_behindScale = juce::Component::getApproximateScaleFactorForComponent(&m_panel);
+		m_behind = m_panel.createComponentSnapshot(m_panel.getLocalBounds(), true, m_behindScale);
+	}
+
+	void MenuLook::preparePopupMenuWindow(juce::Component& _window)
+	{
+		m_glasses.erase(std::remove_if(m_glasses.begin(), m_glasses.end(),
+			[](const std::unique_ptr<Glass>& _g) { return _g->getParentComponent() == nullptr; }), m_glasses.end());
+		auto& glass = *m_glasses.emplace_back(std::make_unique<Glass>(*this));
+		_window.addAndMakeVisible(glass, 0);
+		glass.setBounds(_window.getLocalBounds());
+	}
+
+	juce::Font MenuLook::getPopupMenuFont()
+	{
+		return juce::FontOptions(g_tipFontHeight);	// the tooltips' size
+	}
+
+	void MenuLook::getIdealPopupMenuItemSizeWithOptions(const juce::String& _text, const bool _separator, int,
+		int& _w, int& _h, const juce::PopupMenu::Options&)
+	{
+		_h = _separator ? g_menuSeparatorH : g_menuItemH;
+		_w = juce::roundToInt(juce::GlyphArrangement::getStringWidth(getPopupMenuFont(), _text)) + 2 * (g_menuPadX + g_menuMarkW);
+	}
+
+	void MenuLook::drawPopupMenuItemWithOptions(juce::Graphics& _g, const juce::Rectangle<int>& _area, const bool _highlighted,
+		const juce::PopupMenu::Item& _item, const juce::PopupMenu::Options&)
+	{
+		auto r = _area.toFloat();
+		if(_item.isSeparator)
+		{
+			_g.setColour(juce::Colours::white.withAlpha(0.25f));
+			_g.fillRect(r.reduced(static_cast<float>(g_menuPadX) * 0.5f, 0.0f).withSizeKeepingCentre(r.getWidth() - g_menuPadX, 1.0f));
+			return;
+		}
+		if(_highlighted && _item.isEnabled)
+		{
+			_g.setColour(juce::Colours::white.withAlpha(0.18f));
+			_g.fillRoundedRectangle(r, g_tipCorner);	// edge to edge: the first and last meet the glass's corners
+		}
+		const auto text = juce::Colours::white.withAlpha(_item.isEnabled ? 1.0f : 0.4f);
+		_g.setColour(text);
+		r.removeFromLeft(static_cast<float>(g_menuPadX));
+		const auto mark = r.removeFromLeft(static_cast<float>(g_menuMarkW));
+		if(_item.isTicked)
+		{
+			const auto c = mark.withSizeKeepingCentre(8.0f, 8.0f);
+			juce::Path tick;
+			tick.startNewSubPath(c.getX(), c.getCentreY());
+			tick.lineTo(c.getX() + c.getWidth() * 0.4f, c.getBottom());
+			tick.lineTo(c.getRight(), c.getY());
+			_g.strokePath(tick, juce::PathStrokeType(1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+		}
+		r.removeFromRight(static_cast<float>(g_menuPadX));
+		if(_item.subMenu != nullptr)
+		{
+			// At the right of its column, as far from the text as the column allows.
+			const auto c = r.removeFromRight(static_cast<float>(g_menuMarkW)).removeFromRight(4.0f).withSizeKeepingCentre(4.0f, 8.0f);
+			juce::Path arrow;
+			arrow.startNewSubPath(c.getX(), c.getY());
+			arrow.lineTo(c.getRight(), c.getCentreY());
+			arrow.lineTo(c.getX(), c.getBottom());
+			_g.strokePath(arrow, juce::PathStrokeType(1.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+		}
+		_g.setFont(getPopupMenuFont());
+		_g.drawText(_item.text, r, juce::Justification::centredLeft, true);
+	}
+
+	// Shorter than an item, where JUCE makes it half as tall again; as wide as its capitals.
+	void MenuLook::getIdealPopupMenuSectionHeaderSizeWithOptions(const juce::String& _text, const int _standardHeight, int& _w, int& _h,
+		const juce::PopupMenu::Options& _options)
+	{
+		getIdealPopupMenuItemSizeWithOptions(_text.toUpperCase(), false, _standardHeight, _w, _h, _options);
+		_h = g_menuHeaderH;
+	}
+
+	void MenuLook::drawPopupMenuSectionHeaderWithOptions(juce::Graphics& _g, const juce::Rectangle<int>& _area,
+		const juce::String& _name, const juce::PopupMenu::Options&)
+	{
+		// On a darker band, so it reads over a busy panel. It is the menu's top: its top corners
+		// are the glass's.
+		const auto band = _area.toFloat();
+		juce::Path shade;
+		shade.addRoundedRectangle(band.getX(), band.getY(), band.getWidth(), band.getHeight(), g_tipCorner, g_tipCorner, true, true, false, false);
+		_g.setColour(juce::Colours::black.withAlpha(0.45f));
+		_g.fillPath(shade);
+		_g.setColour(juce::Colours::white.withAlpha(0.85f));
+		_g.setFont(getPopupMenuFont().boldened());
+		_g.drawText(_name.toUpperCase(), _area.withTrimmedLeft(g_menuPadX), juce::Justification::centredLeft, true);
 	}
 
 	void setLcdTip(juce::Component& _c, const juce::String& _tip)
@@ -1518,17 +1694,77 @@ namespace g1gui
 		const auto bit = 1u << _knob;
 		juce::PopupMenu menu;
 		menu.addSectionHeader("Knob " + juce::String(static_cast<int>(_knob + 1)));
-		menu.addItem("Exclude from Random", true, (excluded & bit) != 0, [this, bit]
+		// The item says what a click will do to this knob; the reset is there only when it has
+		// something to undo.
+		menu.addItem((excluded & bit) != 0 ? "Include in Random" : "Exclude from Random", [this, bit]
 		{
 			m_host.setRandomExcluded(m_host.randomExcluded() ^ bit);
 			updateRandomExcluded();
 		});
-		menu.addItem("Include all knobs in Random", excluded != 0, false, [this]
+		if(excluded != 0)
+			menu.addItem("Include all knobs in Random", [this]
+			{
+				m_host.setRandomExcluded(0);
+				updateRandomExcluded();
+			});
+		showMenu(menu);
+	}
+
+	// The menu of the panel itself, for a right click on whatever has no menu of its own.
+	void Panel::showPanelMenu()
+	{
+		auto* view = findParentComponentOfClass<PanelView>();
+		if(view == nullptr)
+			return;
+		juce::PopupMenu sizes;
+		const float now = view->scale();
+		for(const int percent : {75, 100, 125, 150, 175, 200, 250})
 		{
-			m_host.setRandomExcluded(0);
-			updateRandomExcluded();
-		});
-		menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&m_knobs[_knob]));
+			const float s = static_cast<float>(percent) / 100.0f;
+			sizes.addItem(juce::String(percent) + "%", true, std::abs(now - s) < 0.005f, [this, s]
+			{
+				if(auto* v = findParentComponentOfClass<PanelView>())
+					v->setScale(s);
+			});
+		}
+		juce::PopupMenu menu;
+		menu.addSubMenu("GUI Scale", sizes);
+		menu.addSeparator();
+		// The emulator's settings (the gear: audio, MIDI...) and About (the extras drawer's): the
+		// same as pressing them.
+		menu.addItem("Settings", [this] { m_settings.onClick(); });
+		menu.addItem("About", [this] { m_about.onClick(); });
+		showMenu(menu);
+	}
+
+	// What takes a right click for its own: a knob (its menu), a key that latches, and the
+	// controls JUCE gives a right click to (a button clicks, a box or a slider opens or drags).
+	bool Panel::hasOwnRightClick(const juce::Component* _c) const
+	{
+		for(; _c != nullptr && _c != this; _c = _c->getParentComponent())
+		{
+			if(auto* b = dynamic_cast<const PanelButton*>(_c))
+				return b->isLatchable();
+			if(dynamic_cast<const juce::Button*>(_c) || dynamic_cast<const juce::Slider*>(_c)
+				|| dynamic_cast<const juce::ComboBox*>(_c) || dynamic_cast<const juce::TextEditor*>(_c))
+				return true;
+		}
+		return false;
+	}
+
+	void Panel::showMenu(juce::PopupMenu& _menu)
+	{
+		m_tooltips.hideTip();
+		m_menuLook.capture();
+		_menu.setLookAndFeel(&m_menuLook);
+		// Right of the pointer, its first item level with it (below a heading, if it has one).
+		// JUCE lays it under a target area's bottom, or over its top when there is no room below.
+		juce::PopupMenu::MenuItemIterator first(_menu);
+		const bool heading = first.next() && first.getItem().isSectionHeader;
+		const auto mouse = getMouseXYRelative();
+		const int top = mouse.y - (heading ? g_menuHeaderH : 0) - g_menuItemH / 2;
+		const auto target = localAreaToGlobal(juce::Rectangle<int>(mouse.x + 2, top - 1, 1, 1));
+		_menu.showMenuAsync(juce::PopupMenu::Options().withParentComponent(this).withTargetScreenArea(target));
 	}
 
 	void Panel::updateRandomExcluded()
@@ -1593,10 +1829,15 @@ namespace g1gui
 		return false;
 	}
 
-	void Panel::mouseDown(const juce::MouseEvent&)
+	void Panel::mouseDown(const juce::MouseEvent& _e)
 	{
 		if(!hasKeyboardFocus(true))
 			grabKeyboardFocus();
+		if(_e.mods.isPopupMenu() && !hasOwnRightClick(_e.eventComponent) && _e.eventTime != m_menuClickAt)
+		{
+			m_menuClickAt = _e.eventTime;
+			showPanelMenu();
+		}
 	}
 
 	// Shift and A-D on the computer's keyboard hold the panel's Shift and slot buttons, as many at
@@ -1826,6 +2067,12 @@ namespace g1gui
 	// The panel's own size changed (not its scale): the view follows, at the scale its width says.
 	// The resizer gets the new proportions first: the window it resizes would otherwise be put back
 	// to the old ones, and the panel shown smaller in it, with margins.
+	void PanelView::setScale(const float _scale)
+	{
+		const float s = std::clamp(_scale, MinScale, MaxScale);
+		setSize(juce::roundToInt(static_cast<float>(m_panel.getWidth()) * s), juce::roundToInt(static_cast<float>(m_panel.getHeight()) * s));
+	}
+
 	void PanelView::childBoundsChanged(juce::Component* _child)
 	{
 		if(_child != &m_panel || getWidth() == 0 || m_panel.getHeight() == m_panelHeight)

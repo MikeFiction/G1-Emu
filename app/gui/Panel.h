@@ -112,6 +112,7 @@ namespace g1gui
 		void setAutoRepeat(bool _on);
 		// A key whose being held does nothing (Panel Split toggles when pressed): no latching.
 		void setLatchable(bool _on);
+		bool isLatchable() const { return m_latchable; }	// a right click latches it: no menu
 		void mouseDown(const juce::MouseEvent& _e) override;
 		void mouseDrag(const juce::MouseEvent& _e) override;
 		void mouseUp(const juce::MouseEvent& _e) override;
@@ -273,6 +274,36 @@ namespace g1gui
 		bool m_snapshotting = false;	// while the panel behind is drawn for the blur, the tooltip is not
 	};
 
+	// The right-click menus, on the tooltips' glass: what is behind them blurred and darkened, a
+	// lighter band under the mouse, thin rules between groups. They open inside the panel, so
+	// they scale with it; capture() takes the picture of the panel they blur, before one opens.
+	class MenuLook : public juce::LookAndFeel_V4
+	{
+	public:
+		explicit MenuLook(juce::Component& _panel);
+		~MenuLook() override;
+		void capture();
+
+		void preparePopupMenuWindow(juce::Component& _window) override;
+		void drawPopupMenuBackgroundWithOptions(juce::Graphics&, int, int, const juce::PopupMenu::Options&) override {}
+		void drawPopupMenuItemWithOptions(juce::Graphics& _g, const juce::Rectangle<int>& _area, bool _highlighted,
+			const juce::PopupMenu::Item& _item, const juce::PopupMenu::Options&) override;
+		void drawPopupMenuSectionHeaderWithOptions(juce::Graphics& _g, const juce::Rectangle<int>& _area,
+			const juce::String& _name, const juce::PopupMenu::Options&) override;
+		void getIdealPopupMenuItemSizeWithOptions(const juce::String& _text, bool _separator, int _standardHeight,
+			int& _w, int& _h, const juce::PopupMenu::Options&) override;
+		void getIdealPopupMenuSectionHeaderSizeWithOptions(const juce::String& _text, int _standardHeight, int& _w, int& _h,
+			const juce::PopupMenu::Options& _options) override;
+		int getPopupMenuBorderSizeWithOptions(const juce::PopupMenu::Options&) override { return 0; }
+		juce::Font getPopupMenuFont() override;
+	private:
+		class Glass;
+		juce::Component& m_panel;
+		juce::Image m_behind;	// the panel as it was when the menu opened, in its pixels on the screen
+		float m_behindScale = 1.0f;
+		std::vector<std::unique_ptr<Glass>> m_glasses;	// one per menu window; dropped once it closes
+	};
+
 	// The display below the knobs, in the knob displays' dots: the name of the synth's control
 	// under the mouse (setLcdTip), and its value at the right, after a tab. What is too long for it
 	// scrolls through and starts over.
@@ -324,7 +355,10 @@ namespace g1gui
 		void placeDrawer();
 		void shiftAsideForKnobs();
 		void randomizeKnobs();
-		void showKnobMenu(size_t _knob);	// right click: Exclude from Random
+		void showKnobMenu(size_t _knob);	// right click: Exclude from Random, or Include
+		void showPanelMenu();				// right click anywhere else: GUI Scale, Settings, About
+		bool hasOwnRightClick(const juce::Component* _c) const;	// a control that answers a right click itself
+		void showMenu(juce::PopupMenu& _menu);		// on the glass, at the mouse
 		void updateRandomExcluded();		// the knobs' marks and hover tooltips, from the host
 		void restoreKnobs();
 		void setKnobDisplays(bool _on);
@@ -436,6 +470,8 @@ namespace g1gui
 		TipDisplay m_tip;
 		DelayedTooltips m_tooltips{this};
 		TooltipLook m_tooltipLook{m_tooltips};
+		MenuLook m_menuLook{*this};
+		juce::Time m_menuClickAt;	// the right click that opened the panel's menu: the panel gets its own twice
 		double m_peakHold = 0;
 		uint64_t m_lastMidiIn = 0;
 		int m_midiHold = 0;
@@ -456,13 +492,14 @@ namespace g1gui
 		void applyLimits(juce::ComponentBoundsConstrainer& _c) const { applyLimits(_c, aspectRatio()); }
 		static void applyLimits(juce::ComponentBoundsConstrainer& _c, double _aspect);
 		std::function<void()> onAspectChanged;
+		float scale() const { return static_cast<float>(getWidth()) / static_cast<float>(m_panel.getWidth()); }
+		void setScale(float _scale);	// the window follows: the standalone's fits it, the plugin's editor too
 
 		void resized() override;
 		void paint(juce::Graphics& _g) override;
 		void childBoundsChanged(juce::Component* _child) override;
 
 	private:
-		float scale() const { return static_cast<float>(getWidth()) / static_cast<float>(m_panel.getWidth()); }
 		PanelHost& m_host;
 		Panel m_panel;
 		int m_panelHeight = 0;	// the panel's own, to tell the drawer opening from a new scale
