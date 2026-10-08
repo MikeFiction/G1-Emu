@@ -75,7 +75,7 @@ int main()
 	check(engine.loadFlash(flash), "flash loaded from " + flashFile);
 	auto& mc = engine.mc();
 	g1app::PresetsLink link;
-	std::vector<uint8_t> fromG1, toEditor, toG1;
+	std::vector<uint8_t> fromG1, toEditor, toG1, seen;	// seen: all that reached the editor
 	auto run = [&](const uint64_t _ms)
 	{
 		for(uint64_t i = 0; i < _ms; ++i)
@@ -88,6 +88,7 @@ int main()
 			mc.getPcPort().takeTx(fromG1);
 			toEditor.clear();
 			link.g1Sent(fromG1, now, toEditor);
+			seen.insert(seen.end(), toEditor.begin(), toEditor.end());
 			toG1.clear();
 			link.tick(now, toG1);
 			if(!toG1.empty())
@@ -129,6 +130,7 @@ int main()
 			++shown;
 		}
 
+	seen.clear();
 	link.load(0, 0, first);
 	std::string shown;
 	for(int t = 0; t < 60; ++t)
@@ -140,6 +142,12 @@ int main()
 	}
 	check(shown.find(trim(names[static_cast<size_t>(first)])) != std::string::npos,
 		"loaded position " + std::to_string(first + 1) + " into slot A: the display says \"" + shown + "\"");
+
+	// The editor is told, as after a load from the panel: NewPatchInSlot (cc $14, sc $38) for slot A.
+	bool told = false;
+	for(size_t i = 0; i + 7 < seen.size(); ++i)
+		told = told || (seen[i] == 0xf0 && seen[i + 1] == 0x33 && (seen[i + 2] >> 2) == 0x14 && seen[i + 5] == 0x38 && seen[i + 6] == 0);
+	check(told, "the editor is told of the new patch in slot A (NewPatchInSlot)");
 
 	std::printf(failures ? "%d failure(s)\n" : "all ok\n", failures);
 	return failures ? 1 : 0;

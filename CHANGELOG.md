@@ -7,6 +7,17 @@ Older entries cite their commit by hand.
 
 ## 2026-10-08
 
+- [Fix] **The editor follows a patch loaded or uploaded from the Presets page (Claude, reported by
+  Javier).** Loaded with the dial and Load, or by a Program Change, a patch reaches Animatek NME:
+  the OS tells the editor (NewPatchInSlot, `f0 33 50 06 01 38 00 01 33 f7` for slot A) and NME
+  fetches it. Loaded from the Presets page it did not: the request goes in through the PC Port, the
+  OS takes it for the editor's own and only answers it, with an ACK the link keeps. Now the link
+  tells the editor itself, with the same message the OS sends and the patch's new id from that ACK;
+  after a Load .pch too, with the id the upload's first ACK gives. In the plugin the slot keeper
+  hears it as well and reads the slot again, so the project keeps the new patch. Checked:
+  `g1presetstest` and `g1pchtest` find the message, byte for byte the OS's, reaching the editor;
+  all tests pass.
+
 - [Fix] **Knobs turned on the panel reach the host as real gestures, and never under a lock
   (Claude, issue #42, reported by Waltercalling).** Nuendo crashed when one of its modulators was
   set to learn a parameter ("Acquisition") and a knob was turned in G1-Emu's window. Two things of

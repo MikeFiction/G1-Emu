@@ -15,7 +15,8 @@ namespace g1app
 		constexpr uint64_t QuietMs = 500;		// the editor's own exchanges come closer together
 		constexpr uint64_t ReplyMs = 1500;
 		constexpr uint64_t FilterTailMs = 300;	// late replies to an abandoned request
-		constexpr uint8_t CcAck = 0x16, CcPatch = 0x17;
+		constexpr uint8_t CcInfo = 0x14, CcAck = 0x16, CcPatch = 0x17;
+		constexpr uint8_t LoadAck = 0x38, InfoNewPatchInSlot = 0x38;
 		constexpr uint8_t ListAckA = 0x13, ListAckB = 0x15;	// the ACK types that carry a list
 		constexpr uint8_t ListEnd = 4;		// the end marker that says the whole list is done
 		constexpr uint8_t PacketAck = 0x36, LastPacketAck = 0x7f;	// an upload's packet taken
@@ -173,6 +174,7 @@ namespace g1app
 		m_deadline = m_filterUntil = m_lastActivity = 0;
 		m_rx.clear();
 		m_editorRx.clear();
+		m_toEditor.clear();
 		++m_revision;
 	}
 
@@ -216,10 +218,15 @@ namespace g1app
 			}
 			const bool hide = hides(ccOf(_m), _nowMs);	// before the reply moves the state on
 			takeReply(_m, _nowMs);
-			if(hide)
-				traceMsg("<-", _nowMs, _m);
-			else
+			traceMsg(hide ? "<-" : "<= (to the editor)", _nowMs, _m);
+			if(!hide)
 				_toEditor.insert(_toEditor.end(), _m.begin(), _m.end());
+			if(!m_toEditor.empty())
+			{
+				traceMsg("=> (to the editor, ours)", _nowMs, m_toEditor);
+				_toEditor.insert(_toEditor.end(), m_toEditor.begin(), m_toEditor.end());
+				m_toEditor.clear();
+			}
 		});
 	}
 
@@ -235,11 +242,24 @@ namespace g1app
 		if(ccOf(_m) != CcAck || _m.size() < 7)
 			return;
 		if(m_state == State::Loading)
+		{
+			// The OS tells an editor of a patch loaded from the panel or by MIDI (NewPatchInSlot), but
+			// not of one loaded through the PC Port, which it takes for the editor's own: the editor
+			// would never fetch it. So the link tells it, as the OS would have: the slot, and the
+			// patch's new id from this ACK (f0 33 50 06 01 38 00 01 33 f7 for slot A, id 1).
+			if(_m[5] == LoadAck && _m.size() > 8)
+			{
+				const uint8_t slot = _m[6] & 3, pid = _m[7] & 0x7f;
+				m_toEditor = frame(CcInfo, slot, {_m[4], InfoNewPatchInSlot, slot, pid});
+			}
 			return finish(_nowMs);
+		}
 		if(m_state == State::Uploading)
 		{
 			if(_m[5] != PacketAck && _m[5] != LastPacketAck)
 				return;
+			if(_m[5] == PacketAck)
+				m_uploadPid = _m[6] & 0x7f;	// the patch's new id, as an editor's upload learns it
 			++m_frame;
 			m_uploadNext = true;		// the next packet, or the store, at the next tick
 			return;
@@ -309,6 +329,9 @@ namespace g1app
 				m_deadline = _nowMs + PacketMs;
 				return;
 			}
+			// All in: the editor is told of the new patch in the slot, as after a load (takeReply).
+			const auto slot = static_cast<uint8_t>(m_upload.slot);
+			m_toEditor = frame(CcInfo, slot, {0x01, InfoNewPatchInSlot, slot, m_uploadPid});
 			if(m_upload.bank >= 0)
 			{
 				request(frame(CcPatch, static_cast<uint8_t>(m_upload.slot), {0x41, 0x0b, static_cast<uint8_t>(m_upload.slot),

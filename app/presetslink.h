@@ -88,10 +88,12 @@ namespace g1app
 		bool m_pendingNext = false;		// an answer came and the bank goes on: the next request, at the next tick
 		Upload m_upload;				// the one going on
 		size_t m_frame = 0;				// its next packet
+		uint8_t m_uploadPid = 1;		// the id the OS gave the uploaded patch
 		bool m_uploadNext = false;		// the last packet was acknowledged: the next one, or the store, at the next tick
 		uint64_t m_deadline = 0;
 		uint64_t m_filterUntil = 0;		// replies to the link are hidden from the editor until then
 		uint64_t m_lastActivity = 0;	// the editor's last message
 		std::vector<uint8_t> m_rx, m_editorRx;
+		std::vector<uint8_t> m_toEditor;	// what the link has to tell the editor itself (a load's NewPatchInSlot)
 	};
 }

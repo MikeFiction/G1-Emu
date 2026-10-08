@@ -55,7 +55,7 @@ int main()
 	auto& mc = engine.mc();
 	constexpr uint64_t ms = g1::g_ucClock / 1000;
 	g1app::PresetsLink link;
-	std::vector<uint8_t> fromG1, toEditor, toG1;
+	std::vector<uint8_t> fromG1, toEditor, toG1, seen;	// seen: all that reached the editor
 	auto run = [&](const uint64_t _ms)
 	{
 		for(uint64_t i = 0; i < _ms; ++i)
@@ -68,6 +68,7 @@ int main()
 			mc.getPcPort().takeTx(fromG1);
 			toEditor.clear();
 			link.g1Sent(fromG1, now, toEditor);
+			seen.insert(seen.end(), toEditor.begin(), toEditor.end());
 			toG1.clear();
 			link.tick(now, toG1);
 			if(!toG1.empty())
@@ -78,6 +79,7 @@ int main()
 	mc.getPcPort().receive({0xf0, 0x33, 0x00, 0x06, 0x00, 0x03, 0x03, 0xf7});	// IAm, as an editor greets it
 	run(500);
 
+	seen.clear();
 	link.upload(0, up.frames, up.abort, 8, 98);
 	g1app::PresetsLink::UploadStatus status;
 	for(int t = 0; t < 400; ++t)
@@ -88,6 +90,10 @@ int main()
 			break;
 	}
 	check(status.ok && !status.busy, "uploaded and stored: " + status.message);
+	bool told = false;
+	for(size_t i = 0; i + 7 < seen.size(); ++i)
+		told = told || (seen[i] == 0xf0 && seen[i + 1] == 0x33 && (seen[i + 2] >> 2) == 0x14 && seen[i + 5] == 0x38 && seen[i + 6] == 0);
+	check(told, "the editor is told of the new patch in slot A (NewPatchInSlot)");
 
 	g1app::PresetsLink::BankNames names;
 	bool known = false;
