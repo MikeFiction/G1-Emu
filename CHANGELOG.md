@@ -13,6 +13,13 @@ Older entries cite their commit by hand.
   later art updates keep them. Nothing else in the image changes. Saved as 8-bit RGB, like the
   previous file. Checked on Windows: it builds, and the PNG matches the master export pixel for
   pixel.
+- [Fix] **Switching between Presets and Settings no longer flashes the main panel (Claude,
+  reported by Mike Fiction).** Pressing one page's key while the other page was open faded the
+  open page out to the main panel and then faded the new one in, so the main panel showed for a
+  moment in between. Now the new page fades in on top of the open one, and the old page is hidden
+  once it's covered. Fading in from the main panel and out to it are unchanged. Checked on
+  Windows: the standalone and the VST3 build, and the switch shows no main panel in between, both
+  ways.
 
 - [Docs] **ROADMAP: running without a ROM (#16) is a goal around the beta, with no date (Claude,
   decided with Javier).**

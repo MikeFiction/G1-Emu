@@ -1083,10 +1083,10 @@ namespace g1gui
 		m_drawer.addAndMakeVisible(m_followToggle);
 
 		m_presetsPage.setTooltip("The synth's banks and programs (in development); press again for the panel");
-		m_presetsPage.onClick = [this] { showPresets(!m_presetsView.isVisible()); };
+		m_presetsPage.onClick = [this] { showPresets(!m_presetsView.isOpen()); };
 		setLcdTip(m_presetsPage, "Presets");
 		m_settingsPage.setTooltip("The slots' MIDI channels, the clock and the other settings of the whole G1; press again for the panel");
-		m_settingsPage.onClick = [this] { showSynthSettings(!m_synthView.isVisible()); };
+		m_settingsPage.onClick = [this] { showSynthSettings(!m_synthView.isOpen()); };
 		setLcdTip(m_settingsPage, "Settings");
 		for(auto* c : std::initializer_list<juce::Component*>{&m_presetsPage, &m_settingsPage, &m_presetsLed, &m_settingsLed})
 			addAndMakeVisible(*c);
@@ -1383,14 +1383,16 @@ namespace g1gui
 	// A page button: the settings fade in over the knobs, or out to show them again.
 	void Panel::showSynthSettings(const bool _show)
 	{
-		if(_show == m_synthView.isVisible())
+		if(_show == m_synthView.isOpen())
 			return;
 		if(!_show)
 		{
 			m_synthView.close();	// its onClose puts its LED out
 			return;
 		}
-		showPresets(false);
+		// From the Presets page: this one fades in over it, and it goes once covered.
+		if(m_presetsView.isOpen())
+			m_presetsView.close(true);
 		m_synthView.open(settingsFrame());
 		m_settingsLed.setOn(true);
 	}
@@ -1398,14 +1400,15 @@ namespace g1gui
 	// The same for the Presets page; one page at a time.
 	void Panel::showPresets(const bool _show)
 	{
-		if(_show == m_presetsView.isVisible())
+		if(_show == m_presetsView.isOpen())
 			return;
 		if(!_show)
 		{
 			m_presetsView.close();
 			return;
 		}
-		showSynthSettings(false);
+		if(m_synthView.isOpen())
+			m_synthView.close(true);
 		m_presetsView.open(settingsFrame());
 		m_presetsLed.setOn(true);
 	}
