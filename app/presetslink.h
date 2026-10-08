@@ -65,9 +65,9 @@ namespace g1app
 		enum class State { Idle, Listing, Loading, Uploading, Storing };
 
 		void request(const std::vector<uint8_t>& _msg, State _state, uint64_t _nowMs, std::vector<uint8_t>& _toG1);
-		void finish(uint64_t _nowMs);
+		void finish(uint64_t _nowMs, bool _answered = false);
 		void takeReply(const std::vector<uint8_t>& _m, uint64_t _nowMs);
-		bool hides(uint8_t _cc, uint64_t _nowMs) const;
+		bool hides(const std::vector<uint8_t>& _m, uint64_t _nowMs) const;
 		void uploadDone(bool _ok, const std::string& _message);
 
 		mutable std::mutex m_mutex;		// what the other threads see and ask for
@@ -83,6 +83,7 @@ namespace g1app
 		std::atomic<int> m_readingBank{-1};
 
 		std::atomic<State> m_state{State::Idle};
+		State m_hideState = State::Idle;	// the last request's kind: which ACKs are the link's (hides)
 		BankNames m_partial{};			// the bank being read, filled as the answers come
 		int m_bank = 0, m_position = 0;	// where the open request starts
 		bool m_pendingNext = false;		// an answer came and the bank goes on: the next request, at the next tick

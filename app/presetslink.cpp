@@ -182,13 +182,15 @@ namespace g1app
 	// ____________________________________________________________________________________________
 	// Worker thread
 
-	void PresetsLink::finish(const uint64_t _nowMs)
+	// _answered: the request got its answer, so no late one is coming and nothing more is kept
+	// from the editor; otherwise (no answer, or abandoned) its late answers are, for a moment.
+	void PresetsLink::finish(const uint64_t _nowMs, const bool _answered)
 	{
 		m_state = State::Idle;
 		m_pendingNext = false;
 		m_uploadNext = false;
 		m_readingBank = -1;
-		m_filterUntil = _nowMs + FilterTailMs;
+		m_filterUntil = _answered ? 0 : _nowMs + FilterTailMs;
 	}
 
 	void PresetsLink::editorSent(const std::vector<uint8_t>& _bytes, const uint64_t _nowMs)
@@ -222,7 +224,7 @@ namespace g1app
 				_toEditor.insert(_toEditor.end(), _m.begin(), _m.end());
 				return;
 			}
-			const bool hide = hides(ccOf(_m), _nowMs);	// before the reply moves the state on
+			const bool hide = hides(_m, _nowMs);	// before the reply moves the state on
 			takeReply(_m, _nowMs);
 			traceMsg(hide ? "<-" : "<= (to the editor)", _nowMs, _m);
 			if(!hide)
@@ -237,10 +239,22 @@ namespace g1app
 	}
 
 	// The ACKs to the link's own requests, while one is open or shortly after: not the editor's.
-	// What the OS says on its own after a load (the new patch in the slot) goes on to the editor.
-	bool PresetsLink::hides(const uint8_t _cc, const uint64_t _nowMs) const
+	// Only those of the kinds its requests get (a list, a load, an upload's packets), so an ACK
+	// to the editor's own request is never kept: Animatek NME asks for the patch the moment it
+	// hears of a load, and its answer, kept as the link's, made it wait seconds for a retry.
+	bool PresetsLink::hides(const std::vector<uint8_t>& _m, const uint64_t _nowMs) const
 	{
-		return _cc == CcAck && (m_state != State::Idle || _nowMs < m_filterUntil);
+		if(ccOf(_m) != CcAck || _m.size() < 7 || !(m_state != State::Idle || _nowMs < m_filterUntil))
+			return false;
+		const uint8_t type = _m[5];
+		switch(m_hideState)
+		{
+		case State::Listing:
+		case State::Storing:	return type == ListAckA || type == ListAckB;	// a store is answered with the list there
+		case State::Loading:	return type == LoadAck;
+		case State::Uploading:	return type == PacketAck || type == LastPacketAck;
+		default:				return false;
+		}
 	}
 
 	void PresetsLink::takeReply(const std::vector<uint8_t>& _m, const uint64_t _nowMs)
@@ -258,7 +272,7 @@ namespace g1app
 				const uint8_t slot = _m[6] & 3, pid = _m[7] & 0x7f;
 				m_toEditor = frame(CcInfo, slot, {_m[4], InfoNewPatchInSlot, slot, pid});
 			}
-			return finish(_nowMs);
+			return finish(_nowMs, true);
 		}
 		if(m_state == State::Uploading)
 		{
@@ -275,7 +289,7 @@ namespace g1app
 			std::lock_guard<std::mutex> lock(m_mutex);
 			m_readWanted[static_cast<size_t>(m_upload.bank)] = true;	// the list shows it
 			uploadDone(true, "Stored in bank " + std::to_string(m_upload.bank + 1) + " at " + std::to_string(m_upload.position + 1) + ".");
-			finish(_nowMs);
+			finish(_nowMs, true);
 			return;
 		}
 		if(_m.size() < 9)
@@ -306,7 +320,7 @@ namespace g1app
 			m_names[static_cast<size_t>(m_bank)] = m_partial;
 			m_known[static_cast<size_t>(m_bank)] = true;
 			++m_revision;
-			finish(_nowMs);
+			finish(_nowMs, true);
 			return;
 		}
 		m_position = next;
@@ -346,7 +360,7 @@ namespace g1app
 			}
 			std::lock_guard<std::mutex> lock(m_mutex);
 			uploadDone(true, std::string("Loaded into slot ") + static_cast<char>('A' + m_upload.slot) + ".");
-			finish(_nowMs);
+			finish(_nowMs, true);
 			return;
 		}
 		if(m_state == State::Listing && m_pendingNext)
@@ -426,6 +440,7 @@ namespace g1app
 		_toG1.insert(_toG1.end(), _msg.begin(), _msg.end());
 		m_filterUntil = UINT64_MAX;
 		m_state = _state;
+		m_hideState = _state;		// what its late answers look like, after it is over
 		m_deadline = _nowMs + ReplyMs;
 	}
 }

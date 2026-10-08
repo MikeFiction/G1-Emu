@@ -7,6 +7,17 @@ Older entries cite their commit by hand.
 
 ## 2026-10-08
 
+- [Fix] **After a load from the Presets page, the editor's own answers reach it (Claude, reported
+  by Javier).** NME still took seconds to show a patch loaded from the page. The link kept from the
+  editor every ACK while a request of its own was open and for 300 ms after, so as to catch late
+  answers; the moment NME heard of the new patch it asked for it, and the OS's answer to NME was
+  kept as the link's: NME waited for its retry. Now the link keeps only the ACKs of the kinds its
+  own requests get (a list's $13 and $15, a load's $38, an upload's $36 and $7F), and the 300 ms
+  only after a request that got no answer, not after one that did. Checked: `g1presetstest` has the
+  editor ask for the patch the moment it hears of the load, and every ACK the G1 sends it from then
+  on reaches it (1 of 1 under the factory OS; the 3.03b update answers that request with none);
+  the trace before the fix showed that ACK kept; all tests pass.
+
 - [Fix] **A load from the Presets page reaches the editor at once, not seconds later (Claude,
   reported by Javier).** With the dial and Load, Animatek NME had the patch at once; from the
   Presets page, some seconds later. The link only speaks once the editor has been quiet for half a

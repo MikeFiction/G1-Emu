@@ -12,6 +12,7 @@
 #include "presetslink.h"
 #include "romfinder.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -76,6 +77,7 @@ int main()
 	auto& mc = engine.mc();
 	g1app::PresetsLink link;
 	std::vector<uint8_t> fromG1, toEditor, toG1, seen;	// seen: all that reached the editor
+	std::vector<uint8_t> sent;							// all the G1 sent, kept or not
 	auto run = [&](const uint64_t _ms)
 	{
 		for(uint64_t i = 0; i < _ms; ++i)
@@ -86,6 +88,7 @@ int main()
 			const auto now = mc.ucCycles() / g_ms;
 			fromG1.clear();
 			mc.getPcPort().takeTx(fromG1);
+			sent.insert(sent.end(), fromG1.begin(), fromG1.end());
 			toEditor.clear();
 			link.g1Sent(fromG1, now, toEditor);
 			seen.insert(seen.end(), toEditor.begin(), toEditor.end());
@@ -151,12 +154,26 @@ int main()
 	link.load(0, 0, first);
 	std::string shown;
 	uint64_t toldAt = 0;
+	size_t askedFrom = 0, sentFrom = 0;	// where in seen and in sent the editor's own request was made
 	for(int t = 0; t < 60; ++t)
 	{
 		greet(50);
 		for(size_t i = 0; toldAt == 0 && i + 7 < seen.size(); ++i)
 			if(seen[i] == 0xf0 && (seen[i + 2] >> 2) == 0x14 && seen[i + 5] == 0x38)
+			{
 				toldAt = mc.ucCycles() / g_ms;
+				// The editor, told of the new patch, asks for it at once (RequestPatch, $41 $35, as
+				// Animatek NME does): the OS's answer must reach it, not be kept as the link's.
+				std::vector<uint8_t> req = {0xf0, 0x33, 0x5c, 0x06, 0x41, 0x35, 0x00, 0xf7};
+				uint32_t sum = 0;
+				for(size_t k = 0; k + 2 < req.size(); ++k)
+					sum += req[k];
+				req[req.size() - 2] = static_cast<uint8_t>(sum & 0x7f);
+				mc.getPcPort().receive(req);
+				link.editorSent(req, mc.ucCycles() / g_ms);
+				askedFrom = seen.size();
+				sentFrom = sent.size();
+			}
 		shown = trim(mc.getLcd().line(0));
 		if(toldAt && shown.find(trim(names[static_cast<size_t>(first)])) != std::string::npos)
 			break;
@@ -165,6 +182,31 @@ int main()
 		+ std::to_string(toldAt ? toldAt - asked : 0) + " ms after it is asked for");
 	check(shown.find(trim(names[static_cast<size_t>(first)])) != std::string::npos,
 		"loaded position " + std::to_string(first + 1) + " into slot A: the display says \"" + shown + "\"");
+
+	// Every ACK the G1 sent after the editor's request reaches the editor: the link keeps only the
+	// answers to its own requests (a list, a load, an upload), never one to the editor's.
+	const auto acks = [](const std::vector<uint8_t>& _b, const size_t _from)
+	{
+		std::vector<std::vector<uint8_t>> out;
+		for(size_t i = _from; i + 5 < _b.size(); ++i)
+			if(_b[i] == 0xf0 && _b[i + 1] == 0x33 && (_b[i + 2] >> 2) == 0x16)
+			{
+				const auto end = std::find(_b.begin() + static_cast<long>(i), _b.end(), uint8_t(0xf7));
+				out.emplace_back(_b.begin() + static_cast<long>(i), end == _b.end() ? end : end + 1);
+			}
+		return out;
+	};
+	size_t lost = 0, editorsAcks = 0;
+	for(const auto& a : acks(sent, sentFrom))
+	{
+		if(a[5] == 0x38 || a[5] == 0x13 || a[5] == 0x15)	// the link's own kinds
+			continue;
+		++editorsAcks;
+		const auto got = acks(seen, askedFrom);
+		lost += std::find(got.begin(), got.end(), a) == got.end() ? 1 : 0;
+	}
+	check(toldAt && lost == 0, "after the load, the editor's own answers reach it: " + std::to_string(editorsAcks)
+		+ " ACK(s) for it, " + std::to_string(lost) + " kept from it");
 
 	// The editor is told, as after a load from the panel: NewPatchInSlot (cc $14, sc $38) for slot A.
 	bool told = false;
