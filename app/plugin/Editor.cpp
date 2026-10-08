@@ -123,6 +123,7 @@ namespace g1plugin
 	g1app::HostStats Editor::stats() { return m_processor.stats(); }
 	bool Editor::extrasOpen() const { return m_processor.extrasOpen(); }
 	g1app::SynthSettingsLink& Editor::synthSettings() { return m_processor.synthSettings(); }
+	g1app::PresetsLink& Editor::presets() { return m_processor.presets(); }
 	void Editor::setExtrasOpen(const bool _open) { m_processor.setExtrasOpen(_open); }
 	bool Editor::knobDisplays() const { return m_processor.knobDisplays(); }
 	void Editor::setKnobDisplays(const bool _on) { m_processor.setKnobDisplays(_on); }

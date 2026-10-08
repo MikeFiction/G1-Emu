@@ -7,6 +7,22 @@ Older entries cite their commit by hand.
 
 ## 2026-10-08
 
+- [New] **The Presets page lists the synth's banks, and a click loads one (Claude, requested by
+  Javier).** Pick a bank (1 to 9) from the drop-down at the top right and its names show in three
+  columns, scrolling; **Hide empty** (on by default) leaves out the positions with nothing stored,
+  and the count beside it says how many are used. A click on a name loads it into the slot lit on
+  the panel; the loaded one is marked in orange. The names come from the OS over the PC Port as an
+  editor reads them (GetPatchList, `$41 $14`) and the load is the OS's own LoadPatch (`$41 $0A`),
+  through a new `PresetsLink` (`app/presetslink.*`), which talks between the editor's messages and
+  hides the answers to its own requests from it, like the Synth Settings' link; in the plugin the
+  slot keeper, the settings and the presets each take the others' requests for an editor's, so they
+  never talk at once. The bank is read again each time the page opens or the bank changes. The
+  standalone may now start a second window for `G1_SNAPSHOTS`, which touches no device. Checked:
+  `g1presetstest` (new) decodes hand-made answers, reads bank 1 from an emulated G1 (98 of 99 used)
+  under the factory OS and under 3.03b, and loading its first patch into slot A puts its name on
+  the G1's display; all tests pass; the snapshots show the page with the bank's names. Not done
+  yet: Load .pch and Edit in NME.
+
 - [Docs] **ROADMAP: the expanded G1 is tracked in #39 (Claude).**
 
 - [Merge] **Mike Fiction's pull requests #36, #40, #41 and #43 (Claude, requested by Javier).**

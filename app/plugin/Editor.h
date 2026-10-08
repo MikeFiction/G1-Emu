@@ -49,6 +49,7 @@ namespace g1plugin
 		juce::String settingsTooltip() const override { return "ROM, latency, and where this instance's patches came from"; }
 		void showSettings(juce::Component* _parent) override;
 		g1app::SynthSettingsLink& synthSettings() override;
+		g1app::PresetsLink& presets() override;
 		bool canRestart() const override { return true; }
 		void restart() override;
 		juce::String restartNote() const override

@@ -557,40 +557,148 @@ namespace g1gui
 	// ____________________________________________________________________________________________
 	// Presets
 
-	PresetsView::PresetsView() : m_frame(G1Skin::settings_panel_png, G1Skin::settings_panel_pngSize)
+	namespace
+	{
+		const juce::Colour g_loaded(0xffe89d32);	// the frame's orange: the patch loaded from here
+		constexpr int g_listTop = g_titleRuleY + 6, g_listRowH = 18, g_listCols = 3;
+		constexpr int g_numberW = 22;				// "07" before each name
+	}
+
+	PresetsView::PresetsView(g1app::PresetsLink& _link, std::function<int()> _activeSlot)
+		: m_link(_link), m_activeSlot(std::move(_activeSlot)), m_frame(G1Skin::settings_panel_png, G1Skin::settings_panel_pngSize)
 	{
 		setWantsKeyboardFocus(true);
+		setLookAndFeel(&m_look);
+
+		// Bank's label as the Settings page's Name: small white condensed capitals.
+		m_bankLabel.setFont(juce::FontOptions(g_textSize).withHorizontalScale(g_condensed));
+		m_bankLabel.setText("BANK", juce::dontSendNotification);
+		m_bankLabel.setColour(juce::Label::textColourId, g_label);
+		m_bankLabel.setJustificationType(juce::Justification::centredRight);
+		addAndMakeVisible(m_bankLabel);
+		for(int b = 0; b < g1app::PresetsLink::Banks; ++b)
+			m_bank.addItem("Bank " + juce::String(b + 1), b + 1);
+		m_bank.setSelectedId(1, juce::dontSendNotification);
+		m_bank.onChange = [this]
+		{
+			m_link.readBank(m_bank.getSelectedId() - 1);
+			m_revision = ~0ull;
+			showBank();
+			m_viewport.setViewPosition(0, 0);
+		};
+		addAndMakeVisible(m_bank);
+
+		m_hideEmpty.setToggleState(true, juce::dontSendNotification);
+		m_hideEmpty.setColour(juce::ToggleButton::textColourId, g_label);
+		m_hideEmpty.setColour(juce::ToggleButton::tickColourId, g_label);
+		m_hideEmpty.setColour(juce::ToggleButton::tickDisabledColourId, g_label);
+		m_hideEmpty.setTooltip("List only the positions that hold a patch");
+		m_hideEmpty.onClick = [this] { showBank(); };
+		addAndMakeVisible(m_hideEmpty);
+
+		m_count.setFont(juce::FontOptions(g_textSize));
+		m_count.setColour(juce::Label::textColourId, g_label);
+		m_count.setJustificationType(juce::Justification::centredLeft);
+		addAndMakeVisible(m_count);
+
+		m_viewport.setViewedComponent(&m_list, false);
+		m_viewport.setScrollBarsShown(true, false);
+		m_viewport.setScrollBarThickness(8);
+		m_viewport.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId, g_heading);
+		addAndMakeVisible(m_viewport);
+	}
+
+	PresetsView::~PresetsView()
+	{
+		setLookAndFeel(nullptr);
 	}
 
 	void PresetsView::open(const juce::Rectangle<int> _frame)
 	{
 		setBounds(_frame);
+		m_link.readBank(m_bank.getSelectedId() - 1);	// it may have changed since (an editor stored one)
+		m_revision = ~0ull;
+		showBank();
 		m_open = true;
 		juce::Desktop::getInstance().getAnimator().fadeIn(this, g_fadeMs);
 		toFront(true);
+		startTimerHz(g_pollHz);
 	}
 
 	void PresetsView::close(const bool _under)
 	{
+		stopTimer();
 		m_open = false;
 		hidePage(*this, _under);
 		if(onClose)
 			onClose();
 	}
 
+	void PresetsView::timerCallback()
+	{
+		if(m_link.revision() != m_revision)
+			showBank();
+		else
+			repaint(getLocalBounds().withTop(g_footerY));	// "Reading..." comes and goes
+	}
+
+	void PresetsView::showBank()
+	{
+		m_revision = m_link.revision();
+		const int bank = m_bank.getSelectedId() - 1;
+		m_known = m_link.bank(bank, m_names);
+		m_shown.clear();
+		int used = 0;
+		for(int p = 0; p < g1app::PresetsLink::Positions; ++p)
+		{
+			const bool empty = m_names[static_cast<size_t>(p)].empty();
+			used += empty ? 0 : 1;
+			if(m_known && (!empty || !m_hideEmpty.getToggleState()))
+				m_shown.push_back(p);
+		}
+		m_count.setText(m_known ? juce::String(used) + " / 99" : juce::String(), juce::dontSendNotification);
+		const int width = m_viewport.getMaximumVisibleWidth();
+		m_list.setSize(width, std::max(m_viewport.getMaximumVisibleHeight(), m_list.rowsFor(static_cast<int>(m_shown.size())) * g_listRowH));
+		m_list.repaint();
+		repaint();
+	}
+
+	void PresetsView::loadAt(const int _position)
+	{
+		const int bank = m_bank.getSelectedId() - 1;
+		const int slot = m_activeSlot ? m_activeSlot() : 0;
+		m_link.load(slot, bank, _position);
+		m_loadedBank = bank;
+		m_loadedPosition = _position;
+		m_list.repaint();
+	}
+
+	juce::String PresetsView::footer() const
+	{
+		const int bank = m_bank.getSelectedId() - 1;
+		if(m_link.reading(bank))
+			return "Reading bank " + juce::String(bank + 1) + " from the synth...";
+		if(!m_known)
+			return "The synth has not answered yet.";
+		if(m_shown.empty())
+			return "Bank " + juce::String(bank + 1) + " is empty.";
+		const char slots[] = {'A', 'B', 'C', 'D'};
+		const int slot = m_activeSlot ? std::clamp(m_activeSlot(), 0, 3) : 0;
+		return juce::String("Click a patch to load it into slot ") + slots[slot] + ". Press Presets again to go back to the panel.";
+	}
+
 	// Mike Fiction's frame with its inside blanked (it carries the Synth Settings' own lettering),
-	// the title and the rules as that page has them, and the note in the middle.
+	// the title and the rules as that page has them, the list, and the note below.
 	void PresetsView::paint(juce::Graphics& _g)
 	{
 		const auto c = getLocalBounds();
 		m_frame.draw(_g, c.toFloat());
-		const auto inside = c.reduced(g_frameEdge + 2);
 		_g.setColour(juce::Colour(0xff9ea1b2));		// the frame's own grey
-		_g.fillRect(inside);
+		_g.fillRect(c.reduced(g_frameEdge + 2));
 
 		_g.setColour(g_heading);
 		_g.setFont(juce::FontOptions(15.0f, juce::Font::bold).withHorizontalScale(g_condensed));
-		_g.drawText("PRESETS", c.getX() + g_margin, c.getY() + g_titleY, 200, g_titleRuleY - g_titleY - 4, juce::Justification::centredLeft, false);
+		_g.drawText("PRESETS", c.getX() + g_margin, c.getY() + g_titleY - 2, 200, g_rowH + 4, juce::Justification::centredLeft, false);
 
 		for(const int y : {g_titleRuleY, g_footerY})
 		{
@@ -601,18 +709,23 @@ namespace g1gui
 			_g.fillRect(rule.withY(rule.getBottom()).withHeight(1));
 		}
 
-		const auto body = juce::Rectangle<int>(c.getX(), c.getY() + g_titleRuleY + 2, c.getWidth(), g_footerY - g_titleRuleY - 4);
-		_g.setColour(g_heading);
-		_g.setFont(juce::FontOptions(22.0f, juce::Font::bold).withHorizontalScale(g_condensed));
-		_g.drawText("IN DEVELOPMENT", body.withTrimmedBottom(body.getHeight() / 2 - 6), juce::Justification::centredBottom, false);
 		_g.setColour(g_label);
-		_g.setFont(juce::FontOptions(g_textSize + 1.0f));
-		_g.drawFittedText("The synth's banks and programs, listed here to load with a click,\ncome in the next release.",
-			body.withTrimmedTop(body.getHeight() / 2 + 8).reduced(g_margin, 0), juce::Justification::centredTop, 2);
-
 		_g.setFont(juce::FontOptions(g_textSize));
-		_g.drawText("Press Presets again to go back to the panel.", c.getX() + g_margin, c.getY() + g_footerY + 4,
-			c.getWidth() - 2 * g_margin, c.getHeight() - g_footerY - 8, juce::Justification::centredLeft, false);
+		_g.drawText(footer(), c.getX() + g_margin, c.getY() + g_footerY + 4, c.getWidth() - 2 * g_margin, c.getHeight() - g_footerY - 8,
+			juce::Justification::centredLeft, true);
+	}
+
+	// The title bar as the Settings page's: Bank and its box at the right, where Name is, and
+	// before it the filter and the count.
+	void PresetsView::resized()
+	{
+		const auto c = getLocalBounds();
+		m_bank.setBounds(c.getRight() - g_margin - 90, c.getY() + g_titleY, 90, g_rowH);
+		m_bankLabel.setBounds(m_bank.getX() - 4 - 40, c.getY() + g_titleY, 40, g_rowH);
+		m_count.setBounds(m_bankLabel.getX() - 12 - 52, c.getY() + g_titleY, 52, g_rowH);
+		m_hideEmpty.setBounds(m_count.getX() - 4 - 80, c.getY() + g_titleY - 1, 80, g_rowH + 2);	// JUCE sizes its text to its height
+		m_viewport.setBounds(c.getX() + g_margin - 6, c.getY() + g_listTop, c.getWidth() - 2 * g_margin + 12, g_footerY - g_listTop - 6);
+		showBank();
 	}
 
 	bool PresetsView::keyPressed(const juce::KeyPress& _key)
@@ -621,5 +734,74 @@ namespace g1gui
 			return false;
 		close();
 		return true;
+	}
+
+	// ____________________________________________________________________________________________
+	// Presets: the list
+
+	int PresetsView::List::rowsFor(const int _count) const
+	{
+		return (_count + g_listCols - 1) / g_listCols;
+	}
+
+	int PresetsView::List::positionAt(const juce::Point<int> _p) const
+	{
+		const auto& shown = m_owner.m_shown;
+		const int rows = std::max(1, rowsFor(static_cast<int>(shown.size())));
+		const int colW = getWidth() / g_listCols;
+		const int col = _p.x / std::max(1, colW), row = _p.y / g_listRowH;
+		const int i = col * rows + row;
+		if(_p.x < 0 || col >= g_listCols || row >= rows || i < 0 || i >= static_cast<int>(shown.size()))
+			return -1;
+		return shown[static_cast<size_t>(i)];
+	}
+
+	void PresetsView::List::paint(juce::Graphics& _g)
+	{
+		const auto& shown = m_owner.m_shown;
+		const int rows = rowsFor(static_cast<int>(shown.size()));
+		const int colW = getWidth() / g_listCols;
+		const bool thisBank = m_owner.m_loadedBank == m_owner.m_bank.getSelectedId() - 1;
+		for(size_t i = 0; i < shown.size(); ++i)
+		{
+			const int pos = shown[i];
+			const int col = static_cast<int>(i) / std::max(1, rows), row = static_cast<int>(i) % std::max(1, rows);
+			const auto r = juce::Rectangle<int>(col * colW, row * g_listRowH, colW - 8, g_listRowH).reduced(0, 1);
+			const auto& name = m_owner.m_names[static_cast<size_t>(pos)];
+			const bool loaded = thisBank && pos == m_owner.m_loadedPosition;
+			if(loaded || pos == m_hover)
+				fillBox(_g, r.toFloat(), loaded ? g_loaded : g_boxHover);
+			_g.setFont(juce::FontOptions(g_textSize, juce::Font::bold));
+			_g.setColour(loaded || pos == m_hover ? g_boxText : g_heading);
+			_g.drawText(juce::String(pos + 1).paddedLeft('0', 2), r.withWidth(g_numberW).withTrimmedLeft(4), juce::Justification::centredLeft, false);
+			_g.setFont(juce::FontOptions(g_textSize + 1.0f));
+			_g.setColour(name.empty() ? g_label.withAlpha(0.45f) : g_label);
+			_g.drawText(name.empty() ? juce::String("--") : juce::String(name), r.withTrimmedLeft(g_numberW + 6), juce::Justification::centredLeft, true);
+		}
+	}
+
+	void PresetsView::List::mouseMove(const juce::MouseEvent& _e)
+	{
+		const int p = positionAt(_e.getPosition());
+		if(p == m_hover)
+			return;
+		m_hover = p;
+		repaint();
+	}
+
+	void PresetsView::List::mouseExit(const juce::MouseEvent&)
+	{
+		m_hover = -1;
+		repaint();
+	}
+
+	// A click on a name loads it; on an empty position, nothing (there is nothing to load).
+	void PresetsView::List::mouseUp(const juce::MouseEvent& _e)
+	{
+		if(_e.mouseWasDraggedSinceMouseDown())
+			return;
+		const int p = positionAt(_e.getPosition());
+		if(p >= 0 && !m_owner.m_names[static_cast<size_t>(p)].empty())
+			m_owner.loadAt(p);
 	}
 }

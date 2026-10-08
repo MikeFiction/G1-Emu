@@ -17,6 +17,8 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <cstdlib>
+
 namespace g1gui
 {
 	// The panel's view of EmuHost: its preferences go to the settings file, and Settings opens
@@ -42,6 +44,7 @@ namespace g1gui
 		juce::String settingsTooltip() const override { return "Audio driver, output level and raw MIDI"; }
 		void showSettings(juce::Component* _parent) override { SettingsView::show(m_host, _parent); }
 		g1app::SynthSettingsLink& synthSettings() override { return m_host.synthSettings(); }
+		g1app::PresetsLink& presets() override { return m_host.presets(); }
 		bool canRestart() const override { return true; }
 		void restart() override { if(onRestart) onRestart(); }
 		juce::String restartNote() const override
@@ -203,8 +206,9 @@ namespace g1gui
 			case 3: save("4-about-end.png"); if(about) click("Close", about); break;
 			case 4: click("Settings"); break;
 			case 5: save("5-synth-settings.png"); click("Presets"); break;
-			case 6: save("6-presets.png"); click("Presets"); break;
-			case 7: save("7-back-to-panel.png"); break;
+			case 6: break;	// the bank is read from the OS
+			case 7: save("6-presets.png"); click("Presets"); break;
+			case 8: save("7-back-to-panel.png"); break;
 			default:
 				stopTimer();
 				juce::JUCEApplication::getInstance()->systemRequestedQuit();
@@ -233,7 +237,8 @@ namespace g1gui
 	public:
 		const juce::String getApplicationName() override { return "G1-Emu"; }
 		const juce::String getApplicationVersion() override { return "0.1"; }
-		bool moreThanOneInstanceAllowed() override { return false; }
+		// One window at a time; G1_SNAPSHOTS beside one, as it touches no device (Snapshots).
+		bool moreThanOneInstanceAllowed() override { return std::getenv("G1_SNAPSHOTS") != nullptr; }
 
 		void initialise(const juce::String& _cmd) override
 		{

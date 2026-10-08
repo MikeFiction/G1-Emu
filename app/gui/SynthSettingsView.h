@@ -5,6 +5,7 @@
 // have them. Each change goes to the OS at once (SynthSettingsLink), which then reports what it
 // took. It sits in Mike Fiction's frame (skin/settings_panel.png), over the knobs' four sections.
 
+#include "presetslink.h"
 #include "synthsettings.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -125,13 +126,16 @@ namespace g1gui
 		juce::Label m_note;
 	};
 
-	// The Presets page, in the same frame and place as the Synth Settings: the synth's banks and
-	// programs, to be listed and loaded from here. Not done yet (the next release): for now it
-	// says so.
-	class PresetsView : public juce::Component
+	// The Presets page, in the same frame and place as the Synth Settings: one bank of the synth's
+	// at a time, picked from a drop-down, its names in three columns (the empty positions hidden or
+	// not), and a click that loads one into the active slot. The names come from the OS through
+	// PresetsLink, read again each time the page opens or the bank changes.
+	class PresetsView : public juce::Component, private juce::Timer
 	{
 	public:
-		PresetsView();
+		// _activeSlot says which slot (0-3) a click loads into: the one lit on the panel.
+		PresetsView(g1app::PresetsLink& _link, std::function<int()> _activeSlot);
+		~PresetsView() override;
 
 		void open(juce::Rectangle<int> _frame);
 		void close(bool _under = false);
@@ -139,10 +143,47 @@ namespace g1gui
 		std::function<void()> onClose;
 
 		void paint(juce::Graphics& _g) override;
+		void resized() override;
 		bool keyPressed(const juce::KeyPress& _key) override;
 
 	private:
+		// The names, in columns top to bottom, as many rows as the bank needs; it scrolls.
+		class List : public juce::Component
+		{
+		public:
+			explicit List(PresetsView& _owner) : m_owner(_owner) {}
+			void paint(juce::Graphics& _g) override;
+			void mouseMove(const juce::MouseEvent& _e) override;
+			void mouseExit(const juce::MouseEvent& _e) override;
+			void mouseUp(const juce::MouseEvent& _e) override;
+			int rowsFor(int _count) const;
+		private:
+			int positionAt(juce::Point<int> _p) const;	// -1: none
+			PresetsView& m_owner;
+			int m_hover = -1;
+		};
+
+		void timerCallback() override;
+		void showBank();				// the link's names into the list
+		void loadAt(int _position);
+		juce::String footer() const;
+
+		g1app::PresetsLink& m_link;
+		std::function<int()> m_activeSlot;
+		SettingsLook m_look;
 		SkinImage m_frame;
+		juce::Label m_bankLabel;
+		juce::ComboBox m_bank;
+		juce::ToggleButton m_hideEmpty{"Hide empty"};
+		juce::Label m_count;
+		juce::Viewport m_viewport;
+		List m_list{*this};
+
+		g1app::PresetsLink::BankNames m_names{};
+		std::vector<int> m_shown;		// the positions listed, in order
+		bool m_known = false;
+		uint64_t m_revision = ~0ull;
+		int m_loadedBank = -1, m_loadedPosition = -1;	// the last one loaded from here
 		bool m_open = false;
 	};
 }

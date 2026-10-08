@@ -263,6 +263,7 @@ namespace g1app
 			m_engine->mc().setAdc(static_cast<uint8_t>(i), adc[i]);
 
 		m_synthSettings.reset();
+		m_presets.reset();
 		{
 			std::lock_guard<std::mutex> lock(m_statsMutex);
 			m_stats.dspProblem.clear();
@@ -509,6 +510,7 @@ namespace g1app
 				pcLog.flush();
 				mc.getPcPort().receive(incoming[m_pcPort]);
 				m_synthSettings.editorSent(incoming[m_pcPort], mc.ucCycles() / msCycles);
+				m_presets.editorSent(incoming[m_pcPort], mc.ucCycles() / msCycles);
 				incoming[m_pcPort].clear();
 			}
 			// The editor on the direct link talks to the same PC Port.
@@ -520,6 +522,7 @@ namespace g1app
 				logMidi("in ", "Link", linkIn);
 				mc.getPcPort().receive(linkIn);
 				m_synthSettings.editorSent(linkIn, mc.ucCycles() / msCycles);
+				m_presets.editorSent(linkIn, mc.ucCycles() / msCycles);
 			}
 			if(!incoming[m_midiPort].empty())
 			{
@@ -536,17 +539,34 @@ namespace g1app
 			while(mc.ucCycles() < target && mc.ucCycles() < limit)
 				mc.exec();
 
-			// What goes out. The answers to the settings' own requests stay here.
+			// What goes out. The answers to the settings' and the presets' own requests stay here.
+			const auto nowMs = mc.ucCycles() / msCycles;
 			out.clear();
 			mc.getPcPort().takeTx(out);
 			toEditor.clear();
-			m_synthSettings.g1Sent(out, mc.ucCycles() / msCycles, toEditor);
+			m_synthSettings.g1Sent(out, nowMs, toEditor);
 			out.swap(toEditor);
-			toG1.clear();
+			toEditor.clear();
+			m_presets.g1Sent(out, nowMs, toEditor);
+			out.swap(toEditor);
+			// Their own requests, each taken by the other for an editor's, so they never talk at once.
 			if(!m_updateMode)	// Clavia's updater has the PC Port to itself
-				m_synthSettings.tick(mc.ucCycles() / msCycles, toG1);
-			if(!toG1.empty())
-				mc.getPcPort().receive(toG1);
+			{
+				toG1.clear();
+				m_synthSettings.tick(nowMs, toG1);
+				if(!toG1.empty())
+				{
+					mc.getPcPort().receive(toG1);
+					m_presets.editorSent(toG1, nowMs);
+				}
+				toG1.clear();
+				m_presets.tick(nowMs, toG1);
+				if(!toG1.empty())
+				{
+					mc.getPcPort().receive(toG1);
+					m_synthSettings.editorSent(toG1, nowMs);
+				}
+			}
 			m_pcOut += out.size();
 			logMidi("out", "PC Port", out);
 			m_midi->send(m_pcPort, out);

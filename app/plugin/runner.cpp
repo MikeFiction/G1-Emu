@@ -29,8 +29,8 @@ namespace g1app
 	}
 
 	Runner::Runner(Engine& _engine, const double _rate, const size_t _maxBlock, const float _gainDb,
-		MidiTransport* _pcPort, const int _pcIndex, SlotKeeper* _keeper, SynthSettingsLink* _settings, DirectLink* _link)
-		: m_engine(_engine), m_pcPort(_pcPort), m_link(_link), m_pcIndex(_pcIndex), m_keeper(_keeper), m_settings(_settings), m_rate(_rate > 0 ? _rate : 48000.0), m_ahead(aheadFor(m_rate, _maxBlock)),
+		MidiTransport* _pcPort, const int _pcIndex, SlotKeeper* _keeper, SynthSettingsLink* _settings, DirectLink* _link, PresetsLink* _presets)
+		: m_engine(_engine), m_pcPort(_pcPort), m_link(_link), m_pcIndex(_pcIndex), m_keeper(_keeper), m_settings(_settings), m_presets(_presets), m_rate(_rate > 0 ? _rate : 48000.0), m_ahead(aheadFor(m_rate, _maxBlock)),
 		  m_latency(m_ahead + guardFor(m_rate)),
 		  m_bridge(std::pow(10.0f, _gainDb / 20.0f))
 	{
@@ -135,9 +135,9 @@ namespace g1app
 		std::vector<uint8_t> out, pcOut, toEditor, toG1, linkIn;
 		std::vector<std::vector<uint8_t>> pcIn;
 		auto nowMs = [&mc] { return mc.ucCycles() / (g1::g_ucClock / 1000); };
-		// The keeper's and the settings' own requests, when the editor leaves them room. Each
-		// takes the other's for an editor's, so they never talk over each other.
-		const auto speak = [&](auto* _link, auto* _other)
+		// The keeper's, the settings' and the presets' own requests, when the editor leaves them
+		// room. Each takes the others' for an editor's, so they never talk over each other.
+		const auto speak = [&](auto* _link, auto*... _others)
 		{
 			if(!_link)
 				return;
@@ -146,8 +146,8 @@ namespace g1app
 			if(toG1.empty())
 				return;
 			mc.getPcPort().receive(toG1);
-			if(_other)
-				_other->editorSent(toG1, nowMs());
+			const auto tell = [&](auto* _other) { if(_other) _other->editorSent(toG1, nowMs()); };
+			(tell(_others), ...);
 		};
 		// Each sees all the G1 sends, and keeps the answers to its own requests from the editor.
 		const auto keepOwn = [&](auto* _link)
@@ -183,6 +183,8 @@ namespace g1app
 						m_keeper->editorSent(bytes, nowMs());
 					if(m_settings)
 						m_settings->editorSent(bytes, nowMs());
+					if(m_presets)
+						m_presets->editorSent(bytes, nowMs());
 					bytes.clear();
 				}
 			}
@@ -200,10 +202,13 @@ namespace g1app
 						m_keeper->editorSent(linkIn, nowMs());
 					if(m_settings)
 						m_settings->editorSent(linkIn, nowMs());
+					if(m_presets)
+						m_presets->editorSent(linkIn, nowMs());
 				}
 			}
-			speak(m_keeper, m_settings);
-			speak(m_settings, m_keeper);
+			speak(m_keeper, m_settings, m_presets);
+			speak(m_settings, m_keeper, m_presets);
+			speak(m_presets, m_keeper, m_settings);
 			while(const auto* e = m_events.front())
 			{
 				if(e->frame > produced)
@@ -241,6 +246,7 @@ namespace g1app
 				mc.getPcPort().takeTx(pcOut);
 				m_pcOut += pcOut.size();
 				keepOwn(m_settings);
+				keepOwn(m_presets);
 				keepOwn(m_keeper);
 				lock.unlock();
 				if(m_pcPort && !pcOut.empty())

@@ -19,7 +19,7 @@ message(STATUS "g1Host: ${G1_BACKEND} audio and MIDI backend")
 # g1Core: the engine and what every front end shares (ROM search, settings file, statistics).
 # No devices and no threads of its own: the plugin builds on it without the backends below.
 add_library(g1Core STATIC engine.cpp engine.h hostconfig.cpp hostconfig.h romfinder.cpp romfinder.h
-	slotkeeper.cpp slotkeeper.h synthsettings.cpp synthsettings.h audiobridge.h directlink.cpp directlink.h)
+	slotkeeper.cpp slotkeeper.h synthsettings.cpp synthsettings.h presetslink.cpp presetslink.h audiobridge.h directlink.cpp directlink.h)
 target_include_directories(g1Core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # So a clone works with no setup: the repo's own Roms/ is one of the folders searched.
 target_compile_definitions(g1Core PRIVATE G1_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
@@ -39,6 +39,12 @@ add_executable(g1slotkeepertest slotkeepertest.cpp)
 target_link_libraries(g1slotkeepertest PRIVATE g1Core)
 add_test(NAME g1slotkeepertest COMMAND g1slotkeepertest)
 set_tests_properties(g1slotkeepertest PROPERTIES TIMEOUT 300 LABELS g1 SKIP_RETURN_CODE 77)
+
+# The synth's banks for the Presets page: the list decoded, a bank read and a patch loaded.
+add_executable(g1presetstest presetstest.cpp)
+target_link_libraries(g1presetstest PRIVATE g1Core)
+add_test(NAME g1presetstest COMMAND g1presetstest)
+set_tests_properties(g1presetstest PROPERTIES TIMEOUT 300 LABELS g1 SKIP_RETURN_CODE 77)
 
 # The synth settings read and written through the PC Port, as an editor does.
 add_executable(g1synthsettingstest synthsettingstest.cpp)

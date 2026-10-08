@@ -1121,7 +1121,7 @@ namespace g1gui
 			drawLcdText(_g, lines[row].substring(0, g_knobLcdCols), glass.getX(), glass.getY() + static_cast<float>(row) * cellH + (cellH - dot * 7.0f) * 0.5f, cellW, dot);
 	}
 
-	Panel::Panel(PanelHost& _host) : m_host(_host), m_mc(_host.mc()), m_lcd(_host.mc().getLcd()), m_dial(_host.mc()), m_synthView(_host.synthSettings()), m_knobMap(_host.mc())
+	Panel::Panel(PanelHost& _host) : m_host(_host), m_mc(_host.mc()), m_lcd(_host.mc().getLcd()), m_dial(_host.mc()), m_synthView(_host.synthSettings()), m_presetsView(_host.presets(), [this] { return activeSlot(); }), m_knobMap(_host.mc())
 	{
 		addAndMakeVisible(m_lcd);
 		addAndMakeVisible(m_dial);
@@ -1601,6 +1601,15 @@ namespace g1gui
 			m_presetsView.close(true);
 		m_synthView.open(settingsFrame());
 		m_settingsLed.setOn(true);
+	}
+
+	// The slot whose LED is lit, where the Presets page loads (the first one if several are).
+	int Panel::activeSlot() const
+	{
+		for(int i = 0; i < 4; ++i)
+			if(ledLit(g_slotLeds[static_cast<size_t>(i)]))
+				return i;
+		return 0;
 	}
 
 	// The same for the Presets page; one page at a time.

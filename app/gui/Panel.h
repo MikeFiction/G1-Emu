@@ -57,6 +57,7 @@ namespace g1gui
 		virtual juce::String settingsTooltip() const = 0;
 		virtual void showSettings(juce::Component* _parent) = 0;
 		virtual g1app::SynthSettingsLink& synthSettings() = 0;	// the OS's, for the extras' overlay
+		virtual g1app::PresetsLink& presets() = 0;				// the OS's banks, for the Presets page
 		// Switching the G1 off and on, where the host can: the panel shows its Restart button only
 		// then. The host deletes this panel and makes a new one, so it must do it later, not inside
 		// the call.
@@ -365,6 +366,7 @@ namespace g1gui
 		void updateTip();
 		void showSynthSettings(bool _show);	// the Synth Settings page, or the main one
 		void showPresets(bool _show);		// the Presets page, or the main one
+		int activeSlot() const;				// 0-3, the slot lit on the panel
 
 		juce::SharedResourcePointer<Skin> m_skin;	// keeps the images while a panel is open
 		PanelHost& m_host;

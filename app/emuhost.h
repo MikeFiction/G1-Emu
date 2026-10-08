@@ -15,6 +15,7 @@
 
 #include "engine.h"
 #include "hostconfig.h"
+#include "presetslink.h"
 #include "synthsettings.h"
 
 #include <atomic>
@@ -76,6 +77,7 @@ namespace g1app
 		g1::Microcontroller& mc() { return m_engine->mc(); }
 		// The OS's synth settings (MIDI channels, clock...), through the PC Port between the editor's messages.
 		SynthSettingsLink& synthSettings() { return m_synthSettings; }
+		PresetsLink& presets() { return m_presets; }
 
 		Stats stats();
 
@@ -105,6 +107,7 @@ namespace g1app
 		int m_pcPort = -1, m_midiPort = -1;
 		DirectLink m_link;	// the PC Port for Animatek NME over a local socket, beside the MIDI one
 		SynthSettingsLink m_synthSettings;
+		PresetsLink m_presets;
 		bool m_rawMidiBound = false;
 		std::string m_romProblem;
 		std::vector<uint8_t> m_rom;		// kept for a restart
