@@ -759,3 +759,12 @@ Both pass since the fix ([CI run 35570337853](https://github.com/animatek/G1-Emu
   its own.
 - `g1run` records everything NME sends in `~/.local/share/Animatek/G1-Emu/pcport-in.bin`, to replay
   it. `G1_RECORD=10` records 10 s of output as a WAV (without the variable nothing is recorded).
+
+## A patch's name cut short (open, 2026-10-08)
+
+`LfoAdditive05NET.pch` (James Clark's, in the community archive) comes back named **"LfoAdd"**
+whatever its file is called (`LfoAddTen1`, `LfoAdditive05NE`...), on the display and in the bank
+once stored: through the Presets page's Load .pch and through `g1patchtest`, which uploads as NME
+does, so not an upload of ours. The name goes out whole (the first packet carries `LfoAddTen1`).
+`future303` keeps a 16-character name. Not seen on the real G1 yet: to check there with NME before
+calling it the OS's or the emulator's.

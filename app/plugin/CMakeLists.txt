@@ -23,7 +23,9 @@ target_compile_definitions(g1plugin PUBLIC
 	JUCE_USE_CURL=0
 	JUCE_VST3_CAN_REPLACE_VST2=0
 	JUCE_DISPLAY_SPLASH_SCREEN=0)
-target_link_libraries(g1plugin PRIVATE g1Core g1Skin juce::juce_audio_utils
+target_sources(g1plugin PRIVATE ${G1_NME_SOURCES})
+target_include_directories(g1plugin PRIVATE ${G1_NME_INCLUDE})
+target_link_libraries(g1plugin PRIVATE g1Core g1Skin g1NmeData juce::juce_audio_utils
 	PUBLIC juce::juce_recommended_config_flags)
 
 # The same plugin as CLAP (G1-Emu.clap), when the Gearmulator clone has clap-juce-extensions.

@@ -144,6 +144,23 @@ if(G1_HAVE_JUCE)
 	juce_add_binary_data(g1Skin NAMESPACE G1Skin HEADER_NAME G1Skin.h SOURCES
 		gui/skin/background.png gui/skin/knob.png gui/skin/dial.png gui/skin/dial_indent.png gui/skin/dial_shadow.png
 		gui/skin/button_wide.png gui/skin/button_wide_held.png gui/skin/button_tall.png gui/skin/button_tilted.png gui/skin/button_tilted_held.png gui/skin/led.png gui/skin/small_lcd.png gui/skin/small_lcd_dark.png gui/skin/knob_shadow.png gui/skin/settings_panel.png gui/skin/master_tune_bg.png)
+	# Animatek NME's code that makes a .pch into the G1's upload (app/nme, its README), with its
+	# module descriptions built in: compiled into the window and the plugin, which have JUCE.
+	juce_add_binary_data(g1NmeData NAMESPACE G1NmeData HEADER_NAME G1NmeData.h SOURCES nme/modules.xml)
+	set(G1_NME_SOURCES
+		${CMAKE_CURRENT_SOURCE_DIR}/nme/model/ModuleDescriptions.cpp ${CMAKE_CURRENT_SOURCE_DIR}/nme/model/ModuleTags.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/nme/model/Patch.cpp ${CMAKE_CURRENT_SOURCE_DIR}/nme/model/PatchSerializer.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/nme/model/PchFileIO.cpp ${CMAKE_CURRENT_SOURCE_DIR}/nme/midi/UploadPacketizer.cpp
+		${CMAKE_CURRENT_SOURCE_DIR}/gui/PchUpload.cpp ${CMAKE_CURRENT_SOURCE_DIR}/gui/PchUpload.h)
+	set(G1_NME_INCLUDE ${CMAKE_CURRENT_SOURCE_DIR}/nme)
+	# Load .pch against an emulated G1: a patch made into packets, uploaded and stored in a bank.
+	juce_add_console_app(g1pchtest PRODUCT_NAME "g1pchtest")
+	target_sources(g1pchtest PRIVATE pchtest.cpp ${G1_NME_SOURCES})
+	target_include_directories(g1pchtest PRIVATE ${G1_NME_INCLUDE} ${CMAKE_CURRENT_SOURCE_DIR})
+	target_compile_definitions(g1pchtest PRIVATE G1_SOURCE_DIR="${CMAKE_SOURCE_DIR}" JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+	target_link_libraries(g1pchtest PRIVATE g1Core g1NmeData juce::juce_core juce::juce_events juce::juce_graphics juce::juce_data_structures)
+	add_test(NAME g1pchtest COMMAND g1pchtest)
+	set_tests_properties(g1pchtest PROPERTIES TIMEOUT 300 LABELS g1 SKIP_RETURN_CODE 77)
 	add_subdirectory(gui)
 	add_subdirectory(plugin)
 endif()

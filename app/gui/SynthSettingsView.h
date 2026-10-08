@@ -6,6 +6,7 @@
 // took. It sits in Mike Fiction's frame (skin/settings_panel.png), over the knobs' four sections.
 
 #include "presetslink.h"
+#include "PchUpload.h"
 #include "synthsettings.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -146,6 +147,9 @@ namespace g1gui
 		void resized() override;
 		bool keyPressed(const juce::KeyPress& _key) override;
 
+		// Load .pch with this file, as if picked: it is read, and the page asks where it goes.
+		void loadPch(const juce::File& _file);
+
 	private:
 		// The names, in columns top to bottom, as many rows as the bank needs; it scrolls.
 		class List : public juce::Component
@@ -163,9 +167,33 @@ namespace g1gui
 			int m_hover = -1;
 		};
 
+		// Load .pch's question, over the list: which bank and position the patch goes to (each
+		// position named after what it holds, the first empty one offered), a warning when that
+		// one is taken, and Store, Load only (into the slot, stored nowhere) or Cancel.
+		class StoreCard : public juce::Component
+		{
+		public:
+			explicit StoreCard(PresetsView& _owner);
+			void open(const juce::String& _name, int _bank);
+			void refresh();					// the positions' names, once the bank is read
+			void paint(juce::Graphics& _g) override;
+			void resized() override;
+		private:
+			void fillPositions(bool _pickEmpty);
+			void warn();
+			PresetsView& m_owner;
+			juce::String m_name;
+			juce::Label m_bankLabel, m_posLabel, m_warning;
+			juce::ComboBox m_bank, m_position;
+			juce::TextButton m_store{"Store"}, m_loadOnly{"Load only"}, m_cancel{"Cancel"};
+			bool m_known = false;
+		};
+
 		void timerCallback() override;
 		void showBank();				// the link's names into the list
 		void loadAt(int _position);
+		void choosePch();
+		void send(int _bank, int _position);	// m_pending, stored there (_bank < 0: only loaded)
 		juce::String footer() const;
 
 		g1app::PresetsLink& m_link;
@@ -178,6 +206,14 @@ namespace g1gui
 		juce::Label m_count;
 		juce::Viewport m_viewport;
 		List m_list{*this};
+		juce::TextButton m_loadPch{"Load .pch..."};
+		std::unique_ptr<juce::FileChooser> m_chooser;
+		PchUpload m_pending;			// the patch Load .pch read, until it is sent or dropped
+		juce::File m_pendingFile;
+		StoreCard m_card{*this};
+		juce::String m_message;			// what the last Load .pch came to, for a while in the footer
+		juce::uint32 m_messageUntil = 0;
+		uint64_t m_uploadSerial = 0;
 
 		g1app::PresetsLink::BankNames m_names{};
 		std::vector<int> m_shown;		// the positions listed, in order

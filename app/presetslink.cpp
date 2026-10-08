@@ -18,6 +18,8 @@ namespace g1app
 		constexpr uint8_t CcAck = 0x16, CcPatch = 0x17;
 		constexpr uint8_t ListAckA = 0x13, ListAckB = 0x15;	// the ACK types that carry a list
 		constexpr uint8_t ListEnd = 4;		// the end marker that says the whole list is done
+		constexpr uint8_t PacketAck = 0x36, LastPacketAck = 0x7f;	// an upload's packet taken
+		constexpr uint64_t PacketMs = 3000;	// the OS takes longer at some packets (it reloads the DSPs)
 
 		// G1_PRESETS_TRACE=1: every message the link sends and every one it keeps, on stderr.
 		void traceMsg(const char* _dir, const uint64_t _nowMs, const std::vector<uint8_t>& _m)
@@ -115,6 +117,30 @@ namespace g1app
 		m_loads.push_back({_slot, _bank, _position});
 	}
 
+	void PresetsLink::upload(const int _slot, std::vector<std::vector<uint8_t>> _frames, std::vector<uint8_t> _abort, const int _bank, const int _position)
+	{
+		if(_slot < 0 || _slot > 3 || _frames.empty())
+			return;
+		std::lock_guard<std::mutex> lock(m_mutex);
+		Upload u;
+		u.slot = _slot;
+		u.frames = std::move(_frames);
+		u.abort = std::move(_abort);
+		u.bank = _bank >= 0 && _bank < Banks && _position >= 0 && _position < Positions ? _bank : -1;
+		u.position = _position;
+		m_uploads.push_back(std::move(u));
+		m_uploadStatus.busy = true;
+		m_uploadStatus.message = "Sending the patch to the synth...";
+		++m_uploadStatus.serial;
+		++m_revision;
+	}
+
+	PresetsLink::UploadStatus PresetsLink::uploadStatus() const
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		return m_uploadStatus;
+	}
+
 	bool PresetsLink::bank(const int _bank, BankNames& _out) const
 	{
 		if(_bank < 0 || _bank >= Banks)
@@ -139,6 +165,9 @@ namespace g1app
 		m_known = {};
 		m_readWanted = {};
 		m_loads.clear();
+		m_uploads.clear();
+		m_uploadStatus = {};
+		m_uploadNext = false;
 		m_state = State::Idle;
 		m_readingBank = -1;
 		m_deadline = m_filterUntil = m_lastActivity = 0;
@@ -154,6 +183,7 @@ namespace g1app
 	{
 		m_state = State::Idle;
 		m_pendingNext = false;
+		m_uploadNext = false;
 		m_readingBank = -1;
 		m_filterUntil = _nowMs + FilterTailMs;
 	}
@@ -202,10 +232,28 @@ namespace g1app
 
 	void PresetsLink::takeReply(const std::vector<uint8_t>& _m, const uint64_t _nowMs)
 	{
-		if(ccOf(_m) != CcAck || _m.size() < 9)
+		if(ccOf(_m) != CcAck || _m.size() < 7)
 			return;
 		if(m_state == State::Loading)
 			return finish(_nowMs);
+		if(m_state == State::Uploading)
+		{
+			if(_m[5] != PacketAck && _m[5] != LastPacketAck)
+				return;
+			++m_frame;
+			m_uploadNext = true;		// the next packet, or the store, at the next tick
+			return;
+		}
+		if(m_state == State::Storing)
+		{
+			std::lock_guard<std::mutex> lock(m_mutex);
+			m_readWanted[static_cast<size_t>(m_upload.bank)] = true;	// the list shows it
+			uploadDone(true, "Stored in bank " + std::to_string(m_upload.bank + 1) + " at " + std::to_string(m_upload.position + 1) + ".");
+			finish(_nowMs);
+			return;
+		}
+		if(_m.size() < 9)
+			return;
 		if(m_state != State::Listing || (_m[5] != ListAckA && _m[5] != ListAckB))
 			return;
 
@@ -240,8 +288,38 @@ namespace g1app
 		m_pendingNext = true;
 	}
 
+	// Under m_mutex.
+	void PresetsLink::uploadDone(const bool _ok, const std::string& _message)
+	{
+		m_uploadStatus.busy = !m_uploads.empty();
+		m_uploadStatus.ok = _ok;
+		m_uploadStatus.message = _message;
+		++m_uploadStatus.serial;
+		++m_revision;
+	}
+
 	void PresetsLink::tick(const uint64_t _nowMs, std::vector<uint8_t>& _toG1)
 	{
+		if(m_state == State::Uploading && m_uploadNext)
+		{
+			m_uploadNext = false;
+			if(m_frame < m_upload.frames.size())
+			{
+				request(m_upload.frames[m_frame], State::Uploading, _nowMs, _toG1);
+				m_deadline = _nowMs + PacketMs;
+				return;
+			}
+			if(m_upload.bank >= 0)
+			{
+				request(frame(CcPatch, static_cast<uint8_t>(m_upload.slot), {0x41, 0x0b, static_cast<uint8_t>(m_upload.slot),
+					static_cast<uint8_t>(m_upload.bank), static_cast<uint8_t>(m_upload.position)}), State::Storing, _nowMs, _toG1);
+				return;
+			}
+			std::lock_guard<std::mutex> lock(m_mutex);
+			uploadDone(true, std::string("Loaded into slot ") + static_cast<char>('A' + m_upload.slot) + ".");
+			finish(_nowMs);
+			return;
+		}
 		if(m_state == State::Listing && m_pendingNext)
 		{
 			m_pendingNext = false;
@@ -252,11 +330,21 @@ namespace g1app
 		{
 			if(_nowMs < m_deadline)
 				return;
-			// No answer: try again later, once the editor is quiet.
+			// No answer: a list is tried again later, once the editor is quiet; an upload ends with
+			// its empty last packet, so the OS is not left waiting for the rest, and says so.
 			if(m_state == State::Listing)
 			{
 				std::lock_guard<std::mutex> lock(m_mutex);
 				m_readWanted[static_cast<size_t>(m_bank)] = true;
+			}
+			else if(m_state == State::Uploading || m_state == State::Storing)
+			{
+				if(m_state == State::Uploading && !m_upload.abort.empty())
+					_toG1.insert(_toG1.end(), m_upload.abort.begin(), m_upload.abort.end());
+				std::lock_guard<std::mutex> lock(m_mutex);
+				uploadDone(false, m_state == State::Uploading
+					? "The synth did not take packet " + std::to_string(m_frame + 1) + " of " + std::to_string(m_upload.frames.size()) + "; nothing was stored."
+					: std::string("The synth did not confirm the store."));
 			}
 			finish(_nowMs);
 			return;
@@ -264,8 +352,17 @@ namespace g1app
 		if(_nowMs < BootMs || _nowMs < m_filterUntil || _nowMs < m_lastActivity + QuietMs)
 			return;
 
-		// A load first: it is what the user is waiting for.
+		// An upload or a load first: it is what the user is waiting for.
 		std::lock_guard<std::mutex> lock(m_mutex);
+		if(!m_uploads.empty())
+		{
+			m_upload = std::move(m_uploads.front());
+			m_uploads.erase(m_uploads.begin());
+			m_frame = 0;
+			request(m_upload.frames[0], State::Uploading, _nowMs, _toG1);
+			m_deadline = _nowMs + PacketMs;
+			return;
+		}
 		if(!m_loads.empty())
 		{
 			const auto l = m_loads.front();

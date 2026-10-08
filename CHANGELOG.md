@@ -7,6 +7,22 @@ Older entries cite their commit by hand.
 
 ## 2026-10-08
 
+- [New] **Load .pch on the Presets page (Claude, requested by Javier; Mike Fiction's idea).** A
+  **Load .pch...** button sends a patch file to the synth with no editor: it is read and made into
+  the G1's upload with Animatek NME's own code, copied into `app/nme` (its README says from which
+  NME commit and how to bring it up to date) with NME's `modules.xml` built in. A card then asks
+  where it goes: the bank, and the position, each named after what it holds, the first empty one
+  offered; a position that holds a patch is named in a warning and the button says **Replace**.
+  **Store** uploads it into the slot lit on the panel and stores it there (StorePatch, `$41 $0B`),
+  and the bank is read again, so it shows in the list; **Load only** sends it to the slot and
+  stores it nowhere; **Cancel**. `PresetsLink` uploads as an editor does, each packet after the
+  OS's acknowledgement, and ends a transfer cut short with the empty last packet, so the OS is
+  never left waiting for the rest. Checked: `g1pchtest` (new) uploads `ClockTest.pch` (one packet),
+  `future303.pch` (17) and others into slot A, stores them in bank 9 at 99, and finds them there
+  and on the display; all tests pass; the snapshots show the card, before and after the bank is
+  read. Found on the way, not ours: one patch comes back named by its first six letters, through
+  NME's upload too (`NOTES.md`, "A patch's name cut short").
+
 - [New] **The Presets page lists the synth's banks, and a click loads one (Claude, requested by
   Javier).** Pick a bank (1 to 9) from the drop-down at the top right and its names show in three
   columns, scrolling; **Hide empty** (on by default) leaves out the positions with nothing stored,

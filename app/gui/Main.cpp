@@ -172,7 +172,7 @@ namespace g1gui
 
 	// G1_SNAPSHOTS=dir: pictures of the window, for a look at the GUI from somewhere else (a
 	// phone, a pull request). Once the G1 has booted, the panel, the extras drawer, About at its
-	// top and at its end, the Synth Settings and Presets pages and the panel again are saved as PNGs, each after clicking what
+	// top and at its end, the Synth Settings and Presets pages, Load .pch's question and the panel again are saved as PNGs, each after clicking what
 	// a user would click; then G1-Emu quits. With G1_AUDIO=no and G1_RAWMIDI=0 it touches no device.
 	class Snapshots : private juce::Timer
 	{
@@ -207,8 +207,14 @@ namespace g1gui
 			case 4: click("Settings"); break;
 			case 5: save("5-synth-settings.png"); click("Presets"); break;
 			case 6: break;	// the bank is read from the OS
-			case 7: save("6-presets.png"); click("Presets"); break;
-			case 8: save("7-back-to-panel.png"); break;
+			case 7:
+				save("6-presets.png");
+				// Load .pch's question, with a patch of the test bench (no file chooser here).
+				if(auto* presets = findNamed<PresetsView>(w))
+					presets->loadPch(juce::File(G1_SOURCE_DIR "/tools/patches/ClockTest.pch"));
+				break;
+			case 8: save("7-load-pch.png"); click("Cancel"); click("Presets"); break;
+			case 9: save("8-back-to-panel.png"); break;
 			default:
 				stopTimer();
 				juce::JUCEApplication::getInstance()->systemRequestedQuit();

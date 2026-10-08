@@ -601,6 +601,13 @@ namespace g1gui
 		m_count.setJustificationType(juce::Justification::centredLeft);
 		addAndMakeVisible(m_count);
 
+		m_loadPch.setTooltip("Send a .pch file to the synth, and store it in a bank if you like");
+		m_loadPch.setColour(juce::TextButton::buttonColourId, g_heading);
+		m_loadPch.setColour(juce::TextButton::textColourOffId, g_boxText);
+		m_loadPch.onClick = [this] { choosePch(); };
+		addAndMakeVisible(m_loadPch);
+		addChildComponent(m_card);
+
 		m_viewport.setViewedComponent(&m_list, false);
 		m_viewport.setScrollBarsShown(true, false);
 		m_viewport.setScrollBarThickness(8);
@@ -636,10 +643,69 @@ namespace g1gui
 
 	void PresetsView::timerCallback()
 	{
+		const auto status = m_link.uploadStatus();
+		if(status.serial != m_uploadSerial)
+		{
+			m_uploadSerial = status.serial;
+			m_message = status.message;
+			m_messageUntil = juce::Time::getMillisecondCounter() + 8000;
+		}
 		if(m_link.revision() != m_revision)
+		{
 			showBank();
+			if(m_card.isVisible())
+				m_card.refresh();
+		}
 		else
 			repaint(getLocalBounds().withTop(g_footerY));	// "Reading..." comes and goes
+	}
+
+	// The file, read and made into packets at once: what cannot be read is said here, before
+	// asking where to put it.
+	void PresetsView::choosePch()
+	{
+		m_chooser = std::make_unique<juce::FileChooser>("Load a patch into the synth", juce::File(), "*.pch");
+		m_chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+			[this](const juce::FileChooser& _c)
+		{
+			if(_c.getResult() != juce::File())
+				loadPch(_c.getResult());
+		});
+	}
+
+	void PresetsView::loadPch(const juce::File& _file)
+	{
+		m_pendingFile = _file;
+		m_pending = preparePch(_file, m_activeSlot ? std::clamp(m_activeSlot(), 0, 3) : 0);
+		if(!m_pending.ok())
+		{
+			m_message = "Cannot load it: " + m_pending.error + ".";
+			m_messageUntil = juce::Time::getMillisecondCounter() + 8000;
+			repaint();
+			return;
+		}
+		m_card.open(m_pending.name, m_bank.getSelectedId() - 1);
+	}
+
+	void PresetsView::send(const int _bank, const int _position)
+	{
+		// The packets name the slot they go to (and their checksums count it): made again for the
+		// slot lit now, which may not be the one lit when the file was picked.
+		const int slot = m_activeSlot ? std::clamp(m_activeSlot(), 0, 3) : 0;
+		auto up = preparePch(m_pendingFile, slot);
+		if(!up.ok())
+			return;
+		m_link.upload(slot, std::move(up.frames), std::move(up.abort), _bank, _position);
+		m_pending = {};
+		if(_bank >= 0)
+		{
+			if(m_bank.getSelectedId() != _bank + 1)
+				m_bank.setSelectedId(_bank + 1, juce::dontSendNotification);
+			m_loadedBank = _bank;
+			m_loadedPosition = _position;
+			m_revision = ~0ull;
+			showBank();
+		}
 	}
 
 	void PresetsView::showBank()
@@ -675,6 +741,8 @@ namespace g1gui
 
 	juce::String PresetsView::footer() const
 	{
+		if(m_message.isNotEmpty() && (m_link.uploadStatus().busy || juce::Time::getMillisecondCounter() < m_messageUntil))
+			return m_message;
 		const int bank = m_bank.getSelectedId() - 1;
 		if(m_link.reading(bank))
 			return "Reading bank " + juce::String(bank + 1) + " from the synth...";
@@ -684,7 +752,7 @@ namespace g1gui
 			return "Bank " + juce::String(bank + 1) + " is empty.";
 		const char slots[] = {'A', 'B', 'C', 'D'};
 		const int slot = m_activeSlot ? std::clamp(m_activeSlot(), 0, 3) : 0;
-		return juce::String("Click a patch to load it into slot ") + slots[slot] + ". Press Presets again to go back to the panel.";
+		return juce::String("Click a patch to load it into slot ") + slots[slot] + ".";
 	}
 
 	// Mike Fiction's frame with its inside blanked (it carries the Synth Settings' own lettering),
@@ -711,7 +779,7 @@ namespace g1gui
 
 		_g.setColour(g_label);
 		_g.setFont(juce::FontOptions(g_textSize));
-		_g.drawText(footer(), c.getX() + g_margin, c.getY() + g_footerY + 4, c.getWidth() - 2 * g_margin, c.getHeight() - g_footerY - 8,
+		_g.drawText(footer(), c.getX() + g_margin, c.getY() + g_footerY + 4, m_loadPch.getX() - 8 - g_margin, c.getHeight() - g_footerY - 8,
 			juce::Justification::centredLeft, true);
 	}
 
@@ -725,6 +793,8 @@ namespace g1gui
 		m_count.setBounds(m_bankLabel.getX() - 12 - 52, c.getY() + g_titleY, 52, g_rowH);
 		m_hideEmpty.setBounds(m_count.getX() - 4 - 80, c.getY() + g_titleY - 1, 80, g_rowH + 2);	// JUCE sizes its text to its height
 		m_viewport.setBounds(c.getX() + g_margin - 6, c.getY() + g_listTop, c.getWidth() - 2 * g_margin + 12, g_footerY - g_listTop - 6);
+		m_loadPch.setBounds(c.getRight() - g_margin - 84, c.getY() + g_footerY + 8, 84, g_rowH + 6);
+		m_card.setBounds(m_viewport.getBounds().reduced(60, 18));
 		showBank();
 	}
 
@@ -734,6 +804,149 @@ namespace g1gui
 			return false;
 		close();
 		return true;
+	}
+
+	// ____________________________________________________________________________________________
+	// Presets: Load .pch's question
+
+	PresetsView::StoreCard::StoreCard(PresetsView& _owner) : m_owner(_owner)
+	{
+		for(auto* l : {&m_bankLabel, &m_posLabel})
+		{
+			l->setFont(juce::FontOptions(g_textSize).withHorizontalScale(g_condensed));
+			l->setColour(juce::Label::textColourId, g_label);
+			l->setJustificationType(juce::Justification::centredRight);
+			addAndMakeVisible(*l);
+		}
+		m_bankLabel.setText("BANK", juce::dontSendNotification);
+		m_posLabel.setText("POSITION", juce::dontSendNotification);
+		m_warning.setFont(juce::FontOptions(g_textSize));
+		m_warning.setColour(juce::Label::textColourId, juce::Colour(0xffffd0a0));
+		m_warning.setJustificationType(juce::Justification::centred);
+		addAndMakeVisible(m_warning);
+
+		for(int b = 0; b < g1app::PresetsLink::Banks; ++b)
+			m_bank.addItem("Bank " + juce::String(b + 1), b + 1);
+		m_bank.onChange = [this]
+		{
+			m_owner.m_link.readBank(m_bank.getSelectedId() - 1);
+			m_known = false;
+			fillPositions(true);
+		};
+		m_position.onChange = [this] { warn(); };
+		addAndMakeVisible(m_bank);
+		addAndMakeVisible(m_position);
+
+		for(auto* b : {&m_store, &m_loadOnly, &m_cancel})
+		{
+			b->setColour(juce::TextButton::buttonColourId, g_heading);
+			b->setColour(juce::TextButton::textColourOffId, g_boxText);
+			addAndMakeVisible(*b);
+		}
+		m_store.setTooltip("Send it to the slot and store it at this bank and position");
+		m_loadOnly.setTooltip("Send it to the slot only; store it nowhere");
+		m_store.onClick = [this]
+		{
+			setVisible(false);
+			m_owner.send(m_bank.getSelectedId() - 1, m_position.getSelectedId() - 1);
+		};
+		m_loadOnly.onClick = [this]
+		{
+			setVisible(false);
+			m_owner.send(-1, 0);
+		};
+		m_cancel.onClick = [this]
+		{
+			setVisible(false);
+			m_owner.m_pending = {};
+		};
+	}
+
+	void PresetsView::StoreCard::open(const juce::String& _name, const int _bank)
+	{
+		m_name = _name;
+		m_bank.setSelectedId(_bank + 1, juce::dontSendNotification);
+		m_known = false;
+		fillPositions(true);
+		setVisible(true);
+		toFront(true);
+		repaint();
+	}
+
+	void PresetsView::StoreCard::refresh()
+	{
+		if(!m_known)
+			fillPositions(true);
+	}
+
+	// Each position with what it holds; the first empty one picked once the bank is known.
+	void PresetsView::StoreCard::fillPositions(const bool _pickEmpty)
+	{
+		g1app::PresetsLink::BankNames names;
+		const int bank = m_bank.getSelectedId() - 1;
+		const bool known = m_owner.m_link.bank(bank, names);
+		const int was = m_position.getSelectedId();
+		m_position.clear(juce::dontSendNotification);
+		int firstEmpty = -1;
+		for(int p = 0; p < g1app::PresetsLink::Positions; ++p)
+		{
+			const auto& n = names[static_cast<size_t>(p)];
+			if(n.empty() && firstEmpty < 0)
+				firstEmpty = p;
+			m_position.addItem(juce::String(p + 1).paddedLeft('0', 2) + "   " + (known ? (n.empty() ? juce::String("(empty)") : juce::String(n)) : juce::String("...")), p + 1);
+		}
+		m_known = known;
+		m_position.setSelectedId(_pickEmpty && known ? std::max(firstEmpty, 0) + 1 : std::max(was, 1), juce::dontSendNotification);
+		warn();
+	}
+
+	void PresetsView::StoreCard::warn()
+	{
+		g1app::PresetsLink::BankNames names;
+		const int bank = m_bank.getSelectedId() - 1, pos = m_position.getSelectedId() - 1;
+		juce::String text;
+		if(!m_owner.m_link.bank(bank, names))
+			text = "Reading bank " + juce::String(bank + 1) + "...";
+		else if(pos >= 0 && !names[static_cast<size_t>(pos)].empty())
+			text = "Position " + juce::String(pos + 1).paddedLeft('0', 2) + " holds \"" + juce::String(names[static_cast<size_t>(pos)]) + "\": it will be replaced.";
+		m_warning.setText(text, juce::dontSendNotification);
+		m_store.setButtonText(text.contains("replaced") ? "Replace" : "Store");
+		m_store.setEnabled(m_known);
+	}
+
+	void PresetsView::StoreCard::paint(juce::Graphics& _g)
+	{
+		// A card, not a box: opaque over the list, a frame of the rules' blue.
+		const auto r = getLocalBounds().toFloat().reduced(1.0f);
+		_g.setColour(g_menu);
+		_g.fillRoundedRectangle(r, 8.0f);
+		_g.setColour(g_rule);
+		_g.drawRoundedRectangle(r, 8.0f, 2.0f);
+		_g.setColour(g_boxText);
+		_g.setFont(juce::FontOptions(g_textSize + 2.0f, juce::Font::bold));
+		_g.drawText("Load \"" + m_name + "\"", getLocalBounds().removeFromTop(30).reduced(12, 0), juce::Justification::centredLeft, true);
+	}
+
+	void PresetsView::StoreCard::resized()
+	{
+		auto r = getLocalBounds().reduced(12, 0);
+		r.removeFromTop(32);
+		auto row = r.removeFromTop(g_rowH + 4);
+		m_bankLabel.setBounds(row.removeFromLeft(40));
+		row.removeFromLeft(4);
+		m_bank.setBounds(row.removeFromLeft(80));
+		row.removeFromLeft(14);
+		m_posLabel.setBounds(row.removeFromLeft(60));
+		row.removeFromLeft(4);
+		m_position.setBounds(row.removeFromLeft(std::max(100, row.getWidth())));
+		r.removeFromTop(8);
+		m_warning.setBounds(r.removeFromTop(g_rowH + 4));
+		auto buttons = getLocalBounds().reduced(12, 10).removeFromBottom(g_rowH + 8);
+		m_cancel.setBounds(buttons.removeFromRight(70));
+		buttons.removeFromRight(8);
+		m_loadOnly.setBounds(buttons.removeFromRight(80));
+		buttons.removeFromRight(8);
+		m_store.setBounds(buttons.removeFromRight(80));
 	}
 
 	// ____________________________________________________________________________________________
