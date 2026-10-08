@@ -23,6 +23,7 @@ repository).
 ## Changes
 
 - 2026-10-07, Animatek: in `background.png`, the "Main Panel" and "Synth Settings" labels under the
-  display are gone; the page buttons are now two more keys in the slots' row, right of D, labelled
-  "Presets" (new, set in DejaVu Sans Condensed Bold to stand in for Mike Fiction's lettering) and
-  "Settings" (the second line of Mike Fiction's own "Synth Settings" label, at 88 %).
+  display were removed when the page buttons became two more keys in the slots' row, right of D,
+  with stand-in "Presets" and "Settings" labels.
+- 2026-10-07, Mike Fiction: those two labels redrawn in the panel's own lettering, from the master
+  artwork (#36). The panel is again entirely Mike Fiction's art.

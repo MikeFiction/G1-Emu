@@ -5,6 +5,15 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-08
+
+- [Merge] **Mike Fiction's pull requests #36, #40, #41 and #43 (Claude, requested by Javier).**
+  Presets and Settings lettered in the panel's own font (#36), switching pages without the panel
+  showing in between (#40), oscillator pitch as a note with a click for Hz (#41, fixes #38), and
+  right-click menus on glass with a panel menu: GUI Scale, Settings, Info (#43); their entries are
+  below. `skin/LICENSE.md` now says the panel is again all Mike's art. Only this changelog clashed.
+  Checked: it builds, all tests pass, and the snapshots show the new lettering and both pages.
+
 ## 2026-10-07
 
 - [Imp] **Presets and Settings lettered in the panel's own font (Mike Fiction).** The two labels
