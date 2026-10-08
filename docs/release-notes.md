@@ -1,44 +1,42 @@
-# G1-Emu v0.1.0-alpha.13
+# G1-Emu v0.1.0-alpha.14
 
-**This pre-release gives G1-Emu a new face, and makes the plugin play along with your DAW.** The
-panel is now Mike Fiction's artwork: a real-looking G1 rack, resizable, with knob displays, the
-synth's settings on a page of their own and a display that says what each control does. The plugin
-follows your DAW's tempo, has a mono output for each of the G1's four, and keeps its patches when
-you switch OS. Please try it and report what you find with the **Report issue** button.
+**This pre-release brings the Presets page: the synth's banks at a glance, a click to load a
+patch, and .pch files sent to the synth with no editor.** Plus more of Mike Fiction's panel, and a
+fix for a crash in Nuendo. Please try it and report what you find with the **Report issue** button.
 
-## A new panel, by Mike Fiction
+## Presets
 
-**Panel skin and GUI design by Mike Fiction**, drawn from photographs of real hardware and
-published under CC BY 4.0. Thank you, Mike.
+Press **Presets** (right of slot D) and the page shows over the knobs:
 
-- **Resizable**, in the window and in the plugin, and it remembers its size.
-- **Parameter displays** above the knobs say what each one moves, with the value as the editor
-  shows it (extras drawer). **Master volume** goes 0 to 127, and the DAW can automate it.
-- **An info display** under the panel says what the control under the mouse will do now: the dial,
-  the navigator, Store, Assign/Morph. **Tooltips** wait the same each time and can be turned off.
-- **Presets and Settings**, two more keys right of slot D. **Settings** shows the synth's settings
-  (the slots' MIDI channels, the clock, velocity, master tune...) over the knobs; press it again to
-  go back. **Presets** will list the synth's banks and programs to load with a click: it is **in
-  development**, coming next.
-- **Shift works as on the hardware**: it lets go after the next key, and stays held for the
-  navigator in Edit mode. **Shift + Patch/Load is Random**; right-click a knob to keep it out of
-  Random (a padlock shows it).
-- **Restart** switches the G1 off and on without closing G1-Emu (extras drawer).
-- **About** (extras drawer): who made G1-Emu, the license of every part in it, and Animatek NME.
-- The standalone has an **icon**, and the dial turns with a thumb indent.
+- **The banks, from the synth itself.** Pick a bank (1 to 9) at the top right; its patches show in
+  three columns. **Hide empty** (on by default) leaves out the positions with nothing stored, and
+  the count beside it says how many are used.
+- **A click loads a patch** into the slot lit on the panel, marked in orange. Animatek NME, if it
+  is connected, follows it at once, as when you load with the dial.
+- **Load .pch...** sends a patch file straight to the synth, with no editor. You pick the bank and
+  the position, each named after what it holds (the first empty one is offered); a position that
+  holds a patch is named in a warning and the button says **Replace**. **Load only** sends it to
+  the slot without storing it.
+
+Press Presets again, or Escape, to go back to the panel.
+
+## On the panel (Mike Fiction)
+
+- **Presets and Settings** lettered in the panel's own font.
+- **Switching between the two pages** no longer shows the panel in between.
+- **Oscillator pitch reads as a note** on the knob displays (C4), as on the G1; a click on the
+  display shows it in Hz.
+- **Right-click menus** in the panel's look, and a menu for the panel itself (right-click anywhere
+  else): **GUI Scale** from 75 % to 250 %, Settings and About.
 
 ## In your DAW
 
-- **The plugin follows your DAW's tempo** (#20). With the G1's MIDI clock set to external (the
-  Settings page: MIDI clock source), MIDIGlobal and everything clocked by it play at the host's
-  tempo and start and stop with its transport, loops included.
-- **Mono outputs** (#27): besides Out 1/2 and Out 3/4, Out 1, Out 2, Out 3 and Out 4 one by one.
-  They start off; in Cubase and Nuendo turn them on with **Activate Outputs**.
-- **A project saved under one OS opens under another** (#25). After installing Clavia's 3.03b
-  update, projects saved with the factory OS came back empty. Now their banks and settings load,
-  with the OS in use.
-- **The direct link with Animatek NME** (#8): NME finds every G1-Emu, window or plugin instance,
-  and connects with no MIDI port to set up, also on Windows. It needs the next Animatek NME release.
+- **Knobs turned on the panel reach the DAW as one move** (#42): one touch when the knob starts to
+  move, its values, a release once it stops, where the plugin used to send a touch thirty times a
+  second. Learning a knob with Cubase's and Nuendo's modulators crashed Nuendo; automation in Touch
+  mode also records a turn as one.
+- **Animatek NME 0.21** connects to every G1-Emu, window or plugin instance, with no MIDI port to
+  set up (the direct link), also on Windows.
 
 ## Optional: the OS a real G1 runs
 
@@ -76,9 +74,12 @@ On macOS the plugin is not signed: if the DAW refuses it, run
 ## Known issues
 
 - **macOS:** patch uploads from Animatek NME can time out (#3).
-- **Windows:** the plugin has no PC Port of its own (Windows makes no virtual MIDI ports). The
-  direct link reaches it with no port at all, from the next Animatek NME release on; until then,
-  use the standalone with loopMIDI (below).
+- **Windows:** the plugin has no PC Port of its own (Windows makes no virtual MIDI ports): connect
+  with the direct link, which needs **Animatek NME 0.21** or later. The standalone also works with
+  loopMIDI (below).
+- **Nuendo and Cubase modulators** (#42): learning a G1-Emu knob crashed Nuendo. Two things of ours
+  that could do it are fixed in this release, but it has not been tried in Nuendo yet: please tell
+  us how it goes.
 - **CLAP:** if you remove every G1-Emu instance and then add a new one, that new one may have no PC
   Port until the DAW reloads the plugin; its Settings say so.
 - **After the OS update:** the window crashed twice in the DSP code generator right after one

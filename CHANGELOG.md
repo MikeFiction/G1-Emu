@@ -7,6 +7,11 @@ Older entries cite their commit by hand.
 
 ## 2026-10-08
 
+- [Docs] **Release notes for v0.1.0-alpha.14 (Claude).** The Presets page (banks, a click to load,
+  Load .pch), Mike Fiction's panel work (#36, #40, #41, #43), the gestures for the DAW (#42), and
+  Animatek NME 0.21's direct link; the Windows known issue points to it, and #42 is listed as fixed
+  but not yet tried in Nuendo.
+
 - [Fix] **After a load from the Presets page, the editor's own answers reach it (Claude, reported
   by Javier).** NME still took seconds to show a patch loaded from the page. The link kept from the
   editor every ACK while a request of its own was open and for 300 ms after, so as to catch late
