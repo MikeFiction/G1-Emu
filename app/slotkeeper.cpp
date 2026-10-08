@@ -296,6 +296,10 @@ namespace g1app
 		forEachMessage(m_editorRx, [&](const std::vector<uint8_t>& _m)
 		{
 			traceMsg("ed", _nowMs, _m);
+			// A greeting is a question and its answer, not an exchange to keep out of: Animatek NME
+			// asks whether the synth is still there every so often (PresetsLink::editorSent).
+			if(isClavia(_m) && ccOf(_m) == CcIAm)
+				return;
 			m_lastActivity = _nowMs;
 			if(m_state == State::Requesting || m_state == State::Fetching)
 				abort(_nowMs);		// the editor talks: the keeper gets out of the way

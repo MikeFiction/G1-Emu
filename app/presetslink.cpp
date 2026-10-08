@@ -13,9 +13,10 @@ namespace g1app
 	{
 		constexpr uint64_t BootMs = 2500;		// the OS is up and has looked at its flash
 		constexpr uint64_t QuietMs = 500;		// the editor's own exchanges come closer together
+		constexpr uint64_t LoadQuietMs = 100;	// a load or an upload the user waits for: no more than this
 		constexpr uint64_t ReplyMs = 1500;
 		constexpr uint64_t FilterTailMs = 300;	// late replies to an abandoned request
-		constexpr uint8_t CcInfo = 0x14, CcAck = 0x16, CcPatch = 0x17;
+		constexpr uint8_t CcIAm = 0x00, CcInfo = 0x14, CcAck = 0x16, CcPatch = 0x17;
 		constexpr uint8_t LoadAck = 0x38, InfoNewPatchInSlot = 0x38;
 		constexpr uint8_t ListAckA = 0x13, ListAckB = 0x15;	// the ACK types that carry a list
 		constexpr uint8_t ListEnd = 4;		// the end marker that says the whole list is done
@@ -193,8 +194,13 @@ namespace g1app
 	void PresetsLink::editorSent(const std::vector<uint8_t>& _bytes, const uint64_t _nowMs)
 	{
 		m_editorRx.insert(m_editorRx.end(), _bytes.begin(), _bytes.end());
-		forEachMessage(m_editorRx, [&](const std::vector<uint8_t>&)
+		forEachMessage(m_editorRx, [&](const std::vector<uint8_t>& _m)
 		{
+			// A greeting is a question and its answer, not an exchange to keep out of: Animatek NME
+			// asks whether the synth is still there every so often, and a load waited for a silence
+			// that did not come.
+			if(isClavia(_m) && ccOf(_m) == CcIAm)
+				return;
 			m_lastActivity = _nowMs;
 			// The editor talks: the link gets out of the way and reads the bank again once it is quiet.
 			if(m_state == State::Listing)
@@ -372,11 +378,15 @@ namespace g1app
 			finish(_nowMs);
 			return;
 		}
-		if(_nowMs < BootMs || _nowMs < m_filterUntil || _nowMs < m_lastActivity + QuietMs)
+		if(_nowMs < BootMs || _nowMs < m_filterUntil)
 			return;
 
-		// An upload or a load first: it is what the user is waiting for.
+		// An upload or a load first: it is what the user is waiting for, and it waits less for
+		// the editor to be quiet than a list does.
 		std::lock_guard<std::mutex> lock(m_mutex);
+		const bool userWaits = !m_uploads.empty() || !m_loads.empty();
+		if(_nowMs < m_lastActivity + (userWaits ? LoadQuietMs : QuietMs))
+			return;
 		if(!m_uploads.empty())
 		{
 			m_upload = std::move(m_uploads.front());

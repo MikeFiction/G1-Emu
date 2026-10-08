@@ -130,16 +130,39 @@ int main()
 			++shown;
 		}
 
+	// An editor greets the synth every 300 ms, as Animatek NME's checks do (IAm), through the
+	// load: the load must not wait for a silence that never comes.
 	seen.clear();
+	const auto greet = [&](const uint64_t _ms)
+	{
+		const std::vector<uint8_t> iam = {0xf0, 0x33, 0x00, 0x06, 0x00, 0x03, 0x03, 0xf7};
+		for(uint64_t t = 0; t < _ms; t += 50)
+		{
+			if(t % 300 == 0)
+			{
+				mc.getPcPort().receive(iam);
+				link.editorSent(iam, mc.ucCycles() / g_ms);
+			}
+			run(50);
+		}
+	};
+	greet(600);
+	const auto asked = mc.ucCycles() / g_ms;
 	link.load(0, 0, first);
 	std::string shown;
+	uint64_t toldAt = 0;
 	for(int t = 0; t < 60; ++t)
 	{
-		run(50);
+		greet(50);
+		for(size_t i = 0; toldAt == 0 && i + 7 < seen.size(); ++i)
+			if(seen[i] == 0xf0 && (seen[i + 2] >> 2) == 0x14 && seen[i + 5] == 0x38)
+				toldAt = mc.ucCycles() / g_ms;
 		shown = trim(mc.getLcd().line(0));
-		if(shown.find(trim(names[static_cast<size_t>(first)])) != std::string::npos)
+		if(toldAt && shown.find(trim(names[static_cast<size_t>(first)])) != std::string::npos)
 			break;
 	}
+	check(toldAt && toldAt - asked < 600, "with an editor greeting every 300 ms, the editor hears of the load "
+		+ std::to_string(toldAt ? toldAt - asked : 0) + " ms after it is asked for");
 	check(shown.find(trim(names[static_cast<size_t>(first)])) != std::string::npos,
 		"loaded position " + std::to_string(first + 1) + " into slot A: the display says \"" + shown + "\"");
 

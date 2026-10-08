@@ -7,6 +7,18 @@ Older entries cite their commit by hand.
 
 ## 2026-10-08
 
+- [Fix] **A load from the Presets page reaches the editor at once, not seconds later (Claude,
+  reported by Javier).** With the dial and Load, Animatek NME had the patch at once; from the
+  Presets page, some seconds later. The link only speaks once the editor has been quiet for half a
+  second, so as not to cut into an exchange of the editor's, and Animatek NME greets the synth every
+  so often (IAm) to see it is still there: each greeting started the wait again. A greeting is a
+  question and its answer, not an exchange to keep out of: it no longer counts, in the Presets
+  link, the Synth Settings' link and the slot keeper (which a greeting also made abandon a slot it
+  was reading). And a load or an upload, which the user waits for, waits for 100 ms of quiet, not
+  500. Checked: `g1presetstest` now loads with an editor greeting every 300 ms, and the editor hears
+  of the load 250 ms after it is asked for (the OS's own time to load it; before, not within 3 s);
+  all tests pass.
+
 - [Fix] **The editor follows a patch loaded or uploaded from the Presets page (Claude, reported by
   Javier).** Loaded with the dial and Load, or by a Program Change, a patch reaches Animatek NME:
   the OS tells the editor (NewPatchInSlot, `f0 33 50 06 01 38 00 01 33 f7` for slot A) and NME

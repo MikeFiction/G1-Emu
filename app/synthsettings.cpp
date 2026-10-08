@@ -150,8 +150,11 @@ namespace g1app
 	void SynthSettingsLink::editorSent(const std::vector<uint8_t>& _bytes, const uint64_t _nowMs)
 	{
 		m_editorRx.insert(m_editorRx.end(), _bytes.begin(), _bytes.end());
-		forEachMessage(m_editorRx, [&](const std::vector<uint8_t>&)
+		forEachMessage(m_editorRx, [&](const std::vector<uint8_t>& _m)
 		{
+			// A greeting is not an exchange to keep out of (PresetsLink::editorSent).
+			if(isClavia(_m) && ccOf(_m) == CcIAm)
+				return;
 			m_lastActivity = _nowMs;
 			// The editor talks: the link gets out of the way and tries again once it is quiet.
 			if(m_state == State::Reading)
