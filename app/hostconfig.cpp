@@ -61,6 +61,7 @@ namespace g1app
 			else if(key == "knobFollowsPatch") knobFollowsPatch = value != "0";
 			else if(key == "randomExclude")	randomExclude = knobListFromString(value);
 			else if(key == "tooltips")	tooltips = value != "0";
+			else if(key == "presetsHideEmpty") presetsHideEmpty = value != "0";
 			else if(key == "masterVolume")	masterVolume = std::atoi(value.c_str());
 			else if(key == "panelScale")	panelScale = static_cast<float>(std::atof(value.c_str()));
 			else if(key == "pcPortOutDevice") pcPortOutDevice = value;
@@ -135,6 +136,7 @@ namespace g1app
 		  << "knobFollowsPatch = " << (knobFollowsPatch ? 1 : 0) << "\n"
 		  << "randomExclude = " << knobListToString(randomExclude) << "\n"
 		  << "tooltips = " << (tooltips ? 1 : 0) << "\n"
+		  << "presetsHideEmpty = " << (presetsHideEmpty ? 1 : 0) << "\n"
 		  << "masterVolume = " << masterVolume << "\n"
 		  << "panelScale = " << panelScale << "\n"
 		  << "pcPortOutDevice = " << pcPortOutDevice << "\n"

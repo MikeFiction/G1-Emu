@@ -7,6 +7,26 @@ Older entries cite their commit by hand.
 
 ## 2026-10-09
 
+- [Fix] **A patch stored from the panel shows on the Presets page (Mike Fiction, Claude).** The page
+  only read its bank when opened or switched to, and the OS tells no one of a store made on the
+  panel, so a stored patch appeared only after leaving the page and coming back. Now a press of
+  Store (not Shift + Store) while the page is open has it read its bank again 1.5 s later; the
+  confirming press is the one that counts. Checked by Mike Fiction in the standalone: a patch
+  stored into the bank shown appears in the list without leaving the page.
+
+- [Fix] **The Presets page's Hide empty is remembered (Mike Fiction, Claude).** It came back ticked
+  at every start, whatever was left. The standalone now keeps it as `presetsHideEmpty` in the
+  settings file; the plugin still starts with it on, as with the tooltips. Checked by Mike Fiction
+  in the standalone.
+
+- [GUI] **Panel tweaks for the Presets page (Mike Fiction, Claude).** The Presets and Settings
+  buttons are drawn from Mike Fiction's new grey button (`skin/button_grey.png`, the wide button's
+  layout), so the emulator's own pages stand out from the synth's functions. The Shift label is
+  10 px higher in the background art, and the Shift button with it. The Presets page has its own
+  frame by Mike Fiction (`skin/presets_panel.png`, its title lettered in), instead of the Synth
+  Settings' frame blanked with the title drawn in code, and Hide empty and the count sit together
+  in the middle of its title bar. Checked by Mike Fiction in the standalone.
+
 - [GUI] **A Close button on the Synth Settings and Presets pages (Mike Fiction, Claude).** Each
   page had only Esc and its own button at the panel's far right to close it; Close now sits at its
   bottom right, its tooltip naming Esc. On the Presets page Load .pch moves left of it; on the

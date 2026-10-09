@@ -52,6 +52,10 @@ namespace g1gui
 		// keep the choice, it is on at every start.
 		virtual bool tooltips() const { return true; }
 		virtual void setTooltips(bool) {}
+		// The Presets page's Hide empty, on unless turned off. Where the host does not keep the
+		// choice, it is on at every start.
+		virtual bool presetsHideEmpty() const { return true; }
+		virtual void setPresetsHideEmpty(bool) {}
 		virtual float panelScale() const = 0;			// the window's size, as PanelView keeps it
 		virtual void setPanelScale(float _scale) = 0;
 		virtual juce::String settingsTooltip() const = 0;
