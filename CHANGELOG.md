@@ -7,6 +7,10 @@ Older entries cite their commit by hand.
 
 ## 2026-10-09
 
+- [Docs] **Agent instructions: the shared CODE changelog is written with `cambios apuntar` (Claude, asked by
+  Javier).** `AGENTS.md` now says to log in the maintainer's workspace changelog through that command and never
+  by editing the file, which three times turned its symlink into a loose copy. Docs only, nothing to check.
+
 - [Fix] **Random reaches every knob (Mike Fiction, Claude).** A few knobs at random kept their old
   values on each Random: Shift was let go and the knobs moved at the same moment, and the OS, which
   sees Shift's release only at its next scan of the buttons, took the knobs it read before that as

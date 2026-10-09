@@ -206,3 +206,5 @@ changelog is what people read.
 In the maintainer's workspace, every change also goes into the global changelog
 `/mnt/SPEED/CODE/CHANGELOG.md` (rule in `/mnt/SPEED/CODE/AGENTS.md`, section Global Changelog; that
 one is written in Spanish). It is a link to an Obsidian note: edit its target, never replace it.
+
+**Write entries with `cambios apuntar "<project>" "<what changed, verification, commit>" -a <agent>`**, not by editing the file: it files them under the date and project without rewriting anything or breaking the symlink (`cambios proyectos` lists the names; if the link is already broken, `cambios reparar`). Never `sed -i`, `>` or a whole-file write on it: that is how the symlink broke three times.

@@ -15,3 +15,4 @@ Hard rules:
   "local change, not committed" if there is no commit yet.
 - In the maintainer's workspace it also goes into the global `/mnt/SPEED/CODE/CHANGELOG.md` (a link
   to an Obsidian note: edit its target, never replace it), dated in Madrid time.
+- **Write entries with `cambios apuntar "<project>" "<what changed, verification, commit>" -a <agent>`**, not by editing the file: it files them under the date and project without rewriting anything or breaking the symlink (`cambios proyectos` lists the names; if the link is already broken, `cambios reparar`). Never `sed -i`, `>` or a whole-file write on it: that is how the symlink broke three times.
