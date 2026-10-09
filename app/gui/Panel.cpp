@@ -1603,13 +1603,11 @@ namespace g1gui
 		m_settingsLed.setOn(true);
 	}
 
-	// The slot whose LED is lit, where the Presets page loads (the first one if several are).
-	int Panel::activeSlot() const
+	// The active slot, where the Presets page loads, as the OS keeps it (the one the knobs follow).
+	// Not its LED: the active slot's LED blinks, and while it is dark no slot would be lit.
+	int Panel::activeSlot()
 	{
-		for(int i = 0; i < 4; ++i)
-			if(ledLit(g_slotLeds[static_cast<size_t>(i)]))
-				return i;
-		return 0;
+		return m_mc.read8(g1::KnobMap::ActiveSlot + m_knobMap.osShift()) & 3;
 	}
 
 	// The same for the Presets page; one page at a time.

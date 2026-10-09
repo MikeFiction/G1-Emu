@@ -366,7 +366,7 @@ namespace g1gui
 		void updateTip();
 		void showSynthSettings(bool _show);	// the Synth Settings page, or the main one
 		void showPresets(bool _show);		// the Presets page, or the main one
-		int activeSlot() const;				// 0-3, the slot lit on the panel
+		int activeSlot();					// 0-3, the active slot, read from the OS
 
 		juce::SharedResourcePointer<Skin> m_skin;	// keeps the images while a panel is open
 		PanelHost& m_host;

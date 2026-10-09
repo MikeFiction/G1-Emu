@@ -5,6 +5,15 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-09
+
+- [Fix] **The Presets page loads into the active slot even while its LED is dark (Mike Fiction,
+  Claude).** The page took the slot from the slot LEDs, and the active slot's LED blinks: with B, C
+  or D active, the footer swapped between that slot and A in time with the blink, and a click while
+  the LED was dark loaded into A. The panel now reads the active slot from the OS, where the knobs
+  read it (`$1C3ABE`, `$20` higher under the 3.03b update). Checked by Mike Fiction in the
+  standalone: with B, C or D active the footer names that slot steadily and a click loads into it.
+
 ## 2026-10-08
 
 - [Docs] **Release notes for v0.1.0-alpha.14 (Claude).** The Presets page (banks, a click to load,
