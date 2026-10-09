@@ -345,6 +345,9 @@ namespace g1gui
 	private:
 		void timerCallback() override;
 		void updateKnobs(const std::array<g1::KnobInfo, 18>& _info);
+		void turnKnobs(double _now);		// one frame of the knobs turning to their targets
+		void startKnobTurn();				// turnKnobs on each frame, until the knobs are in place
+		void setKnobTurning(size_t _knob, int _position);	// Random and its reset: set at once, drawn turning
 		void updateLcdTips(const std::array<g1::KnobInfo, 18>& _info);
 		void updateStatus();	// the status bar and the MIDI LED
 		void updateHeldKeys();
@@ -354,7 +357,7 @@ namespace g1gui
 		void setExtrasOpen(bool _open, bool _animate = false);
 		void slideDrawer(double _now);
 		void placeDrawer();
-		void shiftAsideForKnobs();
+		void shiftAsideForKnobs(std::function<void()> _turn);	// Shift let go for the OS, then _turn
 		void randomizeKnobs();
 		void showKnobMenu(size_t _knob);	// right click: Exclude from Random, or Include
 		void showPanelMenu();				// right click anywhere else: GUI Scale, Settings, About
@@ -377,6 +380,9 @@ namespace g1gui
 		juce::Slider m_volume;
 		std::array<juce::Slider, 18> m_knobs;
 		std::array<juce::uint32, 18> m_knobTurnedAt{};	// when the window last turned each (0: never)
+		std::array<double, 18> m_knobTarget{};			// where each knob is going (updateKnobs)
+		std::optional<juce::VBlankAttachment> m_knobTurn;	// while a knob turns into place
+		double m_knobTurnLast = -1.0;					// the last frame's time, while they turn
 		std::array<LedView*, 18> m_knobLeds{};
 		std::vector<std::unique_ptr<PanelButton>> m_buttons;
 		std::vector<std::unique_ptr<LedView>> m_leds;

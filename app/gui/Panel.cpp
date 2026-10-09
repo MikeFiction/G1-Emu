@@ -393,9 +393,17 @@ namespace g1gui
 		constexpr double g_pulsePeriodMs = 1200.0;
 		// How long the G1 sees Shift let go after Shift + Random, for the OS to take the knobs.
 		constexpr juce::uint32 g_shiftAfterRandomMs = 300;
+		// And how long it sees Shift let go before the knobs move: the OS takes Shift's release at
+		// its next scan of the buttons, and a knob it reads before that is lost (taken as Shift +
+		// knob, which does nothing, and not read as a change again).
+		constexpr juce::uint32 g_knobsAfterShiftMs = 60;
 		// A knob the window has just turned (by hand, Random) shows its own position this long
 		// before it follows the patch again: until the OS has read it, the patch's value is the old.
 		constexpr juce::uint32 g_knobSettleMs = 500;
+		// A knob the G1 moves (another patch or slot, the host, Random) turns into place like an
+		// automated desk, as Mike Fiction's Waldorf Wave does it: this share of the remaining
+		// distance each 60th of a second, whatever the frame rate (95 % of the way in 0.14 s).
+		constexpr double g_knobTurnShare = 0.3;
 	}
 
 	void PanelButton::setAutoRepeat(const bool _on)
@@ -1655,18 +1663,23 @@ namespace g1gui
 		}
 	}
 
-	// The OS ignores the knobs while Shift is down: when the window turns them (Random, its
-	// double click) with Shift held, the G1 sees Shift let go while they move and down again after.
-	// On the panel Shift stays as it was.
-	void Panel::shiftAsideForKnobs()
+	// The OS ignores the knobs while Shift is down: when the window turns them (_turn: Random, its
+	// reset) with Shift held, the G1 sees Shift let go first, the knobs move once it has, and Shift
+	// is down again after. Without Shift they move at once. On the panel Shift stays as it was.
+	void Panel::shiftAsideForKnobs(std::function<void()> _turn)
 	{
-		if(m_shift->isPressed())
-			m_shift->pressAgain(g_shiftAfterRandomMs);
+		if(!m_shift->isPressed())
+			return _turn();
+		m_shift->pressAgain(g_knobsAfterShiftMs + g_shiftAfterRandomMs);
+		juce::Timer::callAfterDelay(static_cast<int>(g_knobsAfterShiftMs), [panel = juce::Component::SafePointer<Panel>(this), turn = std::move(_turn)]
+		{
+			if(panel != nullptr)
+				turn();
+		});
 	}
 
 	void Panel::randomizeKnobs()
 	{
-		shiftAsideForKnobs();
 		// Keep the patch's values the first time, and again once the assignments have changed.
 		std::array<g1::KnobInfo, 18> now;
 		bool same = m_haveSnapshot;
@@ -1681,9 +1694,30 @@ namespace g1gui
 			m_haveSnapshot = true;
 		}
 		const auto excluded = m_host.randomExcluded();
-		for(size_t k = 0; k < m_knobs.size(); ++k)
-			if(!(excluded & (1u << k)))
-				m_knobs[k].setValue(1 + m_rng.nextInt(254), juce::sendNotificationSync);	// 0 and 255 the OS ignores
+		shiftAsideForKnobs([this, excluded]
+		{
+			for(size_t k = 0; k < m_knobs.size(); ++k)
+				if(!(excluded & (1u << k)))
+					setKnobTurning(k, 1 + m_rng.nextInt(254));	// 0 and 255 the OS ignores
+		});
+	}
+
+	// The G1 has the knob at _position at once, as if turned there by hand; its picture turns there
+	// like any knob the G1 moves (turnKnobs), instead of jumping.
+	void Panel::setKnobTurning(const size_t _knob, const int _position)
+	{
+		m_mc.setAdc(g_knobAdc[_knob], static_cast<uint8_t>(_position));
+		m_knobTurnedAt[_knob] = juce::Time::getMillisecondCounter();
+		m_knobTarget[_knob] = _position;
+		startKnobTurn();
+	}
+
+	void Panel::startKnobTurn()
+	{
+		if(m_knobTurn)
+			return;
+		m_knobTurnLast = -1.0;
+		m_knobTurn.emplace(this, [this](const double _now) { turnKnobs(_now); });
 	}
 
 	void Panel::KnobMenuListener::mouseDown(const juce::MouseEvent& _e)
@@ -1794,13 +1828,15 @@ namespace g1gui
 	{
 		if(!m_haveSnapshot)
 			return;
-		shiftAsideForKnobs();
-		for(uint32_t k = 0; k < 18; ++k)
+		shiftAsideForKnobs([this]
 		{
-			const auto& s = m_snapshot[k];
-			if(s.assigned && s.section != 2 && sameAssignment(s, m_knobMap.read(k)))
-				m_knobs[k].setValue(g1::KnobMap::positionFor(s.value, s.max), juce::sendNotificationSync);
-		}
+			for(uint32_t k = 0; k < 18; ++k)
+			{
+				const auto& s = m_snapshot[k];
+				if(s.assigned && s.section != 2 && sameAssignment(s, m_knobMap.read(k)))
+					setKnobTurning(k, g1::KnobMap::positionFor(s.value, s.max));
+			}
+		});
 	}
 
 	void Panel::reportIssue()
@@ -1880,6 +1916,22 @@ namespace g1gui
 		updateStatus();
 	}
 
+	namespace
+	{
+		// Whether a knob at _position sets the parameter to its value: position × (max + 1) / 256
+		// (NOTES.md, "A knob's position to a value"), give or take a position, as the OS rounds a
+		// little differently at times (179 gave 90 of 127, not 89). 0 and 255 change nothing.
+		bool givesValue(const int _position, const g1::KnobInfo& _k)
+		{
+			if(_position <= 0 || _position >= 255)
+				return false;
+			for(const int p : {_position - 1, _position, _position + 1})
+				if(p * (_k.max + 1) / 256 == _k.value)
+					return true;
+			return false;
+		}
+	}
+
 	// The knobs follow the G1's own positions, which something else may have moved (the plugin's
 	// host automation), except the one being turned by hand. Following the patch, a knob shows
 	// instead where its parameter's value would put it, as a patch loaded on the hardware leaves
@@ -1896,13 +1948,45 @@ namespace g1gui
 			const auto& k = _info[i];
 			const bool settling = m_knobTurnedAt[i] != 0 && now - m_knobTurnedAt[i] < g_knobSettleMs;
 			const bool fromPatch = follow && k.assigned && k.section != 2 && !settling;
-			m_knobs[i].setValue(fromPatch ? g1::KnobMap::positionFor(k.value, k.max) : m_mc.adc(g_knobAdc[i]), juce::dontSendNotification);
+			if(!fromPatch)
+				m_knobTarget[i] = m_mc.adc(g_knobAdc[i]);
+			else if(!givesValue(static_cast<int>(m_knobTarget[i]), k))
+				m_knobTarget[i] = g1::KnobMap::positionFor(k.value, k.max);
+			// else it stays: a position that already gives the value (a stepped knob turned or
+			// set by Random anywhere in its value's slice) is not moved to the slice's middle.
+			if(m_knobTarget[i] != m_knobs[i].getValue())
+				startKnobTurn();
 		}
 		if(!m_volume.isMouseButtonDown())
 			m_volume.setValue(m_mc.adc(VolumeAdc), juce::dontSendNotification);
 		if(m_knobDisplays[0].isVisible())
 			for(uint32_t k = 0; k < 18; ++k)
 				m_knobDisplays[k].set(_info[k], showsHz(_info[k]));
+	}
+
+	// Each knob still away from its target eases toward it (g_knobTurnShare), the last positions
+	// one a frame. Only the picture moves: the G1's position is not written (dontSendNotification).
+	// A knob taken by the mouse stops.
+	void Panel::turnKnobs(const double _now)
+	{
+		const double dt = m_knobTurnLast < 0 ? 1.0 / 60.0 : std::clamp(_now - m_knobTurnLast, 0.0, 0.1);
+		m_knobTurnLast = _now;
+		const double share = 1.0 - std::pow(1.0 - g_knobTurnShare, dt * 60.0);
+		bool moving = false;
+		for(size_t i = 0; i < m_knobs.size(); ++i)
+		{
+			auto& knob = m_knobs[i];
+			const double from = knob.getValue(), to = m_knobTarget[i];
+			if(knob.isMouseButtonDown() || from == to)
+				continue;
+			double step = (to - from) * share;
+			if(std::abs(step) < 1.0)
+				step = std::clamp(to - from, -1.0, 1.0);
+			knob.setValue(from + step, juce::dontSendNotification);
+			moving = moving || knob.getValue() != to;
+		}
+		if(!moving)
+			m_knobTurn.reset();
 	}
 
 	namespace

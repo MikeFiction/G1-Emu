@@ -5,6 +5,29 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-09
+
+- [Fix] **Random reaches every knob (Mike Fiction, Claude).** A few knobs at random kept their old
+  values on each Random: Shift was let go and the knobs moved at the same moment, and the OS, which
+  sees Shift's release only at its next scan of the buttons, took the knobs it read before that as
+  Shift + knob and ignored them. The knobs now move 60 ms after Shift is let go; the reset to the
+  patch's values does the same. Checked by Mike Fiction in the standalone, over many presses.
+
+- [Fix] **A stepped knob stays where it was turned (Mike Fiction, Claude).** With Knob Follows
+  Patch on, a knob on a parameter of few values (a waveform, a mode) jumped to the middle of its
+  value's slice half a second after it was turned or set by Random. It now stays wherever it is
+  while that position still gives the patch's value (give or take a position: the OS rounds a
+  little differently at times), and moves only when the value differs (another patch or slot, an
+  editor). Checked by Mike Fiction in the standalone.
+
+- [GUI] **The knobs turn into place (Mike Fiction, Claude).** A knob the G1 moves (another patch or
+  slot with Knob Follows Patch on, the host's automation) used to jump there; it now glides like
+  an automated desk, as on Mike Fiction's Waldorf Wave: 30 % of the remaining distance each 60th
+  of a second, on the screen's refresh, there in about 0.14 s. Random and its reset to the patch's
+  values turn the knobs the same way: the G1 has each new position at once, and the knob is drawn
+  turning to it. Only the picture moves, never the G1's knob position; a knob being turned by hand
+  follows the mouse. Checked by Mike Fiction in the standalone.
+
 ## 2026-10-08
 
 - [Docs] **Release notes for v0.1.0-alpha.14 (Claude).** The Presets page (banks, a click to load,
