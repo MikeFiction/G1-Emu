@@ -5,6 +5,13 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-09
+
+- [GUI] **A Close button on the Synth Settings and Presets pages (Mike Fiction, Claude).** Each
+  page had only Esc and its own button at the panel's far right to close it; Close now sits at its
+  bottom right, its tooltip naming Esc. On the Presets page Load .pch moves left of it; on the
+  Synth Settings page the note beside it is in two lines. Checked: the standalone builds and runs.
+
 ## 2026-10-08
 
 - [Docs] **Release notes for v0.1.0-alpha.14 (Claude).** The Presets page (banks, a click to load,

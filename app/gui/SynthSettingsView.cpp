@@ -41,6 +41,17 @@ namespace g1gui
 			_g.fillRoundedRectangle(_r, _r.getHeight() * g_boxRound);
 		}
 
+		// Close, at the bottom right of each page: the way out that is not the page's button at the
+		// panel's far right (or Esc, which the tooltip names).
+		constexpr int g_closeW = 56;
+		void styleCloseButton(juce::TextButton& _b, std::function<void()> _onClick)
+		{
+			_b.setTooltip("Close this page (Esc)");
+			_b.setColour(juce::TextButton::buttonColourId, g_heading);
+			_b.setColour(juce::TextButton::textColourOffId, g_boxText);
+			_b.onClick = std::move(_onClick);
+		}
+
 		juce::String cents(const int _c) { return (_c > 0 ? "+" : "") + juce::String(_c) + " cents"; }
 
 		// Global sync's length, in quarter notes as Clavia counted it.
@@ -337,8 +348,8 @@ namespace g1gui
 			addAndMakeVisible(*v);
 		}
 
-		m_note.setText("Changes reach the G1 at once. To keep them after a restart, press Shift + Store "
-			"on the panel (Save Synth Settings).", juce::dontSendNotification);
+		m_note.setText("Changes reach the G1 at once. To keep them after a restart,\n"
+			"press Shift + Store on the panel (Save Synth Settings).", juce::dontSendNotification);
 		m_note.setFont(juce::FontOptions(g_textSize));
 		m_note.setColour(juce::Label::textColourId, g_heading);
 		m_note.setJustificationType(juce::Justification::centredLeft);
@@ -346,6 +357,8 @@ namespace g1gui
 
 		for(auto* c : getChildren())
 			c->setEnabled(false);	// until the OS has said what it has
+		styleCloseButton(m_close, [this] { close(); });
+		addAndMakeVisible(m_close);	// after the above: it closes the page even before the OS answers
 		addMouseListener(this, true);	// the boxes' hover colour (mouseEnter)
 	}
 
@@ -431,7 +444,8 @@ namespace g1gui
 		row(2, g_velocityY, m_velMin);
 		row(2, g_velocityY + g_rowStep, m_velMax);
 
-		m_note.setBounds(c.getX() + g_margin - 4, c.getY() + g_footerY + 4, c.getWidth() - 2 * g_margin + 8, 32);
+		m_close.setBounds(c.getRight() - g_margin - g_closeW, c.getY() + g_footerY + 8, g_closeW, g_rowH + 6);
+		m_note.setBounds(c.getX() + g_margin - 4, c.getY() + g_footerY + 4, m_close.getX() - 8 - (c.getX() + g_margin - 4), 32);
 	}
 
 	// The mouse going in or out of a box's text (its child) is not the box's own event, so the box
@@ -606,6 +620,8 @@ namespace g1gui
 		m_loadPch.setColour(juce::TextButton::textColourOffId, g_boxText);
 		m_loadPch.onClick = [this] { choosePch(); };
 		addAndMakeVisible(m_loadPch);
+		styleCloseButton(m_close, [this] { close(); });
+		addAndMakeVisible(m_close);
 		addChildComponent(m_card);
 
 		m_viewport.setViewedComponent(&m_list, false);
@@ -793,7 +809,8 @@ namespace g1gui
 		m_count.setBounds(m_bankLabel.getX() - 12 - 52, c.getY() + g_titleY, 52, g_rowH);
 		m_hideEmpty.setBounds(m_count.getX() - 4 - 80, c.getY() + g_titleY - 1, 80, g_rowH + 2);	// JUCE sizes its text to its height
 		m_viewport.setBounds(c.getX() + g_margin - 6, c.getY() + g_listTop, c.getWidth() - 2 * g_margin + 12, g_footerY - g_listTop - 6);
-		m_loadPch.setBounds(c.getRight() - g_margin - 84, c.getY() + g_footerY + 8, 84, g_rowH + 6);
+		m_close.setBounds(c.getRight() - g_margin - g_closeW, c.getY() + g_footerY + 8, g_closeW, g_rowH + 6);
+		m_loadPch.setBounds(m_close.getX() - 8 - 84, c.getY() + g_footerY + 8, 84, g_rowH + 6);
 		m_card.setBounds(m_viewport.getBounds().reduced(60, 18));
 		showBank();
 	}
