@@ -353,8 +353,9 @@ namespace g1app
 				if(cc == CcIAm && m_state == State::Greeting)
 					hide = true;
 				// The G1 reporting a change of its own: a panel knob or MIDI moved a parameter, a
-				// patch came into a slot from the panel or a Program Change.
-				if(cc == CcParameter && _m[4] == 0x40)
+				// patch came into a slot from the panel or a Program Change. A panel knob comes as an
+				// Info message ($14 $01 $40, section, module, parameter, value), not as a Parameter.
+				if((cc == CcParameter && _m[4] == 0x40) || (cc == CcInfo && _m.size() > 6 && _m[4] == 0x01 && _m[5] == 0x40))
 				{
 					std::lock_guard<std::mutex> lock(m_mutex);
 					m_dirty[slot] = true;

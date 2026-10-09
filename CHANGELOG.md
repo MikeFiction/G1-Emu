@@ -7,6 +7,16 @@ Older entries cite their commit by hand.
 
 ## 2026-10-09
 
+- [Fix] **A project keeps the knobs turned on the panel (Mike Fiction, Claude, issue #46).**
+  **Touches the plugin:** `app/slotkeeper.cpp` (`SlotKeeper::g1Sent`). After reopening a
+  project, a knob turned on the panel was back where it was, or with Knob Follows Patch off, in
+  place but with the patch's sound: the slot came back as stored. The OS reports a panel knob as
+  an Info message ($14 $01 $40, then section, module, parameter and value), not as the Parameter
+  message the `SlotKeeper` listened for, so it never read the slot again. It now hears both.
+  `g1slotkeepertest` gets a step: knob 1 turned on the panel, slot A read again (fails without
+  the fix; passes on the factory OS and on the 3.03b update). Checked by Mike Fiction in Bitwig:
+  knob turns come back with the project, Knob Follows Patch on or off.
+
 - [Docs] **Agent instructions: the shared CODE changelog is written with `cambios apuntar` (Claude, asked by
   Javier).** `AGENTS.md` now says to log in the maintainer's workspace changelog through that command and never
   by editing the file, which three times turned its symlink into a loose copy. Docs only, nothing to check.
