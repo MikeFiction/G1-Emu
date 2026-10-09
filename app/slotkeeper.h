@@ -70,7 +70,7 @@ namespace g1app
 		void abort(uint64_t _nowMs);
 		void finishFetch();
 
-		mutable std::mutex m_mutex;		// m_slots, m_pendingRestore, m_dirty, m_state for other threads
+		mutable std::mutex m_mutex;		// m_slots, m_pendingRestore, m_dirty, m_uploadPending, m_state for other threads
 		Slots m_slots;
 		Slots m_pendingRestore;
 		bool m_hasRestore = false;

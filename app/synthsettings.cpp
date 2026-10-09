@@ -121,7 +121,7 @@ namespace g1app
 		std::lock_guard<std::mutex> lock(m_mutex);
 		_out = m_settings;
 		_revision = m_revision;
-		return m_revision > 0;
+		return m_known;
 	}
 
 	void SynthSettingsLink::reset()
@@ -129,6 +129,7 @@ namespace g1app
 		std::lock_guard<std::mutex> lock(m_mutex);
 		m_readWanted = true;
 		m_writeWanted = false;
+		m_known = false;
 		m_pidFresh = false;
 		m_state = State::Idle;
 		m_greeted = false;
@@ -216,6 +217,7 @@ namespace g1app
 			if(!m_writeWanted)
 			{
 				m_settings = s;
+				m_known = true;
 				++m_revision;
 			}
 			m_pidFresh = true;

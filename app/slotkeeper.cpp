@@ -266,7 +266,9 @@ namespace g1app
 		std::lock_guard<std::mutex> lock(m_mutex);
 		if(m_hasRestore || m_state != State::Idle)
 			return false;
-		return std::none_of(m_dirty.begin(), m_dirty.end(), [](const bool _d) { return _d; });
+		// Restored slots still to be sent count too: between two uploads the keeper is idle.
+		const auto any = [](const auto& _flags) { return std::any_of(_flags.begin(), _flags.end(), [](const bool _f) { return _f; }); };
+		return !any(m_dirty) && !any(m_uploadPending);
 	}
 
 	// ____________________________________________________________________________________________
@@ -496,11 +498,15 @@ namespace g1app
 			for(size_t s = 0; s < SlotCount; ++s)
 				if(m_uploadPending[s])
 				{
-					m_uploadPending[s] = false;
+					{
+						// Together, so settled() never sees the slot neither waiting nor uploading.
+						std::lock_guard<std::mutex> lock(m_mutex);
+						m_uploadPending[s] = false;
+						m_state = State::Uploading;
+					}
 					m_slot = s;
 					m_upload = uploadMessages(m_slots[s].sections, static_cast<uint8_t>(s));
 					m_step = 0;
-					m_state = State::Uploading;
 					m_deadline = 0;
 					return tick(_nowMs, _toG1);
 				}

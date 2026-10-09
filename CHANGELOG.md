@@ -7,6 +7,26 @@ Older entries cite their commit by hand.
 
 ## 2026-10-09
 
+- [New] **A project keeps the synth settings (Mike Fiction, Claude, issue #46).** **Touches the
+  plugin:** `app/plugin/Processor.*`, `app/slotkeeper.*` and `app/synthsettings.*`. With the
+  Synth Settings page, the settings it shows (MIDI channels, clock, tune and the rest) are now
+  recalled with the DAW project, with no need to store them through the OS's Save Synth Settings
+  (Shift + Store), however they were changed: on the page, on the OS's own System menu or from an
+  editor. Shift + Store now only sets what the standalone and a new instance start with. It works
+  on the factory OS too, which never loads stored settings at power-on. The OS keeps a change in
+  its memory only, so the plugin reads the settings every 2 s and saves the last reading in the
+  project, and on reopening writes them back once the `SlotKeeper` has put the slots back, then
+  checks that the OS took them. The project's settings win over those stored in the flash. While
+  the slots and settings go back in (about 3.8 s), the track's notes are held back, so none can
+  hang on a slot whose MIDI channel is about to change. `SlotKeeper::settled()`, which this waits
+  on, treated the gap between two slot uploads as settled and now waits for the restored slots
+  not yet sent; the comment in `synthsettings.h` said the OS keeps written settings in its flash.
+  `g1synthsettingstest` gets a step: a restart loses what was written, and writing it back after
+  a slot restored into A brings it back (factory OS and the 3.03b update). Checked by Mike
+  Fiction in Bitwig: a MIDI channel set on the page or on the System menu, and the pedal
+  polarity, come back with the project, and the notes start about 3.4 s after the plugins have
+  loaded.
+
 - [Fix] **The Synth Settings page's change is taken after slot A gets a new patch (Mike Fiction,
   Claude).** **Touches the plugin and `EmuHost`:** `app/synthsettings.cpp`, the link both use. A
   settings write carries the pid of slot A's patch, and the OS drops one with an old pid without a
