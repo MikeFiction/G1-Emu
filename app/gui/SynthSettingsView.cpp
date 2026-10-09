@@ -565,7 +565,7 @@ namespace g1gui
 	}
 
 	PresetsView::PresetsView(g1app::PresetsLink& _link, std::function<int()> _activeSlot)
-		: m_link(_link), m_activeSlot(std::move(_activeSlot)), m_frame(G1Skin::settings_panel_png, G1Skin::settings_panel_pngSize)
+		: m_link(_link), m_activeSlot(std::move(_activeSlot)), m_frame(G1Skin::presets_panel_png, G1Skin::presets_panel_pngSize)
 	{
 		setWantsKeyboardFocus(true);
 		setLookAndFeel(&m_look);
@@ -593,7 +593,12 @@ namespace g1gui
 		m_hideEmpty.setColour(juce::ToggleButton::tickColourId, g_label);
 		m_hideEmpty.setColour(juce::ToggleButton::tickDisabledColourId, g_label);
 		m_hideEmpty.setTooltip("List only the positions that hold a patch");
-		m_hideEmpty.onClick = [this] { showBank(); };
+		m_hideEmpty.onClick = [this]
+		{
+			if(onHideEmptyChanged)
+				onHideEmptyChanged(m_hideEmpty.getToggleState());
+			showBank();
+		};
 		addAndMakeVisible(m_hideEmpty);
 
 		m_count.setFont(juce::FontOptions(g_textSize));
@@ -729,6 +734,17 @@ namespace g1gui
 		repaint();
 	}
 
+	void PresetsView::refresh()
+	{
+		m_link.readBank(m_bank.getSelectedId() - 1);
+	}
+
+	void PresetsView::setHideEmpty(const bool _on)
+	{
+		m_hideEmpty.setToggleState(_on, juce::dontSendNotification);
+		showBank();
+	}
+
 	void PresetsView::loadAt(const int _position)
 	{
 		const int bank = m_bank.getSelectedId() - 1;
@@ -755,18 +771,12 @@ namespace g1gui
 		return juce::String("Click a patch to load it into slot ") + slots[slot] + ".";
 	}
 
-	// Mike Fiction's frame with its inside blanked (it carries the Synth Settings' own lettering),
-	// the title and the rules as that page has them, the list, and the note below.
+	// Mike Fiction's Presets frame (its title lettered in), the rules as the Synth Settings page
+	// has them, the list, and the note below.
 	void PresetsView::paint(juce::Graphics& _g)
 	{
 		const auto c = getLocalBounds();
 		m_frame.draw(_g, c.toFloat());
-		_g.setColour(juce::Colour(0xff9ea1b2));		// the frame's own grey
-		_g.fillRect(c.reduced(g_frameEdge + 2));
-
-		_g.setColour(g_heading);
-		_g.setFont(juce::FontOptions(15.0f, juce::Font::bold).withHorizontalScale(g_condensed));
-		_g.drawText("PRESETS", c.getX() + g_margin, c.getY() + g_titleY - 2, 200, g_rowH + 4, juce::Justification::centredLeft, false);
 
 		for(const int y : {g_titleRuleY, g_footerY})
 		{
@@ -784,14 +794,16 @@ namespace g1gui
 	}
 
 	// The title bar as the Settings page's: Bank and its box at the right, where Name is, and
-	// before it the filter and the count.
+	// the filter and the count together in the middle.
 	void PresetsView::resized()
 	{
 		const auto c = getLocalBounds();
 		m_bank.setBounds(c.getRight() - g_margin - 90, c.getY() + g_titleY, 90, g_rowH);
 		m_bankLabel.setBounds(m_bank.getX() - 4 - 40, c.getY() + g_titleY, 40, g_rowH);
-		m_count.setBounds(m_bankLabel.getX() - 12 - 52, c.getY() + g_titleY, 52, g_rowH);
-		m_hideEmpty.setBounds(m_count.getX() - 4 - 80, c.getY() + g_titleY - 1, 80, g_rowH + 2);	// JUCE sizes its text to its height
+		constexpr int hideW = 80, countW = 52, gap = 4;
+		const int left = c.getCentreX() - (hideW + gap + countW) / 2;
+		m_hideEmpty.setBounds(left, c.getY() + g_titleY - 1, hideW, g_rowH + 2);	// JUCE sizes its text to its height
+		m_count.setBounds(left + hideW + gap, c.getY() + g_titleY, countW, g_rowH);
 		m_viewport.setBounds(c.getX() + g_margin - 6, c.getY() + g_listTop, c.getWidth() - 2 * g_margin + 12, g_footerY - g_listTop - 6);
 		m_loadPch.setBounds(c.getRight() - g_margin - 84, c.getY() + g_footerY + 8, 84, g_rowH + 6);
 		m_card.setBounds(m_viewport.getBounds().reduced(60, 18));

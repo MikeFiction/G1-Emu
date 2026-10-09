@@ -143,6 +143,13 @@ namespace g1gui
 		bool isOpen() const { return m_open; }	// still drawn for a moment after closing under the other page
 		std::function<void()> onClose;
 
+		// Reads the bank shown again: something may have been stored in it (the panel's Store).
+		void refresh();
+
+		// Hide empty, as the host keeps it: set at the start, and told each time it is clicked.
+		void setHideEmpty(bool _on);
+		std::function<void(bool)> onHideEmptyChanged;
+
 		void paint(juce::Graphics& _g) override;
 		void resized() override;
 		bool keyPressed(const juce::KeyPress& _key) override;

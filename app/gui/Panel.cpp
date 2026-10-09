@@ -179,6 +179,7 @@ namespace g1gui
 		Sprite dialShadow{G1Skin::dial_shadow_png, G1Skin::dial_shadow_pngSize, 289, 289, 1};
 		Sprite buttonWide{G1Skin::button_wide_png, G1Skin::button_wide_pngSize, 180, 90, 2};	// up, down
 		Sprite buttonWideHeld{G1Skin::button_wide_held_png, G1Skin::button_wide_held_pngSize, 180, 90, 1};	// latched or held by a key
+		Sprite buttonGrey{G1Skin::button_grey_png, G1Skin::button_grey_pngSize, 180, 90, 2};	// the page buttons: up, down
 		Sprite buttonTall{G1Skin::button_tall_png, G1Skin::button_tall_pngSize, 90, 180, 2};
 		Sprite buttonTilted{G1Skin::button_tilted_png, G1Skin::button_tilted_pngSize, 148, 148, 2};	// centred on the button
 		Sprite buttonTiltedHeld{G1Skin::button_tilted_held_png, G1Skin::button_tilted_held_pngSize, 148, 148, 1};
@@ -309,10 +310,10 @@ namespace g1gui
 		}
 	}
 
-	// As a wide panel button (PanelButton): down while pressed, a touch lighter under the mouse.
+	// As a wide panel button (PanelButton), in grey: down while pressed, a touch lighter under the mouse.
 	void PageButton::paintButton(juce::Graphics& _g, const bool _over, const bool _down)
 	{
-		const auto& sprite = skin().buttonWide;
+		const auto& sprite = skin().buttonGrey;
 		const auto r = spriteArea(*this);
 		sprite.draw(_g, _down ? 1 : 0, r);
 		if(_over)
@@ -321,7 +322,7 @@ namespace g1gui
 
 	bool PageButton::hitTest(const int _x, const int _y)
 	{
-		return !spriteArea(*this).isEmpty() && g_wideButton.contains(inSprite(*this, skin().buttonWide, _x, _y));
+		return !spriteArea(*this).isEmpty() && g_wideButton.contains(inSprite(*this, skin().buttonGrey, _x, _y));
 	}
 
 	void LedView::paint(juce::Graphics& _g)
@@ -393,6 +394,8 @@ namespace g1gui
 		constexpr double g_pulsePeriodMs = 1200.0;
 		// How long the G1 sees Shift let go after Shift + Random, for the OS to take the knobs.
 		constexpr juce::uint32 g_shiftAfterRandomMs = 300;
+		// How long after Store the Presets page reads its bank again, for a store to be in it.
+		constexpr int g_storeRereadMs = 1500;
 		// A knob the window has just turned (by hand, Random) shows its own position this long
 		// before it follows the patch again: until the OS has read it, the patch's value is the old.
 		constexpr juce::uint32 g_knobSettleMs = 500;
@@ -1326,6 +1329,8 @@ namespace g1gui
 			m_presetsLed.setOn(false);
 			grabKeyboardFocus();
 		};
+		m_presetsView.setHideEmpty(m_host.presetsHideEmpty());
+		m_presetsView.onHideEmptyChanged = [this](const bool _on) { m_host.setPresetsHideEmpty(_on); };
 		addChildComponent(m_presetsView);
 
 		setExtrasOpen(m_host.extrasOpen());
@@ -1360,6 +1365,14 @@ namespace g1gui
 
 	void Panel::buttonPressed(PanelButton& _b)
 	{
+		// The OS tells no one of a patch stored from the panel (Store, then Store again to confirm):
+		// the Presets page reads its bank again once the store has had time to be written.
+		if(&_b == m_modeButtons[0] && !m_shift->isPressed() && m_presetsView.isOpen())
+			juce::Timer::callAfterDelay(g_storeRereadMs, [panel = juce::Component::SafePointer<Panel>(this)]
+			{
+				if(panel != nullptr && panel->m_presetsView.isOpen())
+					panel->m_presetsView.refresh();
+			});
 		if(&_b == m_shift || !m_shift->isPressed())
 			return;
 		m_shiftUsed = !_b.wasTaken();	// what the window takes (Random) leaves Shift held
@@ -1496,7 +1509,7 @@ namespace g1gui
 		place(*m_nav[2], wideAt(2655, 281));
 		place(*m_nav[3], tallAt(2587, navMiddle + navGap / 2.0f));
 		place(*m_assign, skf(g_assignX - 74, g_assignY - 74, 148, 148));
-		place(*m_shift, wideAt(2323, 614));
+		place(*m_shift, wideAt(2323, 604));
 		place(m_dial, skf(g_dialX - g_dialSize / 2, g_dialY - g_dialSize / 2, g_dialSize, g_dialSize));
 
 		// The status bar below the face, with Extras, Patreon, Report issue and Settings at its right

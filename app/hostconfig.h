@@ -40,6 +40,7 @@ namespace g1app
 		bool knobFollowsPatch = false;		// the knobs show the patch's values, not where they were turned
 		uint32_t randomExclude = 0;			// the knobs Random leaves alone: bit k for knob k + 1
 		bool tooltips = true;				// the window's tooltips beside the mouse
+		bool presetsHideEmpty = true;		// the Presets page lists only the positions that hold a patch
 		int masterVolume = -1;				// the window's master volume knob as it was left (0-255; -1: not yet)
 		float panelScale = 1.25f;			// the window's size: 1 is the panel's 1200 pixels wide; 1.25 is half the skin's
 
