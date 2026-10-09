@@ -125,6 +125,7 @@ namespace g1gui
 		juce::ComboBox m_knob, m_pedal, m_program, m_leds;
 		ValueBox m_velMin{0, 127}, m_velMax{0, 127};
 		juce::Label m_note;
+		juce::TextButton m_close{"Close"};
 	};
 
 	// The Presets page, in the same frame and place as the Synth Settings: one bank of the synth's
@@ -207,6 +208,7 @@ namespace g1gui
 		juce::Viewport m_viewport;
 		List m_list{*this};
 		juce::TextButton m_loadPch{"Load .pch..."};
+		juce::TextButton m_close{"Close"};
 		std::unique_ptr<juce::FileChooser> m_chooser;
 		PchUpload m_pending;			// the patch Load .pch read, until it is sent or dropped
 		juce::File m_pendingFile;

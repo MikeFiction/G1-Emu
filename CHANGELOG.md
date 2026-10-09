@@ -7,6 +7,11 @@ Older entries cite their commit by hand.
 
 ## 2026-10-09
 
+- [GUI] **A Close button on the Synth Settings and Presets pages (Mike Fiction, Claude).** Each
+  page had only Esc and its own button at the panel's far right to close it; Close now sits at its
+  bottom right, its tooltip naming Esc. On the Presets page Load .pch moves left of it; on the
+  Synth Settings page the note beside it is in two lines. Checked: the standalone builds and runs.
+
 - [Fix] **The Presets page loads into the active slot even while its LED is dark (Mike Fiction,
   Claude).** The page took the slot from the slot LEDs, and the active slot's LED blinks: with B, C
   or D active, the footer swapped between that slot and A in time with the blink, and a click while
