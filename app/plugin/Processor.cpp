@@ -567,6 +567,11 @@ namespace g1plugin
 				runner->queueMidi(m_clockBlock.events[clockAt].offset, m_clockBlock.events[clockAt].bytes, m_clockBlock.events[clockAt].size);
 		};
 
+		// A project's state going back in is moved on here too (restoreStep), never waiting for the
+		// lock: the timer has it, or the message thread is busy, and the next block tries again.
+		if(m_restoring.load(std::memory_order_relaxed))
+			if(std::unique_lock<std::mutex> lifecycle(m_lifecycle, std::try_to_lock); lifecycle)
+				restoreStep();
 		const bool restoring = m_restoring.load(std::memory_order_relaxed);
 		for(const auto m : _midi)
 		{
@@ -873,10 +878,7 @@ namespace g1plugin
 				for(uint32_t k = 0; k < 18; ++k)
 					renamed = m_knobParams[k]->setInfo(map.read(k)) || renamed;
 				const auto now = juce::Time::getMillisecondCounter();
-				if(m_pendingSettings && m_keeper)
-					writePendingSettings();
-				if(m_restoring && ((!m_pendingSettings && m_keeper && m_keeper->settled()) || now - m_restoreStart > RestoreHoldMs))
-					m_restoring = false;
+				restoreStep();
 				// Now and then, but not while the slots go back in: the OS tells no one of a change on
 				// the panel's System menu, of the synth settings or of the active slot's patch settings
 				// (voices, bend range...).
@@ -900,6 +902,19 @@ namespace g1plugin
 		tellHost(edits);
 		if(renamed)
 			updateHostDisplay(ChangeDetails().withParameterInfoChanged(true));
+	}
+
+	// A project's state going back in, a step further: the synth settings written once the slots are
+	// back, and the notes let in once they are too. From the timer, and from processBlock as well:
+	// a host that renders a project offline right after opening it may run no message loop
+	// meanwhile, and the notes would stay held.
+	void Processor::restoreStep()
+	{
+		if(m_pendingSettings && m_keeper)
+			writePendingSettings();
+		if(m_restoring && ((!m_pendingSettings && m_keeper && m_keeper->settled())
+			|| juce::Time::getMillisecondCounter() - m_restoreStart > RestoreHoldMs))
+			m_restoring = false;
 	}
 
 	// The project's synth settings, once the keeper has put the slots back: written, then compared

@@ -7,6 +7,16 @@ Older entries cite their commit by hand.
 
 ## 2026-10-09
 
+- [Fix] **A reopened project lets its notes in when rendered offline (Mike Fiction, Claude, issue
+  #46).** **Touches the plugin:** `app/plugin/Processor.*` and `tools/vst3check`. The notes held
+  back while a project's slots and synth settings go back in were only let in, and the settings
+  only written, from the plugin's timer, on the message thread: a host rendering a project right
+  after opening it with no message loop running (as `g1vst3check` does) kept them held, and the
+  restored instance was silent. `processBlock` now moves the restore on too (`restoreStep`), with
+  a `try_lock` that never waits. `g1vst3check` plays the reopened instance once before measuring
+  it, past the hold (about 3.8 s of the G1's time, past its note at 3 s). It failed on #46's
+  commits and passes now; without the `processBlock` step it still fails.
+
 - [New] **A project keeps the System menu's patch settings (Mike Fiction, Claude, issue #46).**
   **Touches the plugin:** `app/plugin/Processor.*` and `app/slotkeeper.*`. Voices, Bend Range,
   Keyb Range and the rest of the System menu's Patch side are now recalled with the DAW project.

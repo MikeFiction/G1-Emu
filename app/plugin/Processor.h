@@ -177,6 +177,7 @@ namespace g1plugin
 		// The knobs something other than the host turned: (index, value) for the host, VolumeIndex
 		// for the volume. Under m_lifecycle; the host is told after (tellHost).
 		void knobsToHost(g1::Microcontroller& _mc, std::vector<std::pair<size_t, float>>& _edits);
+		void restoreStep();			// m_lifecycle held
 		void writePendingSettings();	// m_lifecycle held
 		void tellHost(const std::vector<std::pair<size_t, float>>& _edits);
 		void startFromStandalone(g1app::Engine& _engine);
