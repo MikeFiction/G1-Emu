@@ -213,6 +213,8 @@ int main()
 		link2.write(kept);	// the first write after the slot's upload, as the plugin's
 		const bool again = waitFor2(r1, restarted) > r1 && same(restarted, changed);
 		check(again, "written back, they are there again: " + describe(restarted));
+		// The link's read and write are not a patch change: the keeper has no slot to read again.
+		check(keeper2.settled(), "the keeper takes the settings' read and write for no change of slot A");
 	}
 
 	// 4. encode/decode

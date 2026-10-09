@@ -357,6 +357,7 @@ namespace g1plugin
 		m_pendingSettings.reset();
 		m_settingsTries = 0;
 		m_settingsWrittenAt = 0;
+		m_systemMenu = false;
 		m_restoring = false;
 		m_presets.reset();
 		m_unstarted = false;
@@ -876,13 +877,21 @@ namespace g1plugin
 					writePendingSettings();
 				if(m_restoring && ((!m_pendingSettings && m_keeper && m_keeper->settled()) || now - m_restoreStart > RestoreHoldMs))
 					m_restoring = false;
-				// Now and then, but not while the slots go back in: the OS tells no one of a change of
-				// the synth settings on the panel's System menu. The project saves them as the OS last
-				// said them (but its own, while they are still to be written).
-				if(!m_restoring && m_runner && !m_pendingSettings && now - m_polledAt >= PollMs)
+				// Now and then, but not while the slots go back in: the OS tells no one of a change on
+				// the panel's System menu, of the synth settings or of the active slot's patch settings
+				// (voices, bend range...).
+				if(!m_restoring && m_runner && m_keeper && now - m_polledAt >= PollMs)
 				{
 					m_polledAt = now;
-					m_synthSettings.read();
+					// The project saves the synth settings as the OS last said them (but its own, while
+					// they are still to be written).
+					if(!m_pendingSettings)
+						m_synthSettings.read();
+					// The active slot is read again while the System menu is open, and once after.
+					const bool systemMenu = !(mc.ledRow(SystemLedRow) & (1u << SystemLedBit));	// active low
+					if(systemMenu || m_systemMenu)
+						m_keeper->reread(mc.read8(g1::KnobMap::ActiveSlot + map.osShift()) & 3);
+					m_systemMenu = systemMenu;
 				}
 			}
 		}

@@ -48,6 +48,9 @@ namespace g1app
 		// G1 once it has booted (empty slots are left alone) and then keeps them as known.
 		Slots slots() const;
 		void restore(const Slots& _slots);
+		// _slot may have changed in a way the OS tells no one (the System menu's patch settings):
+		// read it again once the PC Port is quiet.
+		void reread(size_t _slot);
 		// True while nothing is waiting to be fetched or uploaded: slots() is what the G1 has.
 		bool settled() const;
 

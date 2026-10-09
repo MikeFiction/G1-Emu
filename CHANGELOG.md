@@ -7,6 +7,18 @@ Older entries cite their commit by hand.
 
 ## 2026-10-09
 
+- [New] **A project keeps the System menu's patch settings (Mike Fiction, Claude, issue #46).**
+  **Touches the plugin:** `app/plugin/Processor.*` and `app/slotkeeper.*`. Voices, Bend Range,
+  Keyb Range and the rest of the System menu's Patch side are now recalled with the DAW project.
+  They change the active slot's patch, but the OS tells no one, so the `SlotKeeper` had no reason
+  to read the slot again: the plugin now asks it to every 2 s while the System menu is open (its
+  LED lit) and once after (`SlotKeeper::reread()`). The keeper also no longer takes the synth
+  settings' read and write going by for a change of slot A, which had it read the slot again for
+  nothing. `g1slotkeepertest` gets a step (Bend Range changed on the emulated panel's menu: the
+  keeper has the new header once asked) and `g1synthsettingstest` a check (the keeper stays
+  settled through a settings write; it failed before). Checked by Mike Fiction in Bitwig: Bend
+  Range, Vel Range and Portamento time come back with the project.
+
 - [New] **A project keeps the synth settings (Mike Fiction, Claude, issue #46).** **Touches the
   plugin:** `app/plugin/Processor.*`, `app/slotkeeper.*` and `app/synthsettings.*`. With the
   Synth Settings page, the settings it shows (MIDI channels, clock, tune and the rest) are now

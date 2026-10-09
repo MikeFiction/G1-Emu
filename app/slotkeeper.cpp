@@ -31,6 +31,7 @@ namespace g1app
 		// 7 MorphMap, 8 KnobMap, 9 ControlMap, 10-11 NameDump, 12 NoteDump.
 		constexpr uint8_t g_replyTypes[RequestCount] = {33, 74, 74, 82, 82, 77, 77, 101, 98, 96, 90, 90, 105};
 		constexpr size_t HeaderBytes = 11;			// type (8 bits) + Header (80 bits): no padding
+		constexpr uint8_t SettingsSection = 3;		// the synth settings' section (synthsettings.h)
 
 		bool isGetPatch(const uint8_t _sc)
 		{
@@ -261,6 +262,13 @@ namespace g1app
 		m_hasRestore = true;
 	}
 
+	void SlotKeeper::reread(const size_t _slot)
+	{
+		std::lock_guard<std::mutex> lock(m_mutex);
+		if(_slot < SlotCount)
+			m_dirty[_slot] = true;
+	}
+
 	bool SlotKeeper::settled() const
 	{
 		std::lock_guard<std::mutex> lock(m_mutex);
@@ -324,8 +332,18 @@ namespace g1app
 					if(changes)
 						slot = static_cast<uint8_t>(_m[6] & 3);
 				}
+				else if(_m[4] == 0x44)
+					changes = false;	// the synth settings (RequestSynthSettings): no slot's patch
 				else
 					changes = !isGetPatch(_m[5]);	// a patch modification, not a read
+			}
+			// Nor is the synth settings section (type 3) sent back in one packet, as an editor (or
+			// the SynthSettingsLink) writes them: it would have the keeper read slot A for nothing.
+			if(cc == 0x1f && _m.size() > 8)
+			{
+				const auto raw = unpack7(std::vector<uint8_t>(_m.begin() + 5, _m.end() - 2));
+				if(!raw.empty() && raw[0] == SettingsSection)
+					changes = false;
 			}
 			if(changes)
 			{

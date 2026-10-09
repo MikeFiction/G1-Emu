@@ -209,6 +209,7 @@ namespace g1plugin
 		static constexpr juce::uint32 SettingsCheckMs = 1500;	// after a write, how long to wait for it to be read back
 		static constexpr juce::uint32 PollMs = 2000;			// how often the OS's settings are read for the project
 		static constexpr juce::uint32 RestoreHoldMs = 15000;	// the longest the notes are held back
+		static constexpr uint32_t SystemLedRow = 3, SystemLedBit = 4;	// the System key's LED
 		// The project's synth settings, written once the keeper has put the slots back (a write in
 		// the middle of a slot's upload breaks it: the OS shows "Error"). Kept until the OS reads
 		// them back, and written again up to SettingsTries times if it does not.
@@ -217,6 +218,7 @@ namespace g1plugin
 		juce::uint32 m_settingsWrittenAt = 0;	// 0: not written yet (or to be written again)
 		uint64_t m_settingsRevision = 0;		// the link's revision before the write: a later one is its reading back
 		juce::uint32 m_polledAt = 0;			// when the OS's settings were last asked for
+		bool m_systemMenu = false;				// the System key's LED was lit at the last look
 		// A project's state going back in (slots, then synth settings): the track's notes are left
 		// out meanwhile, so none is played on a slot whose MIDI channel is about to change and then
 		// hangs, its note off arriving on the channel the slot no longer hears. At most
