@@ -113,6 +113,7 @@ namespace g1app
 		std::lock_guard<std::mutex> lock(m_mutex);
 		m_toWrite = _settings;
 		m_writeWanted = true;
+		m_pidFresh = false;		// read first: slot A may hold another patch since the last read
 	}
 
 	bool SynthSettingsLink::settings(SynthSettings& _out, uint64_t& _revision) const
@@ -128,6 +129,7 @@ namespace g1app
 		std::lock_guard<std::mutex> lock(m_mutex);
 		m_readWanted = true;
 		m_writeWanted = false;
+		m_pidFresh = false;
 		m_state = State::Idle;
 		m_greeted = false;
 		m_pid = 0;
@@ -209,8 +211,14 @@ namespace g1app
 		if(SynthSettings::decode(unpack7(m_packets), s))
 		{
 			std::lock_guard<std::mutex> lock(m_mutex);
-			m_settings = s;
-			++m_revision;
+			// With a write waiting, this read was for the pid: what it says is about to be replaced,
+			// and shown it would flash the old values on the page until the write is read back.
+			if(!m_writeWanted)
+			{
+				m_settings = s;
+				++m_revision;
+			}
+			m_pidFresh = true;
 			finish(_nowMs);
 		}
 		m_packets.clear();
@@ -237,11 +245,15 @@ namespace g1app
 		}
 	}
 
-	// A write first, then a read: a write is read back to see what the OS made of it.
+	// A write first, then a read: a write is read back to see what the OS made of it. A write
+	// waits for a read that brings the pid it must carry (m_pidFresh).
 	void SynthSettingsLink::startNext(const uint64_t _nowMs, std::vector<uint8_t>& _toG1)
 	{
 		std::lock_guard<std::mutex> lock(m_mutex);
-		if(m_writeWanted)
+		const auto read = [&] { request(frame(CcPatch, 0, {0x44, 0x02, 0x06, 0x08, 0x04}), State::Reading, ReplyMs, _nowMs, _toG1); };	// RequestSynthSettings, as NME
+		if(m_writeWanted && !m_pidFresh)
+			read();
+		else if(m_writeWanted)
 		{
 			m_writeWanted = false;
 			m_readWanted = true;
@@ -252,7 +264,7 @@ namespace g1app
 		else if(m_readWanted)
 		{
 			m_readWanted = false;
-			request(frame(CcPatch, 0, {0x44, 0x02, 0x06, 0x08, 0x04}), State::Reading, ReplyMs, _nowMs, _toG1);	// RequestSynthSettings, as NME
+			read();
 		}
 	}
 

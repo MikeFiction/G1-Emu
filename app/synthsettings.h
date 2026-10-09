@@ -90,6 +90,9 @@ namespace g1app
 		std::atomic<State> m_state{State::Idle};
 		bool m_greeted = false;			// an unanswered request gets one IAm, as an editor's would
 		uint8_t m_pid = 0;				// as the OS's last reply had it
+		// m_pid read since write() was called. A write carries the pid of slot A's patch, which a
+		// patch loaded or uploaded into slot A changes; with an old one the OS drops the write.
+		bool m_pidFresh = false;
 		uint64_t m_deadline = 0;
 		uint64_t m_filterUntil = 0;		// replies to the link are hidden from the editor until then
 		uint64_t m_lastActivity = 0;	// the editor's last message

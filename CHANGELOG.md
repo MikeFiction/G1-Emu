@@ -7,6 +7,15 @@ Older entries cite their commit by hand.
 
 ## 2026-10-09
 
+- [Fix] **The Synth Settings page's change is taken after slot A gets a new patch (Mike Fiction,
+  Claude).** **Touches the plugin and `EmuHost`:** `app/synthsettings.cpp`, the link both use. A
+  settings write carries the pid of slot A's patch, and the OS drops one with an old pid without a
+  word. The link knew the pid from its last read, so once a patch had gone into slot A since (an
+  upload, as when a project's slots go back in), the next change on the page was dropped. The
+  link now reads first before every write, without showing that read on the page (it flashed the
+  old value). The new `g1synthsettingstest` step writes right after a slot is restored into A; it
+  failed before.
+
 - [Fix] **A project keeps the knobs turned on the panel (Mike Fiction, Claude, issue #46).**
   **Touches the plugin:** `app/slotkeeper.cpp` (`SlotKeeper::g1Sent`). After reopening a
   project, a knob turned on the panel was back where it was, or with Knob Follows Patch off, in
