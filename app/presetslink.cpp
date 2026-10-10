@@ -229,13 +229,15 @@ namespace g1app
 			traceMsg(hide ? "<-" : "<= (to the editor)", _nowMs, _m);
 			if(!hide)
 				_toEditor.insert(_toEditor.end(), _m.begin(), _m.end());
-			if(!m_toEditor.empty())
-			{
-				traceMsg("=> (to the editor, ours)", _nowMs, m_toEditor);
-				_toEditor.insert(_toEditor.end(), m_toEditor.begin(), m_toEditor.end());
-				m_toEditor.clear();
-			}
 		});
+		// The link's own word to the editor, after what the G1 said: also when the G1 says nothing
+		// (an upload loaded only, with no Store to answer after it).
+		if(!m_toEditor.empty())
+		{
+			traceMsg("=> (to the editor, ours)", _nowMs, m_toEditor);
+			_toEditor.insert(_toEditor.end(), m_toEditor.begin(), m_toEditor.end());
+			m_toEditor.clear();
+		}
 	}
 
 	// The ACKs to the link's own requests, while one is open or shortly after: not the editor's.

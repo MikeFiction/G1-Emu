@@ -5,6 +5,14 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-10
+
+- [Fix] **A patch loaded only, from the Presets page, shows in Animatek NME (Mike Fiction,
+  Claude).** `app/presetslink.cpp`. The notice that tells the editor of the new patch went out
+  only along with something the G1 said next: after Store its answer took it, but after Load
+  only it waited. It now goes at once. Checked by Mike Fiction in the standalone with Animatek
+  NME.
+
 ## 2026-10-09
 
 - [Docs] **Agent instructions: the shared CODE changelog is written with `cambios apuntar` (Claude, asked by
