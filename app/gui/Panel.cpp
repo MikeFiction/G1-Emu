@@ -1833,8 +1833,7 @@ namespace g1gui
 		}
 	}
 
-	// Only where the knob still moves the same parameter, and not the morph groups (left to their
-	// own positions for now).
+	// Only where the knob still moves the same parameter (or morph group).
 	void Panel::restoreKnobs()
 	{
 		if(!m_haveSnapshot)
@@ -1844,7 +1843,7 @@ namespace g1gui
 			for(uint32_t k = 0; k < 18; ++k)
 			{
 				const auto& s = m_snapshot[k];
-				if(s.assigned && s.section != 2 && sameAssignment(s, m_knobMap.read(k)))
+				if(s.assigned && sameAssignment(s, m_knobMap.read(k)))
 					setKnobTurning(k, g1::KnobMap::positionFor(s.value, s.max));
 			}
 		});
@@ -1946,8 +1945,8 @@ namespace g1gui
 	// The knobs follow the G1's own positions, which something else may have moved (the plugin's
 	// host automation), except the one being turned by hand. Following the patch, a knob shows
 	// instead where its parameter's value would put it, as a patch loaded on the hardware leaves
-	// its knobs where they were; turning it starts from there. A knob with nothing assigned, or on
-	// a morph group (left to its own position for now), shows its position.
+	// its knobs where they were; turning it starts from there. A knob on a morph group follows the
+	// group's value. A knob with nothing assigned shows its position.
 	void Panel::updateKnobs(const std::array<g1::KnobInfo, 18>& _info)
 	{
 		const bool follow = m_followToggle.getToggleState();
@@ -1958,7 +1957,7 @@ namespace g1gui
 				continue;
 			const auto& k = _info[i];
 			const bool settling = m_knobTurnedAt[i] != 0 && now - m_knobTurnedAt[i] < g_knobSettleMs;
-			const bool fromPatch = follow && k.assigned && k.section != 2 && !settling;
+			const bool fromPatch = follow && k.assigned && !settling;
 			if(!fromPatch)
 				m_knobTarget[i] = m_mc.adc(g_knobAdc[i]);
 			else if(!givesValue(static_cast<int>(m_knobTarget[i]), k))

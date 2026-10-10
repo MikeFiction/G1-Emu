@@ -5,6 +5,14 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-10
+
+- [Fix] **A knob on a morph group follows the group's value (Mike Fiction, Claude).**
+  `app/gui/Panel.cpp`. With Knob Follows Patch on, a knob assigned to a morph group stayed where
+  it was turned while the group's value changed elsewhere (the dial on the Morph page, the editor,
+  another patch). It now turns to the value, as a knob on a parameter does. Checked by Mike
+  Fiction in the standalone.
+
 ## 2026-10-09
 
 - [Docs] **Agent instructions: the shared CODE changelog is written with `cambios apuntar` (Claude, asked by
