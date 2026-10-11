@@ -19,7 +19,7 @@ namespace g1app
 		constexpr uint64_t WriteMs = 300;		// the OS takes them without a word; then they are read back
 		constexpr uint64_t FilterTailMs = 300;	// late replies to an abandoned request
 
-		constexpr uint8_t CcIAm = 0x00, CcAck = 0x16, CcPatch = 0x17;
+		constexpr uint8_t CcIAm = 0x00, CcAck = 0x16, CcPatch = 0x17, CcSettings = 0x1f;
 		constexpr uint8_t SectionType = 3;
 		constexpr uint8_t ChannelMarker = 27;	// after each slot's channel, as the OS writes it
 
@@ -131,7 +131,7 @@ namespace g1app
 		m_state = State::Idle;
 		m_greeted = false;
 		m_pid = 0;
-		m_deadline = m_filterUntil = m_lastActivity = 0;
+		m_deadline = m_filterUntil = m_lastActivity = m_lastRead = 0;
 		m_packets.clear();
 		m_rx.clear();
 		m_editorRx.clear();
@@ -157,11 +157,13 @@ namespace g1app
 				return;
 			m_lastActivity = _nowMs;
 			// The editor talks: the link gets out of the way and tries again once it is quiet.
-			if(m_state == State::Reading)
+			// The editor's own settings ($1F) are read back too, once it is quiet, if they are kept.
+			if(m_state == State::Reading || (isClavia(_m) && ccOf(_m) == CcSettings && m_rereadMs > 0))
 			{
 				std::lock_guard<std::mutex> lock(m_mutex);
 				m_readWanted = true;
-				finish(_nowMs);
+				if(m_state == State::Reading)
+					finish(_nowMs);
 			}
 		});
 	}
@@ -220,6 +222,11 @@ namespace g1app
 	{
 		if(m_state == State::Idle)
 		{
+			if(const auto reread = m_rereadMs.load(); reread > 0 && m_lastRead > 0 && _nowMs >= m_lastRead + reread)
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				m_readWanted = true;
+			}
 			if(_nowMs >= BootMs && _nowMs >= m_filterUntil && _nowMs >= m_lastActivity + QuietMs)
 				startNext(_nowMs, _toG1);
 			return;
@@ -252,6 +259,7 @@ namespace g1app
 		else if(m_readWanted)
 		{
 			m_readWanted = false;
+			m_lastRead = _nowMs;
 			request(frame(CcPatch, 0, {0x44, 0x02, 0x06, 0x08, 0x04}), State::Reading, ReplyMs, _nowMs, _toG1);	// RequestSynthSettings, as NME
 		}
 	}

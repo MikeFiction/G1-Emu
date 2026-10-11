@@ -1,6 +1,6 @@
 // g1vst3check: loads the built G1-Emu.vst3 through JUCE's VST3 host, as a DAW would, and plays it.
 //
-//   g1vst3check path/to/G1-Emu.vst3 [--slots | --window | --clock packets-dir]
+//   g1vst3check path/to/G1-Emu.vst3 [--slots | --settings | --window | --clock packets-dir]
 //
 // Two instances at once in one process, each with its own Program Change and a note, rendered
 // offline block by block and interleaved; then the first one's state goes into a third instance,
@@ -15,6 +15,9 @@
 // --slots, alone (issue #25, where there are PC Ports): a patch sent to slot A through the PC
 // Port, as an editor sends it and not stored in any bank, must be in the project saved
 // afterwards; a new instance opened from that project, with no editor, must play it.
+//
+// --settings, alone (issue #46): the synth settings in use are in the project, and a project's
+// own (slot A put on channel 5) are the ones a new instance opened from it runs with.
 
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -445,6 +448,62 @@ namespace
 		return parts.joinIntoString(", ");
 	}
 
+	// The synth settings section in a plugin state (<SynthSettings>, gzip + base64), and back.
+	std::vector<uint8_t> settingsSection(const juce::XmlElement& _plugin)
+	{
+		const auto* x = _plugin.getChildByName("SynthSettings");
+		juce::MemoryBlock packed;
+		if(!x || !packed.fromBase64Encoding(x->getAllSubText()))
+			return {};
+		juce::MemoryInputStream in(packed, false);
+		juce::GZIPDecompressorInputStream zip(in);
+		juce::MemoryBlock plain;
+		juce::MemoryOutputStream out(plain, false);
+		out.writeFromInputStream(zip, -1);
+		out.flush();
+		const auto* d = static_cast<const uint8_t*>(plain.getData());
+		return {d, d + plain.getSize()};
+	}
+
+	void setSettingsSection(juce::XmlElement& _plugin, const std::vector<uint8_t>& _section)
+	{
+		juce::MemoryOutputStream packed;
+		{
+			juce::GZIPCompressorOutputStream zip(packed, 9);
+			zip.write(_section.data(), _section.size());
+		}
+		auto* x = _plugin.getChildByName("SynthSettings");
+		if(!x)
+			x = _plugin.createNewChildElement("SynthSettings");
+		x->deleteAllTextElements();
+		x->addTextElement(packed.getMemoryBlock().toBase64Encoding());
+	}
+
+	// Where the four slots' MIDI channels are in a section: after 7 bytes of globals and the name
+	// (ended by a zero when shorter than 16), each channel followed by a marker. Empty if none.
+	std::vector<size_t> channelOffsets(const std::vector<uint8_t>& _s)
+	{
+		if(_s.size() < 8 || _s[0] != 3)
+			return {};
+		size_t p = 7, n = 0;
+		while(p < _s.size() && n < 16 && _s[p] != 0)
+			++p, ++n;
+		if(n < 16)
+			++p;
+		std::vector<size_t> at;
+		for(int slot = 0; slot < 4 && p < _s.size(); ++slot, p += 2)
+			at.push_back(p);
+		return at.size() == 4 ? at : std::vector<size_t>{};
+	}
+
+	juce::String channelsText(const std::vector<uint8_t>& _s)
+	{
+		juce::StringArray parts;
+		for(const auto p : channelOffsets(_s))
+			parts.add(juce::String(_s[p] + 1));
+		return parts.isEmpty() ? juce::String("(none)") : parts.joinIntoString(" ");
+	}
+
 	int parameterIndex(juce::AudioPluginInstance& _p, const juce::String& _name)
 	{
 		const auto params = _p.getParameters();
@@ -526,6 +585,49 @@ namespace
 	// --window: the editor's size and the extras' settings live in the project. A window resized
 	// by the host is saved at that size; a project with the extras open, the displays on and the
 	// knobs following the patch opens like that, at the size it was saved at.
+	// Issue #46 (--settings): the synth settings in use go into the project and come back from it,
+	// stored with Shift+Store or not and under either OS. A project's slot A put on channel 5 by
+	// hand must be on channel 5 in a new instance opened from it, as its own state then says
+	// once the instance has read them back from the OS (so the OS took them).
+	int checkSettings(juce::AudioPluginFormatManager& _formats, const juce::String& _path)
+	{
+		Voice f;
+		f.plugin = load(_formats, _path);
+		drone(*f.plugin, 4.0);
+		juce::MemoryBlock project;
+		f.plugin->getStateInformation(project);
+		f.plugin.reset();
+		auto xml = pluginXml(project);
+		const auto saved = xml ? settingsSection(*xml) : std::vector<uint8_t>{};
+		std::printf("issue #46: a new instance saves the channels %s\n", channelsText(saved).toRawUTF8());
+		const auto at = channelOffsets(saved);
+		if(at.empty())
+		{
+			std::printf("FAIL: no synth settings in the project\n");
+			return 1;
+		}
+
+		auto changed = saved;
+		changed[at[0]] = 4;		// slot A on channel 5
+		setSettingsSection(*xml, changed);
+		Voice g;
+		g.plugin = load(_formats, _path);
+		const auto edited = withPluginXml(project, *xml);
+		g.plugin->setStateInformation(edited.getData(), static_cast<int>(edited.getSize()));
+		drone(*g.plugin, 8.0);	// the settings go in once the G1 is up (2.5 s), and are read back
+		juce::MemoryBlock again;
+		g.plugin->getStateInformation(again);
+		const auto reopened = pluginXml(again);
+		const auto back = reopened ? settingsSection(*reopened) : std::vector<uint8_t>{};
+		std::printf("issue #46: the project with slot A on channel 5, reopened, saves the channels %s\n", channelsText(back).toRawUTF8());
+		if(back != changed)
+		{
+			std::printf("FAIL: the project's synth settings do not come back\n");
+			return 1;
+		}
+		return 0;
+	}
+
 	int checkWindow(juce::AudioPluginFormatManager& _formats, const juce::String& _path)
 	{
 		const KeepPreferences keep;
@@ -655,6 +757,12 @@ int main(int _argc, char** _argv)
 	if(_argc > 3 && juce::String(_argv[2]) == "--clock")
 	{
 		failed = checkClock(formats, path, juce::File(juce::String(_argv[3])));
+		std::printf("%s\n", failed ? "FAILED" : "all good");
+		return failed;
+	}
+	if(_argc > 2 && juce::String(_argv[2]) == "--settings")
+	{
+		failed = checkSettings(formats, path);
 		std::printf("%s\n", failed ? "FAILED" : "all good");
 		return failed;
 	}

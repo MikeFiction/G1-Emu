@@ -55,6 +55,16 @@ and puts it back over whatever OS a loaded flash file had. `g1Lib/g1knobs.h` tel
 apart by where the DSP host-port table is and adds `$20` for the update. Getting the image out of
 the updater is not described here; `g1patchtest` takes `G1_OS` too.
 
+**Synth settings written by an editor are not stored (2026-10-09, `g1synthsettingstest`).** The
+section an editor sends ($1F, NME's Synth Settings dialog) changes the settings in use and leaves
+the flash as it was, as the panel's System menu does: only Shift+Store writes them into the flash.
+So a G1 booted from that flash has its old ones (under the factory OS, which loads no stored
+settings at all, always the defaults). The OS builds its answer to RequestSynthSettings as the
+section itself at `$160CCA` (`$20` higher under the update), but only when asked: it is a reply
+buffer, not where the settings live (after boot it holds `05 01 00...`). The settings in use are
+spread elsewhere in other layouts (the name at `$15BC50`, the tempo at `$1A84A5`, each slot's
+channel in its slot block at `$1AEE1C` + `$6000` per slot, factory OS), not mapped further.
+
 **Micro Modular: the same code base with one DSP.** It keeps the eight-port HI08 table, but where
 the rack checks for the expansion and sets 4 or 8 DSPs (`$10BB12`), the Micro sets 1 (`$1050E4`)
 and boots only DSP 0. Its DSP program is the rack's DSP 0 program (codec input) carrying DSP 3's

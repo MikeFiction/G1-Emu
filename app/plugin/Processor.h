@@ -28,6 +28,7 @@
 #include <cmath>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -200,7 +201,8 @@ namespace g1plugin
 		std::unique_ptr<g1app::Engine> m_engine;
 		std::unique_ptr<g1app::Runner> m_runner;
 		std::unique_ptr<g1app::SlotKeeper> m_keeper;	// what each slot holds; lives as long as m_engine
-		g1app::SynthSettingsLink m_synthSettings;	// the OS's synth settings, for the panel's overlay
+		g1app::SynthSettingsLink m_synthSettings;	// the OS's synth settings, for the panel's overlay and the project
+		std::optional<g1app::SynthSettings> m_projectSettings;	// the project's, saved again until the link has read them
 		g1app::PresetsLink m_presets;				// the OS's banks, for the panel's Presets page
 		std::vector<uint8_t> m_os;				// HostOptions::os, if set: the OS to run instead of the ROM's
 		std::atomic<int> m_generation{0};

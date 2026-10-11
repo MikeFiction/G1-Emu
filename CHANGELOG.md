@@ -7,6 +7,22 @@ Older entries cite their commit by hand.
 
 ## 2026-10-11
 
+- [Fix] **The plugin keeps the synth settings in the project (Claude, issue #46, reported by
+  Fabien).** A project reopened with the slots' MIDI channels, the clock and the other synth settings
+  back to the G1's defaults: an editor's settings and the System menu's live in RAM only, Shift+Store
+  is what stores them, and the factory OS never loads stored ones at power-on (the 3.03b update
+  does). The project now carries the settings in use (`<SynthSettings>`), stored or not, and sends
+  them to the G1 once it is up. The `SynthSettingsLink` keeps them current for that: in the plugin
+  it reads them again every 5 s of quiet, since the System menu changes them without a word, and
+  once an editor that sent its own is quiet (`setReread`). Until it has read them, a reopened
+  project saves its own again. Checked: `g1synthsettingstest` (now also: a write is not stored; a
+  new G1 given them reads them back; an editor's and unannounced changes are read again) passes
+  under the factory OS and the 3.03b update; the new `g1vst3check --settings` puts a project's slot A
+  on channel 5, opens it in a new instance and gets 5 back from the instance's own state, under both
+  OSes; all 13 tests pass. Not tried by hand in a DAW. NOTES.md: an editor's settings are not
+  stored, and where the OS builds its reply. README FAQ updated. The other half of #46 (knob
+  changes on the panel not recalled) is not addressed here.
+
 - [Docs] **The README for people who download a release (Claude, asked by Javier).** YouTube
   comments kept asking how to install it, how to load sounds and where Animatek NME is: the README
   only explained building. New **Getting started** (which archive, the plugin folders, macOS

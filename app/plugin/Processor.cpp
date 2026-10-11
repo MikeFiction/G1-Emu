@@ -19,6 +19,9 @@ namespace g1plugin
 		constexpr const char* g_stateTag = "G1EmuState";
 		constexpr int g_stateVersion = 1;
 		constexpr int g_stereoBuses = 2;	// Out 1/2 and Out 3/4; after them, Out 1..4 mono
+		// How often the synth settings are read again for the project (issue #46): the panel's
+		// System menu changes them without telling anyone.
+		constexpr uint64_t g_settingsRereadMs = 5000;
 
 		juce::String packBytes(const std::vector<uint8_t>& _data)
 		{
@@ -354,6 +357,8 @@ namespace g1plugin
 		auto engine = std::make_unique<g1app::Engine>(m_rom, m_os);
 		m_keeper = std::make_unique<g1app::SlotKeeper>();
 		m_synthSettings.reset();
+		m_synthSettings.setReread(g_settingsRereadMs);
+		m_projectSettings.reset();
 		m_presets.reset();
 		m_unstarted = false;
 		if(_state)
@@ -606,8 +611,9 @@ namespace g1plugin
 	}
 
 	// ____________________________________________________________________________________________
-	// State: the G1's user state (the flash against the factory one), the knob positions, and the
-	// panel's two preferences. Never the OS: Engine::userState.
+	// State: the G1's user state (the flash against the factory one), the knob positions, what each
+	// slot holds, the synth settings in use, and the panel's preferences. Never the OS:
+	// Engine::userState.
 
 	// Asked for a state before there is a G1 (the host saves before it starts the audio): what the
 	// plugin has besides the flash, which applyState takes as a new instance's.
@@ -666,6 +672,12 @@ namespace g1plugin
 		// What each slot holds, which the flash does not (issue #25): as the keeper last read it.
 		if(m_keeper)
 			xml.createNewChildElement("Slots")->addTextElement(packBytes(g1app::SlotKeeper::pack(m_keeper->slots())));
+		// The synth settings in use (issue #46), stored with Shift+Store or not: as the link last
+		// read them (it reads them again every few seconds), or, before it has, the project's own.
+		g1app::SynthSettings settings;
+		uint64_t revision = 0;
+		if(m_synthSettings.settings(settings, revision) || m_projectSettings)
+			xml.createNewChildElement("SynthSettings")->addTextElement(packBytes((revision > 0 ? settings : *m_projectSettings).encode()));
 		juce::MemoryBlock out;
 		copyXmlToBinary(xml, out);
 		return out;
@@ -719,6 +731,16 @@ namespace g1plugin
 		if(const auto* slotsXml = xml->getChildByName("Slots"); m_keeper && slotsXml
 			&& unpackBytes(slotsXml->getAllSubText(), slotBytes) && g1app::SlotKeeper::unpack(slotBytes, slots))
 			m_keeper->restore(slots);
+		// And the synth settings, sent once the G1 is up: the factory OS never loads stored ones at
+		// power-on, and the update loads only what Shift+Store last kept (issue #46).
+		std::vector<uint8_t> settingsBytes;
+		g1app::SynthSettings settings;
+		if(const auto* settingsXml = xml->getChildByName("SynthSettings"); settingsXml
+			&& unpackBytes(settingsXml->getAllSubText(), settingsBytes) && g1app::SynthSettings::decode(settingsBytes, settings))
+		{
+			m_synthSettings.write(settings);
+			m_projectSettings = settings;
+		}
 		m_origin = otherOs ? "this project, saved with another OS: its banks and settings, with the OS in use" : "this project";
 		return true;
 	}

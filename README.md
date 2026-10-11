@@ -310,8 +310,10 @@ and two loopMIDI cables on Windows for now ([`WINDOWS.md`](WINDOWS.md)).
 **The MIDI channels and other synth settings are gone when I reopen my project.**
 On the G1 they are kept only by **Shift+Store**, and the ROM's factory OS does not load them at
 power-on at all (the 3.03b update does: see
-[the OS a real G1 runs](#optional-the-os-a-real-g1-runs)). The plugin keeping the settings in use
-in the project is tracked in [#46](https://github.com/animatek/G1-Emu/issues/46).
+[the OS a real G1 runs](#optional-the-os-a-real-g1-runs)). **From the release after alpha.14 the
+plugin keeps the settings in use in the project**, stored or not, and gives them back when the
+project opens, under either OS ([#46](https://github.com/animatek/G1-Emu/issues/46)). The
+standalone still behaves like the hardware: Shift+Store, and the 3.03b update.
 
 **Can I use the original Clavia editor?**
 Yes: G1-Emu emulates the instrument, and any editor that speaks its protocol works. See

@@ -3,8 +3,9 @@
 // The OS's synth settings (the panel's System menu, NME's Synth Settings dialog): the slots' MIDI
 // channels, the clock, the velocity scale, master tune and the rest, read and written the way an
 // editor does. A request (PatchHandling $44) brings them back as a patch packet carrying a
-// section of type 3; the same section sent back (cc $1F) is what the OS takes and keeps in its
-// flash.
+// section of type 3; the same section sent back (cc $1F) is what the OS takes. It takes it in RAM
+// only, as the panel's System menu does: only Shift+Store writes the settings into the flash, and
+// only Clavia's 3.03b update loads them from there at power-on (NOTES.md, "The official OS update").
 //
 // SynthSettingsLink speaks to the OS through the PC Port, between the editor's messages, and hides
 // its own traffic from the editor, as the SlotKeeper does. It runs no thread and owns no G1: the
@@ -60,6 +61,10 @@ namespace g1app
 		// Any thread. read() asks the OS again; write() sends these and then reads them back.
 		void read();
 		void write(const SynthSettings& _settings);
+		// Keeps settings() current for whoever saves them (the plugin's project, issue #46): asks
+		// again every _ms of quiet, since the panel's System menu changes them without a word, and
+		// soon after an editor sends its own. 0 (the default): only when asked.
+		void setReread(uint64_t _ms) { m_rereadMs = _ms; }
 		// What the OS said last; false until it has said anything. The revision grows with each.
 		bool settings(SynthSettings& _out, uint64_t& _revision) const;
 		// A new G1 (its time starts again at 0): whatever was in flight is dropped and it reads
@@ -93,6 +98,8 @@ namespace g1app
 		uint64_t m_deadline = 0;
 		uint64_t m_filterUntil = 0;		// replies to the link are hidden from the editor until then
 		uint64_t m_lastActivity = 0;	// the editor's last message
+		std::atomic<uint64_t> m_rereadMs{0};
+		uint64_t m_lastRead = 0;		// when the link last asked for them
 		std::vector<uint8_t> m_packets;	// a reply's packets so far (7-bit)
 		std::vector<uint8_t> m_rx, m_editorRx;
 	};

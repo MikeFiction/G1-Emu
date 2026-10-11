@@ -98,8 +98,12 @@ clap-juce-extensions; `clap-validator` passes it. The design is
 - **State:** `Engine::userState()` (runs of bytes differing from the factory flash, with a hash of
   the factory flash, which only names the OS: a state saved under another OS still loads its banks
   and settings, with the OS in use, #25), gzip + base64 in XML, plus the 256 ADC values, the
-  panel's two preferences, the last Bank Select/Program Change per channel (replayed at boot), and
-  **what each slot holds** (`<Slots>`, issue #25). A state that cannot be applied is handed back
+  panel's two preferences, the last Bank Select/Program Change per channel (replayed at boot),
+  **what each slot holds** (`<Slots>`, issue #25), and **the synth settings in use**
+  (`<SynthSettings>`, issue #46), stored with Shift+Store or not: the `SynthSettingsLink` reads
+  them again every 5 s of quiet and after an editor sends its own (`setReread`), and they are sent
+  back once the G1 is up, since the factory OS never loads stored ones and the update loads only
+  Shift+Store's. A state that cannot be applied is handed back
   untouched. A new instance copies the standalone's `flash.bin` (read only).
 - **Slots** (`app/slotkeeper.*`): the flash does not hold a slot's patch (sent by an editor,
   loaded from the panel or a Program Change, edited since), so the `SlotKeeper` asks the OS for
