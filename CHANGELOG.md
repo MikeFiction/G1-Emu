@@ -5,6 +5,20 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-11
+
+- [Docs] **The README for people who download a release (Claude, asked by Javier).** YouTube
+  comments kept asking how to install it, how to load sounds and where Animatek NME is: the README
+  only explained building. New **Getting started** (which archive, the plugin folders, macOS
+  quarantine, the first start, four ways to load sounds, MIDI channels) and an **FAQ** at the end
+  (free and where, macOS and plugins not showing, Apple Silicon and Rosetta, CPU and four slots, no
+  sound, no notes from the DAW (#53), NME builds and manual, how editors connect, synth settings
+  (#46), the original editor, ROMs, reporting a bug), to point people to and grow as questions come.
+  The status paragraph and the plugin section are brought up to date (alpha, the plugin, the direct
+  link on every system, the Presets page). Release notes: running a DAW under Rosetta (reported in a
+  YouTube comment, alpha.13 in Cubase on an Apple Silicon Mac mini). Checked: the anchors match the
+  headings, and each answer against the code, the release notes and `WINDOWS.md`.
+
 ## 2026-10-09
 
 - [Docs] **Agent instructions: the shared CODE changelog is written with `cambios apuntar` (Claude, asked by

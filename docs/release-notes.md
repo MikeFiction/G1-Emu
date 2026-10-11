@@ -74,6 +74,8 @@ On macOS the plugin is not signed: if the DAW refuses it, run
 ## Known issues
 
 - **macOS:** patch uploads from Animatek NME can time out (#3).
+- **macOS under Rosetta:** a DAW running under Rosetta 2 (for Intel-only plugins) cannot run the
+  emulator in real time: no sound, load at 100 %. Run the DAW natively; the build is universal.
 - **Windows:** the plugin has no PC Port of its own (Windows makes no virtual MIDI ports): connect
   with the direct link, which needs **Animatek NME 0.21** or later. The standalone also works with
   loopMIDI (below).

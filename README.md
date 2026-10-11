@@ -7,16 +7,15 @@
 system runs on an emulated Motorola 68331 and four emulated DSP56303s, and
 [Animatek NME](https://github.com/animatek/Animatek-NME) edits it as if it were the real synth.
 
-**Status: pre-alpha.** The OS boots, NME connects over the PC Port and uploads patches, and it
+**Status: alpha.** The OS boots, editors connect over the PC Port and upload patches, and it
 sounds clean in real time: oscillators, filters, envelopes, clocks, effects (chorus, overdrive…),
-four outputs and two inputs. It has a window with the panel (display, knobs, buttons and LEDs).
-**Runs on Linux, macOS and Windows.** The three systems build in CI, and their DSP tests pass on
-x86-64 and arm64. The macOS and Windows applications have also been run on real machines and
-connected to Animatek NME; Windows currently uses two loopMIDI cables because of a Windows MIDI
-Services bug. See the [Windows first-run guide](WINDOWS.md). Builds in
-[Releases](https://github.com/animatek/G1-Emu/releases) are unsigned and contain no ROM
-([release notes](docs/release-notes.md)). Also missing:
-module-by-module testing, and the one panel key whose job is still unknown. The technical details are in [`NOTES.md`](NOTES.md), the plan in
+four outputs and two inputs. It has a window with the panel (display, knobs, buttons and LEDs), and
+it is also a **VST3 and CLAP plugin**. **Runs on Linux, macOS and Windows**, tested on real
+machines and in several DAWs. Builds in [Releases](https://github.com/animatek/G1-Emu/releases)
+are free, unsigned and contain no ROM ([release notes](docs/release-notes.md)): **to install one,
+see [Getting started](#getting-started)**, and for common questions the [FAQ](#faq). Still
+missing: module-by-module testing against a real G1. The technical details are in
+[`NOTES.md`](NOTES.md), the plan in
 [`ROADMAP.md`](ROADMAP.md) and what changes in [`CHANGELOG.md`](CHANGELOG.md). Contributions are
 welcome: see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
@@ -45,6 +44,62 @@ hello in an issue.
 
 The window shows this same notice the first time it runs. After that it stays out of the way: it
 is always readable in **Settings**, which is also where to put it back at startup.
+
+## Getting started
+
+**1. Download** the archive for your system from
+[Releases](https://github.com/animatek/G1-Emu/releases) (the newest is at the top):
+
+| System | Archive |
+| --- | --- |
+| macOS (Apple Silicon and Intel) | `G1-Emu-macos-universal.tar.gz` |
+| Windows | `G1-Emu-windows-x86_64.zip` |
+| Linux | `G1-Emu-linux-x86_64-native.tar.gz` (or `-juce`); Raspberry Pi and other arm64: `G1-Emu-linux-arm64-native.tar.gz` |
+
+Each one has the **standalone** (`G1-Emu`, `G1-Emu.app` or `G1-Emu.exe`: the synth in its own
+window) and the **plugin** (`G1-Emu.vst3` and `G1-Emu.clap`: the synth inside your DAW). Use
+either, or both.
+
+**2. Install the plugin**, if you want it, by copying it to your plugin folder, and let the DAW
+rescan:
+
+| System | VST3 | CLAP |
+| --- | --- | --- |
+| macOS | `~/Library/Audio/Plug-Ins/VST3` | `~/Library/Audio/Plug-Ins/CLAP` |
+| Windows | `C:\Program Files\Common Files\VST3` | `C:\Program Files\Common Files\CLAP` |
+| Linux | `~/.vst3` | `~/.clap` |
+
+Nothing is signed yet. **On macOS**, if the app will not open or the DAW does not list the
+plugin, run in Terminal (then rescan):
+
+```bash
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/G1-Emu.vst3
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/CLAP/G1-Emu.clap
+xattr -dr com.apple.quarantine /path/to/G1-Emu.app
+```
+
+**On Windows**, SmartScreen may warn: choose **More info** and **Run anyway**. Read the
+[Windows first-run guide](WINDOWS.md) too.
+
+**3. The first start** asks for the ROM (see [Please read this first](#please-read-this-first)
+and [Using it](#using-it)). Then the synth runs, **with empty slots**: a G1 needs patches, and
+they do not come with it (see [the next section](#two-things-a-nord-modular-needs-and-neither-comes-in-the-box)).
+
+**4. Load sounds.** Three ways, from the easiest:
+
+- **The Presets page**, in the standalone and the plugin: press **Presets** (right of slot D). It
+  lists the synth's banks 1 to 9, and **a click loads a patch** into the active slot. **Load
+  .pch...** sends a patch file from your disk to the synth, with no editor: stored in a bank and
+  position you pick, or **Load only** into the slot. Press Presets again, or Escape, to go back.
+- **An editor**, to load, make and edit patches: [Animatek NME](https://github.com/animatek/Animatek-NME)
+  0.21 or later **finds every running G1-Emu by itself** (window or plugin, on every system, with
+  no MIDI port to set up: the direct link). Other editors connect through the PC Port (see
+  [Using it](#using-it) and, on Windows, [`WINDOWS.md`](WINDOWS.md)).
+- **Program Change** from a MIDI track (and Bank Select), or **Patch/Load** and the dial on the
+  panel, as on the hardware: they choose among the patches already stored in the banks.
+
+**5. Play it** from your DAW track or a MIDI keyboard. Slot A listens on MIDI channel 1 (B on 2,
+C on 3, D on 4) unless the synth settings say otherwise.
 
 ## Building
 
@@ -158,7 +213,8 @@ lost), and the received OS is Clavia's, like the ROM: keep it to yourself.
 
 The same G1 as an instrument inside a DAW: **notes from the track, audio back to the track**, with
 no JACK client and no virtual MIDI card. Its one MIDI port is the PC Port, for the editor (below).
-Tested on Linux; it builds everywhere the standalone does.
+Used on Linux, macOS and Windows, in Bitwig, Ableton Live, Reaper, Cubase and Nuendo among others.
+**To install it from a release, see [Getting started](#getting-started)**; to build it:
 
 ```bash
 cmake --build build --target g1plugin_VST3 g1plugin_CLAP -j$(nproc)
@@ -186,12 +242,88 @@ VST3 is built.
   Change of each channel and sends it again when the project opens.
 - **Latency** is one host block plus about 5.5 ms, and it is reported to the DAW, which
   compensates for it: notes land on the exact sample the DAW put them on, whatever the block size.
-- **Editing from Animatek NME:** each instance opens a virtual MIDI port for its PC Port,
-  **G1-Emu PC Port** (the second instance **G1-Emu 2 PC Port**, and so on). Choose it in NME as
-  input and output, as with the hardware. Linux and macOS; on Windows JUCE cannot create the port,
-  and the direct link of [#8](https://github.com/animatek/G1-Emu/issues/8) is what will cover it.
-  `G1_PLUGIN_PC_PORT=0` leaves the port out.
+- **The Presets page** works here too: the banks, a click to load, and Load .pch (see
+  [Getting started](#getting-started)).
+- **Editing from Animatek NME:** NME 0.21 or later finds each instance by itself over the direct
+  link ([#8](https://github.com/animatek/G1-Emu/issues/8)), on every system. Each instance also
+  opens a virtual MIDI port for its PC Port, **G1-Emu PC Port** (the second instance **G1-Emu 2 PC
+  Port**, and so on), for any other editor: choose it as input and output, as with the hardware.
+  Linux and macOS; on Windows JUCE cannot create that port. `G1_PLUGIN_PC_PORT=0` leaves it out.
 - Loading a patch mutes the G1 for a moment, as on the hardware.
+
+## FAQ
+
+The questions that come up most, with their answers. If yours is not here, look in the
+[issues](https://github.com/animatek/G1-Emu/issues) or open one.
+
+**Is it free? Where do I get it?**
+Yes, free and open source (GPLv3). The ready builds are in
+[Releases](https://github.com/animatek/G1-Emu/releases); [Getting started](#getting-started) says
+which one to take and how to install it.
+
+**macOS will not open it, or my DAW does not show the plugin.**
+It is not signed yet, so macOS quarantines it: run the `xattr` lines in
+[Getting started](#getting-started) and rescan. Also check that it is in the right folder, and that
+your DAW takes that format: **Ableton Live has no CLAP**, use the VST3 there.
+
+**Does it run on Apple Silicon? And under Rosetta?**
+The macOS build is universal and runs natively on Apple Silicon and Intel. **Run your DAW natively,
+not under Rosetta**: under Rosetta the emulator is translated on top of the emulation and cannot
+keep up (no sound, load at 100 %).
+
+**How much CPU does it use? Can all four slots play at once?**
+Yes, four slots at once, like the real G1. The emulator always runs the whole synth, its 68331 and
+its four DSPs, so using all four slots costs about the same as one. Each instance is a whole G1. The
+status bar shows **speed** (100 % means real time) and **load**; if the speed stays below 100 %,
+this computer cannot keep up and you will hear dropouts.
+
+**It makes no sound.**
+A G1 starts with empty slots: load a patch first ([Getting started](#getting-started), step 4).
+Then check that the notes reach it: the **MIDI LED** on the panel flashes with each note, and
+`MIDI in` in the status bar counts up. If they do and it is still silent, check the master volume
+knob and that the DAW routes the plugin's outputs.
+
+**The plugin gets no notes from my DAW.**
+Watch `MIDI in` in the status bar while you play. If it stays at 0, the notes are not reaching the
+plugin: arm the track or turn its monitoring on, and check the DAW's MIDI input settings. If it
+counts up, the G1 gets them but no slot listens on that channel: slot A is on channel 1 by default,
+set in the synth settings (the **Settings** page button on the panel, next to Presets, or your
+editor). We are looking into a case
+on Windows in [#53](https://github.com/animatek/G1-Emu/issues/53): if it happens to you, tell us
+there.
+
+**How do I load patches?**
+The Presets page, Load .pch, an editor, or Program Change: all four in
+[Getting started](#getting-started), step 4.
+
+**Where is Animatek NME? There is no program on its GitHub page.**
+GitHub has its source code. The ready-to-run builds for macOS, Windows and Linux are for
+[Patreon](https://www.patreon.com/c/animatek) members, which is how its development is paid for.
+How to install and use it: [its manual](https://github.com/animatek/Animatek-NME/tree/main/manual).
+Any other G1 editor works too ([the list](#two-things-a-nord-modular-needs-and-neither-comes-in-the-box)).
+
+**How does the editor connect?**
+Animatek NME 0.21 or later finds every running G1-Emu by itself, the window and each plugin
+instance, on every system. Other editors use the PC Port: a virtual MIDI port on Linux and macOS,
+and two loopMIDI cables on Windows for now ([`WINDOWS.md`](WINDOWS.md)).
+
+**The MIDI channels and other synth settings are gone when I reopen my project.**
+On the G1 they are kept only by **Shift+Store**, and the ROM's factory OS does not load them at
+power-on at all (the 3.03b update does: see
+[the OS a real G1 runs](#optional-the-os-a-real-g1-runs)). The plugin keeping the settings in use
+in the project is tracked in [#46](https://github.com/animatek/G1-Emu/issues/46).
+
+**Can I use the original Clavia editor?**
+Yes: G1-Emu emulates the instrument, and any editor that speaks its protocol works. See
+[the list of editors](#two-things-a-nord-modular-needs-and-neither-comes-in-the-box).
+
+**Where do I get the ROM?**
+Not here: see [Please read this first](#please-read-this-first).
+
+**How do I report a bug?**
+With the **Report issue** button in the window's status bar: it opens a new issue with the
+version, system, audio and MIDI details already filled in. Say what you did, what you expected
+and what happened.
 
 ## License and credits
 
