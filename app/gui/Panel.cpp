@@ -1012,7 +1012,8 @@ namespace g1gui
 		_g.setColour(juce::Colours::black.withAlpha(0.45f));
 		_g.fillPath(shade);
 		_g.setColour(juce::Colours::white.withAlpha(0.85f));
-		_g.setFont(getPopupMenuFont().boldened());
+		const auto font = getPopupMenuFont();
+		_g.setFont(font.withHeight(font.getHeight() - 1.0f).boldened());	// a little smaller: capitals, bold
 		_g.drawText(_name.toUpperCase(), _area.withTrimmedLeft(g_menuPadX), juce::Justification::centredLeft, true);
 	}
 

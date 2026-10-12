@@ -58,13 +58,28 @@ namespace g1gui
 #endif
 	}
 
+	juce::Font SettingsView::Look::getComboBoxFont(juce::ComboBox& _box)
+	{
+		const auto f = LookAndFeel_V4::getComboBoxFont(_box);
+		return f.withHeight(f.getHeight() - Smaller);
+	}
+
+	juce::Label* SettingsView::Look::createSliderTextBox(juce::Slider& _slider)
+	{
+		auto* l = LookAndFeel_V4::createSliderTextBox(_slider);
+		l->setFont(l->getFont().withHeight(l->getFont().getHeight() - Smaller));
+		return l;
+	}
+
 	SettingsView::SettingsView(g1app::EmuHost& _host) : m_host(_host)
 	{
+		setLookAndFeel(&m_look);
 		const auto& o = m_host.options();
 
 		auto label = [this](juce::Label& _l, const juce::String& _text)
 		{
 			_l.setText(_text, juce::dontSendNotification);
+			_l.setFont(juce::FontOptions(Look::TitleFontHeight));
 			_l.setColour(juce::Label::textColourId, juce::Colours::white);
 			_l.setJustificationType(juce::Justification::centredRight);
 			addAndMakeVisible(_l);
@@ -213,6 +228,7 @@ namespace g1gui
 			auto label = [this](juce::Label& _l, const juce::String& _text)
 			{
 				_l.setText(_text, juce::dontSendNotification);
+				_l.setFont(juce::FontOptions(Look::TitleFontHeight));
 				_l.setColour(juce::Label::textColourId, juce::Colours::white);
 				_l.setJustificationType(juce::Justification::centredRight);
 				addAndMakeVisible(_l);
@@ -400,6 +416,11 @@ namespace g1gui
 #endif
 		if(text != m_running.getText())
 			m_running.setText(text, juce::dontSendNotification);
+	}
+
+	SettingsView::~SettingsView()
+	{
+		setLookAndFeel(nullptr);
 	}
 
 	// The card paints the background; this, the headings and the rules between the parts. While the

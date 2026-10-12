@@ -41,10 +41,22 @@ namespace g1gui
 	{
 	public:
 		explicit SettingsView(g1app::EmuHost& _host);
+		~SettingsView() override;
 		void paint(juce::Graphics& _g) override;
 		void resized() override;
 
 	private:
+		// The selections and the output level's value in a smaller font (TitleFontHeight for the
+		// rows' titles), the controls at their size.
+		class Look : public juce::LookAndFeel_V4
+		{
+		public:
+			static constexpr float Smaller = 2.0f;
+			static constexpr float TitleFontHeight = 15.0f - Smaller;	// a label's own is 15
+			juce::Font getComboBoxFont(juce::ComboBox& _box) override;
+			juce::Label* createSliderTextBox(juce::Slider& _slider) override;
+		};
+
 		void timerCallback() override;
 		void apply();			// takes what the controls say into the options and saves them
 		void chooseRom();		// the file picker, which checks the file before writing it down
@@ -52,6 +64,7 @@ namespace g1gui
 		void updateAudioDevices(const juce::String& selected = {});
 
 		g1app::EmuHost& m_host;
+		Look m_look;	// before the controls, so it outlives them
 
 		juce::Label m_romLabel, m_audioLabel, m_deviceLabel, m_gainLabel, m_rawLabel;
 		juce::Label m_romPath;

@@ -7,6 +7,11 @@ Older entries cite their commit by hand.
 
 ## 2026-10-12
 
+- [GUI] **Smaller text on the Emulator Settings card and in the menus' titles (Mike Fiction,
+  Claude).** `app/gui/Settings.*` and `app/gui/Panel.cpp`. On the Emulator Settings card the rows'
+  titles, the selections in the boxes and the output level's value are 2 px smaller (a small
+  LookAndFeel of the card's own); the controls keep their size. The section titles in the panel's
+  right-click menus are 1 px smaller, still bold capitals. GUI only.
 - [Docs] **Release notes for v0.1.0-alpha.18 (Claude, asked by Javier).** `docs/release-notes.md`:
   the log's new `system` and `health` lines, and what to send for a "no sound" (one plugin copy,
   Test Audio, a few notes, the log, and a second log with `G1_THREADS=0`).
