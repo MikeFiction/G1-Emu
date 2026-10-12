@@ -34,6 +34,13 @@ Older entries cite their commit by hand.
   link on every system, the Presets page). Release notes: running a DAW under Rosetta (reported in a
   YouTube comment, alpha.13 in Cubase on an Apple Silicon Mac mini). Checked: the anchors match the
   headings, and each answer against the code, the release notes and `WINDOWS.md`.
+## 2026-10-10
+
+- [Fix] **A knob on a morph group follows the group's value (Mike Fiction, Claude).**
+  `app/gui/Panel.cpp`. With Knob Follows Patch on, a knob assigned to a morph group stayed where
+  it was turned while the group's value changed elsewhere (the dial on the Morph page, the editor,
+  another patch). It now turns to the value, as a knob on a parameter does. Checked by Mike
+  Fiction in the standalone.
 
 ## 2026-10-09
 
