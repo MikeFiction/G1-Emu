@@ -61,11 +61,12 @@ namespace g1app
 		// Any thread. read() asks the OS again; write() sends these and then reads them back.
 		void read();
 		void write(const SynthSettings& _settings);
-		// Keeps settings() current for whoever saves them (the plugin's project, issue #46): asks
+		// Keeps settings() current by itself (the plugin asks every 2 s on its own instead): asks
 		// again every _ms of quiet, since the panel's System menu changes them without a word, and
 		// soon after an editor sends its own. 0 (the default): only when asked.
 		void setReread(uint64_t _ms) { m_rereadMs = _ms; }
-		// What the OS said last; false until it has said anything. The revision grows with each.
+		// What the OS said last; false until it has said anything since reset(). The revision grows
+		// with each.
 		bool settings(SynthSettings& _out, uint64_t& _revision) const;
 		// A new G1 (its time starts again at 0): whatever was in flight is dropped and it reads
 		// them again. Only while no runner feeds the link.
@@ -90,11 +91,15 @@ namespace g1app
 		uint64_t m_revision = 0;
 		bool m_readWanted = true;		// once, as soon as the G1 is up
 		bool m_writeWanted = false;
+		bool m_known = false;			// m_settings came from this G1 (since reset())
 		SynthSettings m_toWrite;
 
 		std::atomic<State> m_state{State::Idle};
 		bool m_greeted = false;			// an unanswered request gets one IAm, as an editor's would
 		uint8_t m_pid = 0;				// as the OS's last reply had it
+		// m_pid read since write() was called. A write carries the pid of slot A's patch, which a
+		// patch loaded or uploaded into slot A changes; with an old one the OS drops the write.
+		bool m_pidFresh = false;
 		uint64_t m_deadline = 0;
 		uint64_t m_filterUntil = 0;		// replies to the link are hidden from the editor until then
 		uint64_t m_lastActivity = 0;	// the editor's last message

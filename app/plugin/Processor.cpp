@@ -19,9 +19,6 @@ namespace g1plugin
 		constexpr const char* g_stateTag = "G1EmuState";
 		constexpr int g_stateVersion = 1;
 		constexpr int g_stereoBuses = 2;	// Out 1/2 and Out 3/4; after them, Out 1..4 mono
-		// How often the synth settings are read again for the project (issue #46): the panel's
-		// System menu changes them without telling anyone.
-		constexpr uint64_t g_settingsRereadMs = 5000;
 
 		juce::String packBytes(const std::vector<uint8_t>& _data)
 		{
@@ -357,8 +354,11 @@ namespace g1plugin
 		auto engine = std::make_unique<g1app::Engine>(m_rom, m_os);
 		m_keeper = std::make_unique<g1app::SlotKeeper>();
 		m_synthSettings.reset();
-		m_synthSettings.setReread(g_settingsRereadMs);
-		m_projectSettings.reset();
+		m_pendingSettings.reset();
+		m_settingsTries = 0;
+		m_settingsWrittenAt = 0;
+		m_systemMenu = false;
+		m_restoring = false;
 		m_presets.reset();
 		m_unstarted = false;
 		if(_state)
@@ -567,10 +567,18 @@ namespace g1plugin
 				runner->queueMidi(m_clockBlock.events[clockAt].offset, m_clockBlock.events[clockAt].bytes, m_clockBlock.events[clockAt].size);
 		};
 
+		// A project's state going back in is moved on here too (restoreStep), never waiting for the
+		// lock: the timer has it, or the message thread is busy, and the next block tries again.
+		if(m_restoring.load(std::memory_order_relaxed))
+			if(std::unique_lock<std::mutex> lifecycle(m_lifecycle, std::try_to_lock); lifecycle)
+				restoreStep();
+		const bool restoring = m_restoring.load(std::memory_order_relaxed);
 		for(const auto m : _midi)
 		{
 			if(transport && m.numBytes > 0 && (m.data[0] == 0xf8 || m.data[0] == 0xfa || m.data[0] == 0xfb || m.data[0] == 0xfc || m.data[0] == 0xf2))
 				continue;
+			if(restoring && m.numBytes > 0 && ((m.data[0] & 0xf0) == 0x80 || (m.data[0] & 0xf0) == 0x90))
+				continue;	// no notes while a project's state goes back in (m_restoring)
 			clockUpTo(static_cast<uint32_t>(std::max(m.samplePosition, 0)));
 			runner->queueMidi(static_cast<uint32_t>(m.samplePosition), m.data, static_cast<size_t>(m.numBytes));
 			const auto status = m.data[0] & 0xf0;
@@ -611,9 +619,8 @@ namespace g1plugin
 	}
 
 	// ____________________________________________________________________________________________
-	// State: the G1's user state (the flash against the factory one), the knob positions, what each
-	// slot holds, the synth settings in use, and the panel's preferences. Never the OS:
-	// Engine::userState.
+	// State: the G1's user state (the flash against the factory one), the knob positions, and the
+	// panel's two preferences. Never the OS: Engine::userState.
 
 	// Asked for a state before there is a G1 (the host saves before it starts the audio): what the
 	// plugin has besides the flash, which applyState takes as a new instance's.
@@ -672,12 +679,14 @@ namespace g1plugin
 		// What each slot holds, which the flash does not (issue #25): as the keeper last read it.
 		if(m_keeper)
 			xml.createNewChildElement("Slots")->addTextElement(packBytes(g1app::SlotKeeper::pack(m_keeper->slots())));
-		// The synth settings in use (issue #46), stored with Shift+Store or not: as the link last
-		// read them (it reads them again every few seconds), or, before it has, the project's own.
+		// The synth settings as the OS last said them (read every PollMs), however they were changed:
+		// the page, the panel's System menu or an editor. The OS keeps them only until it restarts
+		// unless stored with Shift + Store (#46). While the project's own are still to be written
+		// back, those.
 		g1app::SynthSettings settings;
 		uint64_t revision = 0;
-		if(m_synthSettings.settings(settings, revision) || m_projectSettings)
-			xml.createNewChildElement("SynthSettings")->addTextElement(packBytes((revision > 0 ? settings : *m_projectSettings).encode()));
+		if(m_pendingSettings || m_synthSettings.settings(settings, revision))
+			xml.createNewChildElement("SynthSettings")->addTextElement(packBytes((m_pendingSettings ? *m_pendingSettings : settings).encode()));
 		juce::MemoryBlock out;
 		copyXmlToBinary(xml, out);
 		return out;
@@ -731,15 +740,17 @@ namespace g1plugin
 		if(const auto* slotsXml = xml->getChildByName("Slots"); m_keeper && slotsXml
 			&& unpackBytes(slotsXml->getAllSubText(), slotBytes) && g1app::SlotKeeper::unpack(slotBytes, slots))
 			m_keeper->restore(slots);
-		// And the synth settings, sent once the G1 is up: the factory OS never loads stored ones at
-		// power-on, and the update loads only what Shift+Store last kept (issue #46).
+		// The project's synth settings win over those stored in the flash: written once the keeper
+		// has put the slots back (timerCallback).
 		std::vector<uint8_t> settingsBytes;
 		g1app::SynthSettings settings;
 		if(const auto* settingsXml = xml->getChildByName("SynthSettings"); settingsXml
 			&& unpackBytes(settingsXml->getAllSubText(), settingsBytes) && g1app::SynthSettings::decode(settingsBytes, settings))
+			m_pendingSettings = settings;
+		if(m_keeper && (xml->getChildByName("Slots") || m_pendingSettings))
 		{
-			m_synthSettings.write(settings);
-			m_projectSettings = settings;
+			m_restoring = true;
+			m_restoreStart = juce::Time::getMillisecondCounter();
 		}
 		m_origin = otherOs ? "this project, saved with another OS: its banks and settings, with the OS in use" : "this project";
 		return true;
@@ -866,6 +877,24 @@ namespace g1plugin
 				g1::KnobMap map(mc);
 				for(uint32_t k = 0; k < 18; ++k)
 					renamed = m_knobParams[k]->setInfo(map.read(k)) || renamed;
+				const auto now = juce::Time::getMillisecondCounter();
+				restoreStep();
+				// Now and then, but not while the slots go back in: the OS tells no one of a change on
+				// the panel's System menu, of the synth settings or of the active slot's patch settings
+				// (voices, bend range...).
+				if(!m_restoring && m_runner && m_keeper && now - m_polledAt >= PollMs)
+				{
+					m_polledAt = now;
+					// The project saves the synth settings as the OS last said them (but its own, while
+					// they are still to be written).
+					if(!m_pendingSettings)
+						m_synthSettings.read();
+					// The active slot is read again while the System menu is open, and once after.
+					const bool systemMenu = !(mc.ledRow(SystemLedRow) & (1u << SystemLedBit));	// active low
+					if(systemMenu || m_systemMenu)
+						m_keeper->reread(mc.read8(g1::KnobMap::ActiveSlot + map.osShift()) & 3);
+					m_systemMenu = systemMenu;
+				}
 			}
 		}
 		// Outside the locks: the host may call back into the plugin from inside these calls (to
@@ -873,6 +902,57 @@ namespace g1plugin
 		tellHost(edits);
 		if(renamed)
 			updateHostDisplay(ChangeDetails().withParameterInfoChanged(true));
+	}
+
+	// A project's state going back in, a step further: the synth settings written once the slots are
+	// back, and the notes let in once they are too. From the timer, and from processBlock as well:
+	// a host that renders a project offline right after opening it may run no message loop
+	// meanwhile, and the notes would stay held.
+	void Processor::restoreStep()
+	{
+		if(m_pendingSettings && m_keeper)
+			writePendingSettings();
+		if(m_restoring && ((!m_pendingSettings && m_keeper && m_keeper->settled())
+			|| juce::Time::getMillisecondCounter() - m_restoreStart > RestoreHoldMs))
+			m_restoring = false;
+	}
+
+	// The project's synth settings, once the keeper has put the slots back: written, then compared
+	// with the OS's reading back (or, if none comes, SettingsCheckMs later); written again if the OS
+	// did not take them.
+	void Processor::writePendingSettings()
+	{
+		const auto now = juce::Time::getMillisecondCounter();
+		if(m_settingsWrittenAt == 0)
+		{
+			if(m_settingsTries >= SettingsTries || !m_keeper->settled())
+				return;
+			g1app::SynthSettings os;
+			m_synthSettings.settings(os, m_settingsRevision);
+			m_synthSettings.write(*m_pendingSettings);
+			m_settingsWrittenAt = std::max<juce::uint32>(now, 1);
+			++m_settingsTries;
+			return;
+		}
+		// The write is read back: decided as soon as that reading comes, or at SettingsCheckMs.
+		g1app::SynthSettings os;
+		uint64_t rev = 0;
+		const bool readBack = m_synthSettings.settings(os, rev) && rev > m_settingsRevision;
+		if(!readBack && now - m_settingsWrittenAt < SettingsCheckMs)
+			return;
+		const bool took = readBack && os == *m_pendingSettings;
+		if(took || m_settingsTries >= SettingsTries)
+		{
+			// Taken, the project saves them from the OS's readings from now on. Given up, they stay
+			// pending, not written again, so the project still saves its own and not the OS's.
+			if(took)
+			{
+				m_pendingSettings.reset();
+				m_settingsTries = 0;
+			}
+			m_restoring = false;	// the slots were back before the write: the notes can come in
+		}
+		m_settingsWrittenAt = 0;
 	}
 
 	// Each knob that something other than the host turned, with the value its parameter takes.
@@ -964,7 +1044,7 @@ namespace g1plugin
 				 "They are saved in the DAW project, never in the standalone's flash, and so is the last\n"
 				 "Program Change of each channel, sent again when the project opens (the G1 does not\n"
 				 "remember what each slot had).\n";
-		d += "Notes and controllers come from the track.\n\n";
+		d += "Notes and controllers come from the track.\n";
 		if(!m_pcPort)
 			d += "PC Port: " + m_pcProblem + ".";
 		else if(m_pcPort->virtualPorts())
