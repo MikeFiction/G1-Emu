@@ -7,6 +7,12 @@ Older entries cite their commit by hand.
 
 ## 2026-10-12
 
+- [Docs] **The test patches as a step by step in Getting started (Claude, asked by Javier).**
+  `README.md`: a new step 6 with direct download links to `Test Audio.pch` and `Test MIDI.pch`,
+  how to load them (slot A, Presets, Load .pch, Load only) and what each result means, ending in
+  Report issue with `g1-emu.log`; the FAQ's "It makes no sound" and `test-patches/README.md` point
+  to it. Checked: the links and anchors read right in the Markdown; not yet followed on a fresh
+  install.
 - [Docs] **Two standard test patches, `test-patches/` (Javier made them in NME, Claude added them,
   issues #53, #59, #65).** `Test Audio.pch` (an oscillator to outputs 1/2: sounds with no notes)
   and `Test MIDI.pch` (keyboard, AD envelope, filter: sounds only with a held note), so a "no

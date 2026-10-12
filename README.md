@@ -101,6 +101,29 @@ they do not come with it (see [the next section](#two-things-a-nord-modular-need
 **5. Play it** from your DAW track or a MIDI keyboard. Slot A listens on MIDI channel 1 (B on 2,
 C on 3, D on 4) unless the synth settings say otherwise.
 
+**6. Check that it works, with the two test patches.** If something does not sound, this is also
+the first thing to try, and what to tell us in an issue. Download them (they are not in the
+release archives):
+[**Test Audio.pch**](https://github.com/animatek/G1-Emu/raw/main/test-patches/Test%20Audio.pch) and
+[**Test MIDI.pch**](https://github.com/animatek/G1-Emu/raw/main/test-patches/Test%20MIDI.pch)
+(more in [`test-patches/`](test-patches/)).
+
+1. **Turn your speakers down first**: the test tone is loud. Select **slot A** on the panel.
+2. **Presets → Load .pch...**, choose `Test Audio.pch` and **Load only**.
+3. **Without playing any note**, you should hear a steady tone, and the status bar's
+   `output 1/2` should read a level, not `silence`. In a DAW, check its meter too.
+   - Silent? Then the problem is the audio, not MIDI or the patch: press **Report issue** and
+     attach `g1-emu.log` (it opens the log's folder for you).
+4. Now load `Test MIDI.pch` the same way. It is silent until you **play a note** on MIDI
+   channel 1: then it sounds while the note is held.
+   - The `MIDI in` counter in the status bar should count up and the **MIDI LED** flash with
+     each note. If they do not, the notes are not reaching the synth: arm the track or turn its
+     monitoring on in your DAW.
+   - They do, but no sound? Then slot A is not listening on that channel: check its MIDI channel
+     in the synth settings.
+
+If both sound, the emulator works: any silence left is in a patch or your routing.
+
 ## Building
 
 Linux (tested on Arch/CachyOS with PipeWire). You need:
@@ -279,9 +302,9 @@ this computer cannot keep up and you will hear dropouts.
 
 **It makes no sound.**
 A G1 starts with empty slots: load a patch first ([Getting started](#getting-started), step 4).
-To rule out the patch, use the two in [`test-patches/`](test-patches/): **Test Audio** sounds with
-no notes at all, **Test MIDI** only while a note is held, so which one stays silent says where the
-problem is. Then check that the notes reach it: the **MIDI LED** on the panel flashes with each note, and
+Then go through the two test patches, step by step, in
+[Getting started, step 6](#getting-started): **Test Audio** sounds with no notes at all, **Test
+MIDI** only while a note is held, so which one stays silent says where the problem is. Then check that the notes reach it: the **MIDI LED** on the panel flashes with each note, and
 `MIDI in` in the status bar counts up. If they do and it is still silent, check the master volume
 knob and that the DAW routes the plugin's outputs.
 
