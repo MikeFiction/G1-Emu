@@ -160,6 +160,7 @@ the four outputs and the links between DSPs; it also has probes for the panel (s
 | `cmake/Dsp56300.cmake`, `g1Lib/dsp56300.cpp` | DSP core fixes (JIT and DMA, and a JIT failure that returns instead of recursing, #17), applied to a build copy. |
 | `cmake/Mc68k.cmake` | 68331 timer (GPT) fixes: the prescaler and compares that match once (#22), applied to a build copy of `gpt.cpp`. |
 | `app/engine.*` | `Engine`: the G1 with nothing around it (ROM in, factory OS in the flash), and its user state as a difference against the factory flash, which never carries the OS. |
+| `app/hostlog.*`, `app/diaglog.*` | The shared log file; the `system:` line and the `health` line (output and link peaks, link misses) written a moment after MIDI comes in (#65). |
 | `app/hostconfig.*` | What every front end shares: the per-user directory, the settings file (`HostOptions`) and the status figures (`HostStats`). |
 | `app/emuhost.*` | The running G1 (flash, MIDI, audio, real time) on its own thread; used by `g1run` and `g1gui`. |
 | `app/g1run.cpp`, `g1.sh` | The console front end. |

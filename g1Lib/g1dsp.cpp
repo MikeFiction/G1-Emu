@@ -521,6 +521,10 @@ namespace g1
 			while(m_linkIn.size() > 1 && m_linkIn[1].index <= block)
 				m_linkIn.pop_front();
 			const LinkBlock* src = (!m_linkIn.empty() && m_linkIn.front().index == block) ? &m_linkIn.front() : nullptr;
+			// Late: the block wanted is newer than any handed on yet, so the previous DSP's audio
+			// came too late (issue #65). Skipped blocks (a reload stop) are not counted.
+			if(!src && inRing && m_hasUpstream && block > 0 && (m_linkIn.empty() || m_linkIn.back().index < block))
+				m_linkMisses.fetch_add(1, std::memory_order_relaxed);
 			const auto pos = (ddr - g_linkBase[_essi] + s) % 9;
 			_frame[s][0] = (src && inRing) ? src->words[_essi * 9 + pos] : 0;
 		}

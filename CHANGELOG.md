@@ -7,6 +7,20 @@ Older entries cite their commit by hand.
 
 ## 2026-10-12
 
+- [Feature] **The log says where a "no sound" stops (Claude, issue #65, asked by Javier).** New
+  `app/diaglog.*` in `g1Core`, used by the plugin's runner and the standalone's `EmuHost`. At
+  start, a `system:` line: the CPU, its threads, performance and efficiency cores on a hybrid one
+  (Windows and Linux), BMI/BMI2/AVX2/AVX512F (what the DSP JIT picks code by) and whether the DSPs
+  run on threads or serially (`G1_THREADS=0`). 1.5 s after a note comes in (at most once every
+  20 s), a `health` line: the output's peak before the gain, each DSP's state and JIT recoveries,
+  the peak of each link DSP 0->1->2->3, and the **link misses**: blocks a DSP wanted from the one
+  before it that had not been handed on yet, which it takes as silence (`g1Lib/g1dsp.*`, new
+  `linkMisses()`), the direct sign of the thread race suspected in #65. Every log line now
+  carries the process id (a DAW may host each plugin in its own process), and the plugin logs
+  `plugin end`. Checked on Windows with `g1vst3check` (all good), threaded and with
+  `G1_THREADS=0`: identical health lines, link misses 0 in both; a first version that also
+  counted blocks skipped on purpose read ~48,000 a second even serially, so only late blocks are
+  counted. All 13 G1-Emu tests pass (`ctest`).
 - [Docs] **Release notes for v0.1.0-alpha.17 (Claude, asked by Javier).** `docs/release-notes.md`:
   the test patches and their step by step, and the plugin's new default output gain, with what to
   do for anyone on #53, #59 or #65 still without sound.

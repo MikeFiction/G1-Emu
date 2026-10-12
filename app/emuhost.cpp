@@ -1,6 +1,7 @@
 #include "emuhost.h"
 #include <ctime>
 
+#include "diaglog.h"
 #include "hostlog.h"
 #include "romfinder.h"
 
@@ -284,6 +285,7 @@ namespace g1app
 	void EmuHost::launch()
 	{
 		wireEngine();
+		logEvent(systemSummary(m_engine->mc().threaded()));
 		m_quit = false;
 		m_thread = std::thread([this] { run(); });
 	}
@@ -303,6 +305,7 @@ namespace g1app
 		// One sample per DSP 3 block (96 kHz): the four outputs.
 		mc.getDsp(3).setBlockCallback([this](const int32_t _o1, const int32_t _o2, const int32_t _o3, const int32_t _o4)
 		{
+			m_health.output(_o1 - g_dc, _o2 - g_dc);
 #ifdef G1_BACKEND_JUCE
 			if(m_juceAudio)
 				m_juceAudio->push(_o1 - g_dc, _o2 - g_dc, _o3 - g_dc, _o4 - g_dc);
@@ -533,6 +536,14 @@ namespace g1app
 				m_midiIn += incoming[m_midiPort].size();
 				logMidi("in ", "MIDI", incoming[m_midiPort]);
 				mc.getSci().write(incoming[m_midiPort]);
+				// A note on with a velocity, the way it arrives (running status aside).
+				const auto& in = incoming[m_midiPort];
+				for(size_t i = 0; i + 2 < in.size(); ++i)
+					if((in[i] & 0xf0) == 0x90 && in[i + 2] != 0 && !(in[i + 1] & 0x80))
+					{
+						m_health.midiIn(mc, mc.ucCycles() / msCycles);
+						break;
+					}
 				incoming[m_midiPort].clear();
 			}
 
@@ -545,6 +556,7 @@ namespace g1app
 
 			// What goes out. The answers to the settings' and the presets' own requests stay here.
 			const auto nowMs = mc.ucCycles() / msCycles;
+			m_health.tick(mc, nowMs);
 			out.clear();
 			mc.getPcPort().takeTx(out);
 			toEditor.clear();

@@ -120,6 +120,8 @@ namespace g1
 		// Waits for the DSPs' catch-up in flight, if any, and hands on what they produced. Needed
 		// before reading a DSP's state from outside (memory, registers); counters are safe anyway.
 		void syncDsps() { joinDsps(); }
+		// Whether the DSPs run on their own threads (the default) or serially (G1_THREADS=0).
+		bool threaded() const { return m_threaded; }
 		// A real-time front end calls setIdle(true) before it sleeps (it is ahead of the clock) and
 		// setIdle(false) when it resumes: meanwhile the DSP threads sleep instead of spinning.
 		void setIdle(bool _idle) { m_idle.store(_idle, std::memory_order_relaxed); }

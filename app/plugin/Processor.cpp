@@ -240,6 +240,7 @@ namespace g1plugin
 		for(const auto& e : open)
 			(e.index == VolumeIndex ? static_cast<juce::RangedAudioParameter&>(*m_volumeParam)
 				: static_cast<juce::RangedAudioParameter&>(*m_knobParams[e.index])).endChangeGesture();
+		g1app::logEvent("plugin end: instance " + std::to_string(m_instance));
 		{
 			std::lock_guard<std::mutex> lock(m_lifecycle);
 			m_runner.reset();

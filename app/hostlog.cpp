@@ -8,6 +8,14 @@
 #include <mutex>
 #include <vector>
 
+#ifdef _WIN32
+#include <process.h>
+#define G1_GETPID _getpid
+#else
+#include <unistd.h>
+#define G1_GETPID getpid
+#endif
+
 namespace g1app
 {
 	namespace
@@ -42,7 +50,9 @@ namespace g1app
 
 		{
 			std::ofstream out(path, std::ios::app);
-			out << stamp << "  " << _line << "\n";
+			// The process too: a DAW may host each plugin in a process of its own, and the
+			// standalone and every instance write here, so their lines interleave.
+			out << stamp << "  [" << G1_GETPID() << "]  " << _line << "\n";
 		}
 
 		if(std::filesystem::file_size(path, ec) > g_capBytes && !ec)

@@ -16,6 +16,7 @@
 // throws their late copies away when they arrive, so the timing stays locked to the host.
 
 #include "audiobridge.h"
+#include "diaglog.h"
 #include "directlink.h"
 #include "engine.h"
 #include "hostconfig.h"
@@ -113,6 +114,7 @@ namespace g1app
 		const size_t m_ahead;		// how far the worker may run past what the host has taken
 		const size_t m_latency;		// where the events go: ahead plus a guard (runner.cpp)
 		AudioBridge m_bridge;
+		HealthProbe m_health;			// worker thread, and DSP 3's for output()
 		SpscQueue<Event, 1024> m_events;
 
 		std::atomic<uint64_t> m_consumed{0};	// frames the host has taken (audio thread writes)

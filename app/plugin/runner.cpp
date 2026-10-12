@@ -1,5 +1,6 @@
 #include "runner.h"
 
+#include "diaglog.h"
 #include "hostlog.h"
 
 #include <algorithm>
@@ -43,6 +44,7 @@ namespace g1app
 		{
 			constexpr auto dc = Engine::OutputDc;
 			m_bridge.push(_o1 - dc, _o2 - dc, _o3 - dc, _o4 - dc);
+			m_health.output(_o1 - dc, _o2 - dc);
 		});
 		mc.getDsp(0).setInputProvider([this](int32_t& _l, int32_t& _r) { m_bridge.pullInput(_l, _r); });
 
@@ -51,7 +53,7 @@ namespace g1app
 			m_rate, m_latency, 1000.0 * static_cast<double>(m_latency) / m_rate, static_cast<double>(_gainDb));
 		m_stats.audio = buf;
 		m_stats.midi = "the DAW track";
-		g1app::logEvent(std::string("runner start: ") + buf);
+		g1app::logEvent(std::string("runner start: ") + buf + "\n  " + systemSummary(mc.threaded()));
 
 		m_thread = std::thread([this] { run(); });
 	}
@@ -212,6 +214,7 @@ namespace g1app
 			speak(m_keeper, m_settings, m_presets);
 			speak(m_settings, m_keeper, m_presets);
 			speak(m_presets, m_keeper, m_settings);
+			bool midiIn = false;
 			while(const auto* e = m_events.front())
 			{
 				if(e->frame > produced)
@@ -219,8 +222,13 @@ namespace g1app
 				for(uint8_t i = 0; i < e->size; ++i)
 					mc.getSci().write(e->bytes[i]);
 				m_midiIn += e->size;
+				// A note (on, with a velocity) is what should make a sound: the clock does not count.
+				midiIn |= (e->bytes[0] & 0xf0) == 0x90 && e->size == 3 && e->bytes[2] != 0;
 				m_events.pop();
 			}
+			if(midiIn)
+				m_health.midiIn(mc, nowMs());
+			m_health.tick(mc, nowMs());
 
 			if(produced >= target)
 			{

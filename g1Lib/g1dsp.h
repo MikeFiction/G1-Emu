@@ -17,6 +17,7 @@
 #include "dsp56kEmu/peripherals.h"
 #include "g1cycleprofile.h"
 
+#include <atomic>
 #include <cstdint>
 #include <array>
 #include <functional>
@@ -85,6 +86,10 @@ namespace g1
 		using LinkPeak = std::array<uint32_t, 18>;
 		const LinkPeak& linkPeak() const { return m_linkPeak; }
 		void resetLinkPeak() { m_linkPeak = {}; }
+		// How many times this DSP wanted a block from the previous one that had not been handed on
+		// yet, and took silence instead (readLink): the threads handed the link on late (issue
+		// #65). A serial run (G1_THREADS=0) is the reference. Read from any thread.
+		uint64_t linkMisses() const { return m_linkMisses.load(std::memory_order_relaxed); }
 
 		// Receives each block's output (one sample at 96 kHz): outputs 1/2 (ESSI0) and 3/4
 		// (ESSI1), signed 24-bit. With DSP 3's sound program, that is what goes to the codec.
@@ -186,6 +191,7 @@ namespace g1
 		std::vector<LinkBlock> m_linkOut;	// this DSP's blocks, pending flushAudio
 		std::deque<LinkBlock> m_linkIn;		// blocks from the previous DSP
 		LinkPeak m_linkPeak{};
+		std::atomic<uint64_t> m_linkMisses{0};
 		std::array<dsp56k::TWord, 2> m_craSeen{};
 		BlockCallback m_blockCallback;
 		InputProvider m_inputProvider;
