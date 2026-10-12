@@ -1,28 +1,26 @@
-# G1-Emu v0.1.0-alpha.17
+# G1-Emu v0.1.0-alpha.18
 
-**Two test patches, and a step by step to know where a "no sound" comes from** (#53, #59, #65).
-[`test-patches/`](https://github.com/animatek/G1-Emu/tree/main/test-patches) has **Test Audio**,
-which sounds with no notes at all, and **Test MIDI**, which sounds only while a note is held. Load
-each into slot A and the one that stays silent says whether the problem is the audio or the notes:
-the README walks through it in
-[Getting started, step 6](https://github.com/animatek/G1-Emu#getting-started).
+**The log now says where a "no sound" stops** (#65). `g1-emu.log` (Report issue opens its
+folder) gets two new kinds of line:
 
-**If you still have no sound** (#53, #59, #65): please go through step 6 with this build. If
-**Test Audio** stays silent, press **Report issue** (bottom right of the panel) and attach
-`g1-emu.log` from the folder it opens, with the status bar's line. On Windows, one more thing
-worth trying and telling us about: set the environment variable `G1_THREADS=0` (System
-Properties, Environment Variables), restart the DAW or the standalone and load Test Audio again.
-It runs the four DSPs one after another instead of in parallel, which costs more CPU; if it sounds
-that way and not the other, we know where to look.
+- At start, **the machine**: the CPU, its cores (performance and efficiency ones on a hybrid
+  CPU), the instruction sets the DSP emulation picks its code by, and whether the four DSPs run
+  on their own threads or one after another (`G1_THREADS=0`).
+- A moment after you play a note, **how far the sound gets**: the output's level, each DSP's
+  state, the level on each link between the four DSPs, and how often a DSP had to go on without
+  the previous one's audio, which is what we suspect goes wrong on some machines.
 
-## Also in this build
+Every line also carries the process id, since a DAW may run each plugin in a process of its own.
 
-- **The plugin's Output Gain starts at +48 dB** (#65), up from +36 dB, which only undid the OS's
-  own -36 dB cap on the master volume and left most patches too quiet next to other instruments.
-  A loud patch may now touch full scale: lower the slider on the Settings card. Projects keep the
-  gain they were saved with, and those from before the slider existed open at +36 dB as before.
+**If you have no sound** (#53, #59, #65): please install this build, keep only one copy of the
+plugin (look in both `C:\Program Files\Common Files\VST3` and
+`C:\Users\<you>\AppData\Local\Programs\Common\VST3`), load **Test Audio** from
+[`test-patches/`](https://github.com/animatek/G1-Emu/tree/main/test-patches)
+([Getting started, step 6](https://github.com/animatek/G1-Emu#getting-started)), **play a few
+notes**, wait a couple of seconds, then press **Report issue** and attach `g1-emu.log`. If you
+can, do it once more with the environment variable `G1_THREADS=0` set, and attach both logs.
 
 ## Known
 
-Same as alpha.16: on Windows the plugin has no PC Port of its own (it uses the direct link); the
+Same as alpha.17: on Windows the plugin has no PC Port of its own (it uses the direct link); the
 standalone still needs loopMIDI for the editor when the direct link is not used.

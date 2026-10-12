@@ -7,6 +7,9 @@ Older entries cite their commit by hand.
 
 ## 2026-10-12
 
+- [Docs] **Release notes for v0.1.0-alpha.18 (Claude, asked by Javier).** `docs/release-notes.md`:
+  the log's new `system` and `health` lines, and what to send for a "no sound" (one plugin copy,
+  Test Audio, a few notes, the log, and a second log with `G1_THREADS=0`).
 - [Feature] **The log says where a "no sound" stops (Claude, issue #65, asked by Javier).** New
   `app/diaglog.*` in `g1Core`, used by the plugin's runner and the standalone's `EmuHost`. At
   start, a `system:` line: the CPU, its threads, performance and efficiency cores on a hybrid one
