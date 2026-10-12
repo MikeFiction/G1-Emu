@@ -41,6 +41,13 @@ Older entries cite their commit by hand.
   it was turned while the group's value changed elsewhere (the dial on the Morph page, the editor,
   another patch). It now turns to the value, as a knob on a parameter does. Checked by Mike
   Fiction in the standalone.
+## 2026-10-10
+
+- [Fix] **A patch loaded only, from the Presets page, shows in Animatek NME (Mike Fiction,
+  Claude).** `app/presetslink.cpp`. The notice that tells the editor of the new patch went out
+  only along with something the G1 said next: after Store its answer took it, but after Load
+  only it waited. It now goes at once. Checked by Mike Fiction in the standalone with Animatek
+  NME.
 
 ## 2026-10-09
 
