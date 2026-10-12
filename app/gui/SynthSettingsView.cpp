@@ -301,12 +301,17 @@ namespace g1gui
 			combo(_c);
 		};
 
-		// Name's label, which the frame does not have, as its labels: small white condensed capitals.
-		m_nameLabel.setFont(juce::FontOptions(g_textSize).withHorizontalScale(g_condensed));
-		m_nameLabel.setText("NAME", juce::dontSendNotification);
-		m_nameLabel.setColour(juce::Label::textColourId, g_label);
-		m_nameLabel.setJustificationType(juce::Justification::centredRight);
-		addAndMakeVisible(m_nameLabel);
+		// The labels the frame does not have, as its own: small white condensed capitals.
+		auto label = [this](juce::Label& _l, const juce::String& _text)
+		{
+			_l.setFont(juce::FontOptions(g_textSize).withHorizontalScale(g_condensed));
+			_l.setText(_text, juce::dontSendNotification);
+			_l.setColour(juce::Label::textColourId, g_label);
+			_l.setJustificationType(juce::Justification::centredRight);
+			_l.setInterceptsMouseClicks(false, false);
+			addAndMakeVisible(_l);
+		};
+		label(m_nameLabel, "NAME");
 		m_name.setFont(juce::FontOptions(g_textSize));
 		m_name.setIndents(6, 0);
 		m_name.setJustification(juce::Justification::centred);	// as the boxes' text
@@ -341,6 +346,19 @@ namespace g1gui
 		choices(m_pedal, {"Normal", "Inverted"});
 		choices(m_program, {"Off", "Receive", "Send", "Send and receive"});
 		choices(m_leds, {"Active", "Off"});
+		choices(m_keyboardMode, {"Active Slot", "Selected Slots"});
+		m_keyboardMode.setTooltip("Selected Slots: a note on a selected slot's channel plays every selected slot, each on its own channel");
+		label(m_keyboardModeLabel, "KEYB MODE");
+		choices(m_midiCc, {"Active Slot", "Selected Slots"});
+		m_midiCc.setTooltip("Selected Slots: a controller on a selected slot's channel goes to every selected slot, each on its own channel. "
+			"Kept by G1-Emu, not by the G1");
+		m_midiCc.onChange = [this]
+		{
+			if(setSelectedControllers)
+				setSelectedControllers(m_midiCc.getSelectedId() == 2);
+			lcdTips();
+		};
+		label(m_midiCcLabel, "MIDI CC MODE");
 		for(auto* v : {&m_velMin, &m_velMax})
 		{
 			v->onChange = [this] { apply(); };
@@ -370,6 +388,7 @@ namespace g1gui
 	void SynthSettingsView::open(const juce::Rectangle<int> _frame)
 	{
 		m_link.read();
+		m_midiCc.setSelectedId(selectedControllers && selectedControllers() ? 2 : 1, juce::dontSendNotification);
 		setBounds(_frame);
 		m_open = true;
 		juce::Desktop::getInstance().getAnimator().fadeIn(this, g_fadeMs);
@@ -432,6 +451,15 @@ namespace g1gui
 		row(1, rowY(0), m_clock);
 		row(1, rowY(1), m_bpm);
 		row(1, rowY(2), m_sync);
+		// Level with Minimum and Maximum, with labels of their own: the frame's Control section has
+		// no room for them yet.
+		auto labelled = [&](const int _y, juce::Component& _control, juce::Label& _label)
+		{
+			row(1, _y, _control);
+			_label.setBounds(_control.getX() - 4 - g_labelW, _control.getY(), g_labelW, g_rowH);
+		};
+		labelled(g_velocityY, m_midiCc, m_midiCcLabel);
+		labelled(g_velocityY + g_rowStep, m_keyboardMode, m_keyboardModeLabel);
 		// The knob under the MIDI channels' boxes, centred on them, in its disk (paint); its value
 		// is on the panel's display while the mouse is on it (lcdTips).
 		const int tuneX = c.getX() + g_colsX + g_labelW + 4 + g_controlW / 2;
@@ -514,6 +542,7 @@ namespace g1gui
 		m_pedal.setSelectedId(_s.pedalPolarity + 1, n);
 		m_program.setSelectedId(1 + (_s.programChangeReceive ? 1 : 0) + (_s.programChangeSend ? 2 : 0), n);
 		m_leds.setSelectedId(_s.ledsActive ? 1 : 2, n);
+		m_keyboardMode.setSelectedId(_s.keyboardMode + 1, n);
 		m_velMin.setValue(_s.velScaleMin);
 		m_velMax.setValue(_s.velScaleMax);
 		lcdTips();
@@ -535,6 +564,10 @@ namespace g1gui
 		tip(m_pedal, "Pedal Polarity", m_pedal.getText());
 		tip(m_program, "Program Change", m_program.getSelectedId() == 4 ? juce::String("Snd/Rcv") : m_program.getText());	// fits the display
 		tip(m_leds, "Editor LEDs", m_leds.getText());
+		// Selected Slots shortened, so the name fits beside it on the display.
+		const auto slots = [](const juce::ComboBox& _c) { return _c.getSelectedId() == 2 ? juce::String("Sel.Slots") : _c.getText(); };
+		tip(m_keyboardMode, "Keyboard Mode", slots(m_keyboardMode));
+		tip(m_midiCc, "MIDI CC Mode", slots(m_midiCc));
 		tip(m_velMin, "Velocity Min", juce::String(m_velMin.getValue()));
 		tip(m_velMax, "Velocity Max", juce::String(m_velMax.getValue()));
 	}
@@ -560,6 +593,7 @@ namespace g1gui
 		s.programChangeReceive = (program & 1) != 0;
 		s.programChangeSend = (program & 2) != 0;
 		s.ledsActive = m_leds.getSelectedId() == 1;
+		s.keyboardMode = m_keyboardMode.getSelectedId() - 1;
 		s.velScaleMin = m_velMin.getValue();
 		s.velScaleMax = m_velMax.getValue();
 		if(s == m_known)

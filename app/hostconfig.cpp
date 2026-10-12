@@ -59,6 +59,7 @@ namespace g1app
 			else if(key == "extrasOpen")	extrasOpen = value != "0";
 			else if(key == "knobDisplays")	knobDisplays = value != "0";
 			else if(key == "knobFollowsPatch") knobFollowsPatch = value != "0";
+			else if(key == "midiCcSelectedSlots") selectedControllers = value != "0";
 			else if(key == "randomExclude")	randomExclude = knobListFromString(value);
 			else if(key == "tooltips")	tooltips = value != "0";
 			else if(key == "presetsHideEmpty") presetsHideEmpty = value != "0";
@@ -134,6 +135,7 @@ namespace g1app
 		  << "extrasOpen = " << (extrasOpen ? 1 : 0) << "\n"
 		  << "knobDisplays = " << (knobDisplays ? 1 : 0) << "\n"
 		  << "knobFollowsPatch = " << (knobFollowsPatch ? 1 : 0) << "\n"
+		  << "midiCcSelectedSlots = " << (selectedControllers ? 1 : 0) << "\n"
 		  << "randomExclude = " << knobListToString(randomExclude) << "\n"
 		  << "tooltips = " << (tooltips ? 1 : 0) << "\n"
 		  << "presetsHideEmpty = " << (presetsHideEmpty ? 1 : 0) << "\n"

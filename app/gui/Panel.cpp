@@ -1398,6 +1398,8 @@ namespace g1gui
 		addChildComponent(m_aboutView);
 		m_settingsCard.onClose = [this] { grabKeyboardFocus(); };
 		addChildComponent(m_settingsCard);
+		m_synthView.selectedControllers = [this] { return m_host.selectedControllers(); };
+		m_synthView.setSelectedControllers = [this](const bool _on) { m_host.setSelectedControllers(_on); };
 		m_synthView.onClose = [this]
 		{
 			m_settingsLed.setOn(false);

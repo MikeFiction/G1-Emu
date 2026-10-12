@@ -50,6 +50,8 @@ namespace g1plugin
 		std::unique_ptr<juce::Component> createSettings() override;
 		g1app::SynthSettingsLink& synthSettings() override;
 		g1app::PresetsLink& presets() override;
+		bool selectedControllers() const override;
+		void setSelectedControllers(bool _on) override;
 		bool canRestart() const override { return true; }
 		void restart() override;
 		juce::String restartNote() const override

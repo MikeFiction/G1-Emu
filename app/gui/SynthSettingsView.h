@@ -93,6 +93,9 @@ namespace g1gui
 		void close(bool _under = false);
 		bool isOpen() const { return m_open; }	// still drawn for a moment after closing under the other page
 		std::function<void()> onClose;
+		// MIDI CC Mode is the host's own setting, not the OS's: read on opening, set at once.
+		std::function<bool()> selectedControllers;
+		std::function<void(bool)> setSelectedControllers;
 
 		void paint(juce::Graphics& _g) override;
 		void resized() override;
@@ -123,6 +126,10 @@ namespace g1gui
 		ValueBox m_bpm{24, 240};
 		juce::Slider m_tune;			// a knob, its value on the panel's display (lcdTips)
 		juce::ComboBox m_knob, m_pedal, m_program, m_leds;
+		juce::ComboBox m_keyboardMode;		// Active Slot, or Selected Slots: the selected slots layered (MidiRouting)
+		juce::Label m_keyboardModeLabel;	// the frame has no label for it yet: drawn as Name's is
+		juce::ComboBox m_midiCc;			// Active Slot, or Selected Slots: controllers layered too (selectedControllers)
+		juce::Label m_midiCcLabel;			// as Keyboard Mode's
 		ValueBox m_velMin{0, 127}, m_velMax{0, 127};
 		juce::Label m_note;
 		juce::TextButton m_close{"Close"};

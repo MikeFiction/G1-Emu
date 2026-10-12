@@ -21,6 +21,7 @@
 #include "engine.h"
 #include "hostconfig.h"
 #include "miditransport.h"
+#include "midirouting.h"
 #include "presetslink.h"
 #include "slotkeeper.h"
 #include "synthsettings.h"
@@ -78,6 +79,9 @@ namespace g1app
 		~Runner();	// stops the worker and detaches from the engine; the engine keeps its state
 
 		size_t latency() const { return m_latency; }
+		// MIDI CC Mode on Selected Slots: a controller on a selected slot's channel goes to every selected
+		// slot (MidiRouting). Any thread.
+		void setSelectedControllers(const bool _on) { m_selectedControllers = _on; }
 		double rate() const { return m_rate; }
 
 		// Audio thread. First the block's MIDI (offsets within the block), then the block itself.
@@ -116,6 +120,9 @@ namespace g1app
 		AudioBridge m_bridge;
 		HealthProbe m_health;			// worker thread, and DSP 3's for output()
 		SpscQueue<Event, 1024> m_events;
+		MidiRouting m_midiRouting;		// the worker's: the track's notes and controllers, to the slots that play them
+		std::atomic<bool> m_selectedControllers{false};	// MIDI CC Mode on Selected Slots (setSelectedControllers)
+		std::vector<uint8_t> m_routed;
 
 		std::atomic<uint64_t> m_consumed{0};	// frames the host has taken (audio thread writes)
 		uint64_t m_debt = 0;					// frames owed: put out as silence, not yet arrived

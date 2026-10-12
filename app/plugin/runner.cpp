@@ -219,8 +219,11 @@ namespace g1app
 			{
 				if(e->frame > produced)
 					break;
-				for(uint8_t i = 0; i < e->size; ++i)
-					mc.getSci().write(e->bytes[i]);
+				// With Keyboard Mode or MIDI CC Mode on Selected Slots, played by every selected slot.
+				m_routed.clear();
+				m_midiRouting.apply(mc, MidiRouting::layout(m_settings, m_selectedControllers), e->bytes, e->size, m_routed);
+				for(const auto b : m_routed)
+					mc.getSci().write(b);
 				m_midiIn += e->size;
 				// A note (on, with a velocity) is what should make a sound: the clock does not count.
 				midiIn |= (e->bytes[0] & 0xf0) == 0x90 && e->size == 3 && e->bytes[2] != 0;
