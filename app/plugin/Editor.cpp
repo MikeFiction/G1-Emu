@@ -156,8 +156,8 @@ namespace g1plugin
 				m_gain.setSliderStyle(juce::Slider::LinearHorizontal);
 				m_gain.setTextBoxStyle(juce::Slider::TextBoxRight, false, 70, 22);
 				m_gain.setTextValueSuffix(" dB");
-				m_gain.setTooltip("The OS caps the G1's master volume at -36 dB; +36 dB undoes it. "
-					"Raise it further for a quiet patch, as the standalone's own Output level does.");
+				m_gain.setTooltip("The OS caps the G1's master volume at -36 dB; +36 dB undoes it, and a new "
+					"instance starts at +48 dB so patches sit level with other instruments. Lower it for a loud patch.");
 				addAndMakeVisible(m_gain);
 
 				m_text.setMultiLine(true, true);

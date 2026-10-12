@@ -71,14 +71,17 @@ namespace g1plugin
 	};
 
 	// The output gain (issue #65): the standalone's "Output level" slider, missing from the plugin,
-	// which had no way at all to make up for a quiet patch beyond the host's own fader. 36 dB is the
-	// default everywhere (the standalone's own default, and what the plugin used as a fixed value
-	// before this parameter existed): a project saved before this change reads back the same gain.
+	// which had no way at all to make up for a quiet patch beyond the host's own fader. A new
+	// instance starts at 48 dB (DefaultDb): +36 dB only undoes the OS's -36 dB cap on the master
+	// volume, and most patches still came out too quiet next to other instruments. A project saved
+	// before this parameter existed ran at a fixed 36 dB and reads back 36 dB (readPreferences).
 	class GainParameter final : public juce::AudioParameterFloat
 	{
 	public:
+		static constexpr float DefaultDb = 48.0f;
+		static constexpr float LegacyDb = 36.0f;		// the fixed gain before this parameter
 		GainParameter() : juce::AudioParameterFloat(juce::ParameterID{"gain", 1}, "Output Gain",
-			juce::NormalisableRange<float>(0.0f, 60.0f, 1.0f), 36.0f, juce::AudioParameterFloatAttributes().withLabel("dB")) {}
+			juce::NormalisableRange<float>(0.0f, 60.0f, 1.0f), DefaultDb, juce::AudioParameterFloatAttributes().withLabel("dB")) {}
 	};
 
 	class Processor : public juce::AudioProcessor, private juce::AsyncUpdater, private juce::Timer
@@ -174,7 +177,7 @@ namespace g1plugin
 		VolumeParameter* m_volumeParam = nullptr;
 		int m_lastVolumeAdc = -1, m_lastVolumeParam = -1;
 		GainParameter* m_gainParam = nullptr;
-		float m_lastGainDb = 36.0f;		// audio thread only: the value last given to the runner
+		float m_lastGainDb = GainParameter::DefaultDb;		// audio thread only: the value last given to the runner
 		std::mutex m_knobMutex;
 		int m_knobGeneration = -1;
 		static constexpr size_t VolumeIndex = 18;		// after the knobs, in m_gestures and m_toHost

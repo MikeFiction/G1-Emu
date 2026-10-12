@@ -7,6 +7,17 @@ Older entries cite their commit by hand.
 
 ## 2026-10-12
 
+- [Docs] **Release notes for v0.1.0-alpha.17 (Claude, asked by Javier).** `docs/release-notes.md`:
+  the test patches and their step by step, and the plugin's new default output gain, with what to
+  do for anyone on #53, #59 or #65 still without sound.
+- [Change] **The plugin's Output Gain starts at +48 dB (Claude, issue #65, asked by Javier).**
+  `app/plugin/Processor.*`, `Editor.cpp`. +36 dB only undoes the OS's -36 dB cap on the master
+  volume, and patches came out too quiet next to other instruments. A project saved with the
+  parameter keeps its value; one saved before it existed (fixed 36 dB) now reads back 36 dB
+  explicitly instead of taking the default, so its mix does not jump 12 dB. Checked on Windows
+  with `g1vst3check`, all good: a patch at -11.6 dBFS at +36 dB reaches 0.0 dBFS at +48 (the
+  output clamps at full scale, so a loud patch may want the slider lowered), a quiet one goes from
+  -25.8 to -13.8 dBFS; 50 dB was tried first and clipped the louder patch by 2.4 dB.
 - [Docs] **The test patches as a step by step in Getting started (Claude, asked by Javier).**
   `README.md`: a new step 6 with direct download links to `Test Audio.pch` and `Test MIDI.pch`,
   how to load them (slot A, Presets, Load .pch, Load only) and what each result means, ending in

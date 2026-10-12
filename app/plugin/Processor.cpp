@@ -663,10 +663,9 @@ namespace g1plugin
 		m_panelScale = static_cast<float>(_xml.getDoubleAttribute("panelScale", m_panelScale));
 		m_knobFollowsPatch = _xml.getBoolAttribute("knobFollowsPatch", m_knobFollowsPatch);
 		// A project from before this parameter existed has no attribute: the fixed 36 dB it ran
-		// with, which is also GainParameter's own default.
-		if(_xml.hasAttribute("gainDb"))
-			m_gainParam->setValueNotifyingHost(m_gainParam->convertTo0to1(
-				static_cast<float>(_xml.getDoubleAttribute("gainDb", 36.0))));
+		// with, not the new default, so its mix does not jump 12 dB.
+		m_gainParam->setValueNotifyingHost(m_gainParam->convertTo0to1(
+			static_cast<float>(_xml.getDoubleAttribute("gainDb", GainParameter::LegacyDb))));
 		if(_xml.hasAttribute("randomExclude"))
 			m_randomExclude = g1app::knobListFromString(_xml.getStringAttribute("randomExclude").toStdString());
 	}
