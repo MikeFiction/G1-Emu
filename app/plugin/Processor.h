@@ -70,6 +70,17 @@ namespace g1plugin
 		void setNotifyingHost(const int _v) { setValueNotifyingHost(convertTo0to1(static_cast<float>(_v))); }
 	};
 
+	// The output gain (issue #65): the standalone's "Output level" slider, missing from the plugin,
+	// which had no way at all to make up for a quiet patch beyond the host's own fader. 36 dB is the
+	// default everywhere (the standalone's own default, and what the plugin used as a fixed value
+	// before this parameter existed): a project saved before this change reads back the same gain.
+	class GainParameter final : public juce::AudioParameterFloat
+	{
+	public:
+		GainParameter() : juce::AudioParameterFloat(juce::ParameterID{"gain", 1}, "Output Gain",
+			juce::NormalisableRange<float>(0.0f, 60.0f, 1.0f), 36.0f, juce::AudioParameterFloatAttributes().withLabel("dB")) {}
+	};
+
 	class Processor : public juce::AudioProcessor, private juce::AsyncUpdater, private juce::Timer
 	{
 	public:
@@ -126,6 +137,10 @@ namespace g1plugin
 		// switches are written at once, the size when the editor closes (savePreferences).
 		g1app::SynthSettingsLink& synthSettings() { return m_synthSettings; }
 		g1app::PresetsLink& presets() { return m_presets; }
+
+		// The Settings card's gain slider (issue #65): the host's own automatable parameter, the
+		// same one processBlock reads, so the slider and host automation never fight each other.
+		juce::RangedAudioParameter& gainParameter() { return *m_gainParam; }
 		bool extrasOpen() const { return m_extrasOpen; }
 		void setExtrasOpen(bool _open) { if(std::exchange(m_extrasOpen, _open) != _open) { stateChanged(); savePreferences(); } }
 		bool knobDisplays() const { return m_knobDisplays; }
@@ -158,6 +173,8 @@ namespace g1plugin
 		std::array<float, 18> m_lastParam{};			// the value each parameter was last seen at
 		VolumeParameter* m_volumeParam = nullptr;
 		int m_lastVolumeAdc = -1, m_lastVolumeParam = -1;
+		GainParameter* m_gainParam = nullptr;
+		float m_lastGainDb = 36.0f;		// audio thread only: the value last given to the runner
 		std::mutex m_knobMutex;
 		int m_knobGeneration = -1;
 		static constexpr size_t VolumeIndex = 18;		// after the knobs, in m_gestures and m_toHost
@@ -242,7 +259,6 @@ namespace g1plugin
 		double m_rate = 0;
 		int m_maxBlock = 0;
 		bool m_prepared = false;
-		float m_gainDb = 36.0f;					// undoes the -36 dB cap the OS puts on the master volume
 		juce::AudioBuffer<float> m_inputs;		// the inputs, copied before the outputs overwrite them
 
 		bool m_extrasOpen = false, m_knobDisplays = false, m_knobFollowsPatch = false;

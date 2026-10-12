@@ -169,6 +169,9 @@ namespace g1plugin
 		auto volume = std::make_unique<VolumeParameter>();
 		m_volumeParam = volume.get();
 		addParameter(volume.release());
+		auto gain = std::make_unique<GainParameter>();
+		m_gainParam = gain.get();
+		addParameter(gain.release());
 		loadPreferences();
 		openPcPort();
 		openLink();
@@ -411,7 +414,8 @@ namespace g1plugin
 		m_runner.reset();
 		if(!m_engine || !m_prepared)
 			return;
-		m_runner = std::make_unique<g1app::Runner>(*m_engine, m_rate, static_cast<size_t>(m_maxBlock), m_gainDb,
+		m_lastGainDb = m_gainParam->get();
+		m_runner = std::make_unique<g1app::Runner>(*m_engine, m_rate, static_cast<size_t>(m_maxBlock), m_lastGainDb,
 			m_pcPort && m_pcPort->virtualPorts() ? m_pcPort.get() : nullptr, m_pcIndex, m_keeper.get(),
 			&m_synthSettings, m_link.listening() ? &m_link : nullptr, &m_presets);
 		setLatencySamples(static_cast<int>(m_runner->latency()));
@@ -608,6 +612,11 @@ namespace g1plugin
 				take(b - g_stereoBuses, out.getWritePointer(0));
 		}
 		knobsFromHost();
+		if(const float gain = m_gainParam->get(); gain != m_lastGainDb)
+		{
+			m_lastGainDb = gain;
+			runner->setGainDb(gain);
+		}
 		runner->process(outs, 4, ins, numIns, static_cast<size_t>(frames), isNonRealtime());
 		for(int c = 0; c < 4; ++c)
 			if(copies[c] && outs[c])
@@ -634,6 +643,7 @@ namespace g1plugin
 		xml.setAttribute("knobFollowsPatch", m_knobFollowsPatch);
 		xml.setAttribute("randomExclude", juce::String(g1app::knobListToString(m_randomExclude)));
 		xml.setAttribute("programs", juce::String(programsToString()));
+		xml.setAttribute("gainDb", static_cast<double>(m_gainParam->get()));
 		return xml;
 	}
 
@@ -643,6 +653,11 @@ namespace g1plugin
 		m_knobDisplays = _xml.getBoolAttribute("knobDisplays", m_knobDisplays);
 		m_panelScale = static_cast<float>(_xml.getDoubleAttribute("panelScale", m_panelScale));
 		m_knobFollowsPatch = _xml.getBoolAttribute("knobFollowsPatch", m_knobFollowsPatch);
+		// A project from before this parameter existed has no attribute: the fixed 36 dB it ran
+		// with, which is also GainParameter's own default.
+		if(_xml.hasAttribute("gainDb"))
+			m_gainParam->setValueNotifyingHost(m_gainParam->convertTo0to1(
+				static_cast<float>(_xml.getDoubleAttribute("gainDb", 36.0))));
 		if(_xml.hasAttribute("randomExclude"))
 			m_randomExclude = g1app::knobListFromString(_xml.getStringAttribute("randomExclude").toStdString());
 	}

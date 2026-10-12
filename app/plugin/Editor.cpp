@@ -142,14 +142,24 @@ namespace g1plugin
 
 	namespace
 	{
-		// What Settings shows in the plugin, on the panel's card: this instance (its ROM, latency,
-		// where its patches came from, its PC Port and direct link) and the notice, as the About
-		// card shows its text. Nothing to set: the host and the project decide.
+		// What Settings shows in the plugin, on the panel's card: the output gain (issue #65: the
+		// standalone's slider, missing here until now, was the only way to make up for a quiet
+		// patch), then this instance (its ROM, latency, where its patches came from, its PC Port and
+		// direct link) and the notice, as the About card shows its text.
 		class InstanceView : public juce::Component
 		{
 		public:
-			explicit InstanceView(const juce::String& _instance)
+			InstanceView(juce::RangedAudioParameter& _gain, const juce::String& _instance)
+				: m_gainAttachment(_gain, m_gain)
 			{
+				label(m_gainLabel, "Output level");
+				m_gain.setSliderStyle(juce::Slider::LinearHorizontal);
+				m_gain.setTextBoxStyle(juce::Slider::TextBoxRight, false, 70, 22);
+				m_gain.setTextValueSuffix(" dB");
+				m_gain.setTooltip("The OS caps the G1's master volume at -36 dB; +36 dB undoes it. "
+					"Raise it further for a quiet patch, as the standalone's own Output level does.");
+				addAndMakeVisible(m_gain);
+
 				m_text.setMultiLine(true, true);
 				m_text.setReadOnly(true);
 				m_text.setScrollbarsShown(true);
@@ -173,16 +183,30 @@ namespace g1plugin
 				addAndMakeVisible(m_text);
 				setSize(Width, Height);
 			}
-			void resized() override { m_text.setBounds(-6, 0, getWidth() + 12, getHeight() - g1gui::CardView::CloseH - 10); }
+			void resized() override
+			{
+				m_gainLabel.setBounds(0, 0, 130, GainRowH);
+				m_gain.setBounds(136, 0, getWidth() - 136, GainRowH);
+				m_text.setBounds(-6, GainRowH + 6, getWidth() + 12, getHeight() - GainRowH - 6 - g1gui::CardView::CloseH - 10);
+			}
 
 		private:
-			static constexpr int Width = 760, Height = 380;
+			static void label(juce::Label& _l, const juce::String& _text)
+			{
+				_l.setText(_text, juce::dontSendNotification);
+				_l.setColour(juce::Label::textColourId, juce::Colours::white);
+				_l.setJustificationType(juce::Justification::centredRight);
+			}
+			static constexpr int Width = 760, Height = 380, GainRowH = 24;
+			juce::Label m_gainLabel;
+			juce::Slider m_gain;
+			juce::SliderParameterAttachment m_gainAttachment;
 			juce::TextEditor m_text;
 		};
 	}
 
 	std::unique_ptr<juce::Component> Editor::createSettings()
 	{
-		return std::make_unique<InstanceView>(juce::String(m_processor.describe()));
+		return std::make_unique<InstanceView>(m_processor.gainParameter(), juce::String(m_processor.describe()));
 	}
 }

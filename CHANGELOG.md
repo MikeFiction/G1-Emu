@@ -7,6 +7,16 @@ Older entries cite their commit by hand.
 
 ## 2026-10-12
 
+- [Fix] **The plugin can raise its output gain, like the standalone's Output level (Claude, issue
+  #65, asked by Javier).** `app/plugin/Processor.*`, `app/plugin/Editor.cpp`. The plugin had the
+  same fixed +36 dB as the standalone (undoing the OS's -36 dB cap) but no way to go further for a
+  quiet patch, unlike the standalone's slider in Settings: the DAW's own fader was the only
+  recourse. A new **Output Gain** parameter (0-60 dB, default 36, host-automatable) drives the
+  same `Runner::setGainDb` the standalone's slider does, with a slider for it on the plugin's
+  Settings card; the project remembers it (`gainDb` in the state, read back with the 36 dB default
+  for a project saved before this). Checked: `g1vst3check` passes (state round-trip, two
+  instances, knobs, mono outputs); tried by hand on Windows 11 in Ableton Live 12 — the slider
+  moves the level live.
 - [Docs] **Release notes for v0.1.0-alpha.15 (Claude, asked by Javier).** `docs/release-notes.md`:
   the synth settings in the project (#46), the Presets and panel fixes since alpha.14, and the
   README's Getting Started and FAQ. Asks the Windows "no notes from the DAW" reporters (#53) to
