@@ -7,6 +7,24 @@ Older entries cite their commit by hand.
 
 ## 2026-10-12
 
+- [Feature] **Octave shift per slot (Mike Fiction, Claude).** **Touches the plugin and `EmuHost`:**
+  `app/plugin/Processor.*` (the Slot A-D Octave parameters, both ways, and the keeper reading a slot
+  again when its shift changes), and the shift in `app/midirouting.*`, which the plugin's runner
+  and `EmuHost` pass their MIDI through. The rack's OS keeps an octave shift per slot (-2 to +2) and
+  carries it in the patch, but only the keyboard model's own keys play it: on the rack it moves
+  nothing. The hosts now move each note from the MIDI port or the track by its slot's shift, its
+  note off following it wherever the shift has gone since; a note shifted past the keyboard's ends
+  is not played. With Keyboard Mode on Selected Slots, each layered slot plays by its own shift.
+  The panel (`app/gui/Panel.*`) has the OCT SHIFT keys and their five LEDs, which show the active
+  slot's shift, in new art (`octave_shift.png` over the background; the Master Volume column moved
+  16 px right to make room), and the display below the knobs shows the shift on the keys. In the
+  plugin, Slot A-D Octave are parameters the host can automate, after Output Gain so the others
+  keep their places, and a project keeps them, as the patches carry them. `NOTES.md`'s Oct Shift
+  note says G1-Emu applies it. `g1slotkeepertest` gets steps (Oct Up on the panel: the patch
+  carries the shift and the notes move; the note off follows; a note moved off the keyboard is not
+  played; layered slots each by their own shift) and `g1vst3check` a check (the host sets slot A
+  to +1, and a reopened project has it). Checked by Mike Fiction in the standalone and in Bitwig,
+  where the shift comes back with the project.
 - [Feature] **MIDI CC assign and MIDI Learn in a knob's right-click menu (Mike Fiction, Claude).**
   **Touches the plugin and `EmuHost`:** `app/plugin/Processor.*`, `app/plugin/runner.h`,
   `app/plugin/Editor.*` and `app/emuhost.h` pass the panel the last MIDI controller that came in

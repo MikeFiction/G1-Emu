@@ -689,7 +689,9 @@ Both pass since the fix ([CI run 35570337853](https://github.com/animatek/G1-Emu
   the ROM, which is `$01`** in the rack's, and sent to the editor in a SysEx. Which fits the
   hardware: the octave shift moves the local keyboard, which the rack does not have. The buttons
   (2.4 and 2.5) and the five LEDs are wired in `g1gui` because the panel there is drawn from a
-  photo of the keyboard model; on the rack they do nothing.
+  photo of the keyboard model; on the rack they do nothing. **G1-Emu applies it itself:** the
+  hosts move each note by its slot's shift on its way to the MIDI IN (`app/midirouting.*`), and
+  the window lights the five LEDs from the active slot's shift.
 - **Panel Split** (button 2.2, LED 3.2, flag `$18C0E4`, **0 = split on**) hands each group of knobs
   to a different slot (`$115EA8`), with two tables in the OS: `$145A94` gives the slot of each
   knob and `$145AA6` its number inside that slot.

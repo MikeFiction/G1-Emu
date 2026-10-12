@@ -9,6 +9,7 @@ namespace g1app
 {
 	namespace
 	{
+		constexpr uint32_t OctShiftAddr = 0x1c3ab8;	// + slot, + the OS's shift (KnobMap::osShift)
 		constexpr uint8_t SlotLedBit = 0x80;			// slot s's LED: bit 7 of LED row s (active low)
 		constexpr uint8_t BankSelectCc = 0, ModWheelCc = 1, BankSelectLsbCc = 32, SustainCc = 64, ChannelModeCc = 120;
 
@@ -19,6 +20,20 @@ namespace g1app
 			return type == 0xc0 || type == 0xd0 ? 1 : 2;
 		}
 	}
+
+	int MidiRouting::shift(g1::Microcontroller& _mc, const size_t _slot)
+	{
+		g1::KnobMap map(_mc);
+		const auto v = static_cast<int8_t>(_mc.read8(OctShiftAddr + map.osShift() + static_cast<uint32_t>(_slot & 3)));
+		return std::clamp<int>(v, -MaxShift, MaxShift);
+	}
+
+	void MidiRouting::setShift(g1::Microcontroller& _mc, const size_t _slot, const int _shift)
+	{
+		g1::KnobMap map(_mc);
+		_mc.write8(OctShiftAddr + map.osShift() + static_cast<uint32_t>(_slot & 3), static_cast<uint8_t>(std::clamp(_shift, -MaxShift, MaxShift)));
+	}
+
 
 	MidiRouting::Layout MidiRouting::layout(const SynthSettingsLink* _settings, const bool _selectedControllers)
 	{
@@ -81,10 +96,11 @@ namespace g1app
 		}
 	}
 
-	// Where a message on _channel goes: to that channel, for the slot on it (the active one, if more
-	// than one is). _layered (Selected Slots) and _channel a selected slot's: to each selected slot's
-	// own channel, whichever of them is active (as the keyboard model's keys play them all); a
-	// channel two of them share once, for the active slot if it is one of them.
+	// Where a message on _channel goes: to that channel, moved by the shift of the slot on it (the
+	// active one, if more than one is). _layered (Selected Slots) and _channel a selected slot's: to each
+	// selected slot's own channel, by its own shift, whichever of them is active (as the keyboard
+	// model's keys play them all); a channel two of them share once, by the active slot's shift if
+	// it is one of them.
 	int MidiRouting::targets(g1::Microcontroller& _mc, const Layout& _layout, const int _channel, const bool _layered, std::array<Target, MaxCopies>& _out) const
 	{
 		const auto active = static_cast<int>(_mc.read8(g1::KnobMap::ActiveSlot + g1::KnobMap(_mc).osShift()) & 3);
@@ -109,7 +125,7 @@ namespace g1app
 			if(onSelected)
 			{
 				if(const int ch = _layout.channels[static_cast<size_t>(active)]; ch >= 0 && ch < 16)
-					add(ch, active);	// first: a channel it shares is its
+					add(ch, active);	// first: a channel it shares goes by its shift
 				for(int s = 0; s < 4; ++s)
 				{
 					const int ch = _layout.channels[static_cast<size_t>(s)];
@@ -127,8 +143,8 @@ namespace g1app
 		return count;
 	}
 
-	// A whole channel message, sent with its status each time, so copies on other channels never
-	// break a running status the G1 would follow.
+	// A whole channel message, sent with its status each time: what is left out (a note moved off
+	// the keyboard) never breaks a running status the G1 would follow.
 	void MidiRouting::message(g1::Microcontroller& _mc, const Layout& _layout, std::vector<uint8_t>& _out)
 	{
 		const auto type = static_cast<uint8_t>(m_status & 0xf0);
@@ -173,14 +189,19 @@ namespace g1app
 		const bool off = type == 0x80 || (type == 0x90 && m_data[1] == 0);
 		if(on || !sent.played)
 		{
-			// Where the note goes now. A note on keeps it for its note off and its pressure.
+			// Where the note goes now: each target moved by its slot's shift, what goes off the
+			// keyboard left out. A note on keeps it for its note off and its pressure.
 			const int n = targets(_mc, _layout, channel, _layout.selectedSlots, to);
 			Sent now;
 			now.played = on;
 			for(int i = 0; i < n; ++i)
 			{
-				now.channel[static_cast<size_t>(now.count)] = to[static_cast<size_t>(i)].channel;
-				now.note[static_cast<size_t>(now.count++)] = note;
+				const auto& t = to[static_cast<size_t>(i)];
+				const int moved = note + (t.slot < 0 ? 0 : 12 * shift(_mc, static_cast<size_t>(t.slot)));
+				if(moved < 0 || moved > 127)
+					continue;
+				now.channel[static_cast<size_t>(now.count)] = t.channel;
+				now.note[static_cast<size_t>(now.count++)] = static_cast<uint8_t>(moved);
 			}
 			for(int i = 0; i < now.count; ++i)
 				send(now.channel[static_cast<size_t>(i)], now.note[static_cast<size_t>(i)]);
@@ -188,8 +209,8 @@ namespace g1app
 				sent = now;
 			return;
 		}
-		// A note off, or the pressure of a held note: where its note on went, whatever the selection
-		// is now.
+		// A note off, or the pressure of a held note: where its note on went, whatever the shifts
+		// and the selection are now.
 		for(int i = 0; i < sent.count; ++i)
 			send(sent.channel[static_cast<size_t>(i)], sent.note[static_cast<size_t>(i)]);
 		if(off)

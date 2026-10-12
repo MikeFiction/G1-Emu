@@ -445,6 +445,9 @@ namespace g1gui
 		LedView* m_panelSplitLed = nullptr;
 		PanelButton* m_panelSplit = nullptr;
 		PanelButton* m_find = nullptr;
+		PanelButton* m_octDown = nullptr;
+		PanelButton* m_octUp = nullptr;
+		std::array<LedView*, 5> m_octLeds{};	// -2 to +2: the active slot's octave shift
 		std::array<PanelButton*, 4> m_modeButtons{};	// Store, System, Edit, Patch/Load
 		std::array<LedView*, 4> m_modeLeds{};
 		std::array<PanelButton*, 4> m_slotButtons{};	// A-D

@@ -173,6 +173,12 @@ namespace g1plugin
 		auto gain = std::make_unique<GainParameter>();
 		m_gainParam = gain.get();
 		addParameter(gain.release());
+		for(int s = 0; s < 4; ++s)	// after the knobs, the volume and the gain, which keep their places
+		{
+			auto octave = std::make_unique<OctaveParameter>(s);
+			m_octaveParams[static_cast<size_t>(s)] = octave.get();
+			addParameter(octave.release());
+		}
 		loadPreferences();
 		openPcPort();
 		openLink();
@@ -371,6 +377,9 @@ namespace g1plugin
 		m_settingsTries = 0;
 		m_settingsWrittenAt = 0;
 		m_systemMenu = false;
+		m_octaves = {};
+		for(size_t s = 0; s < m_octaveParams.size(); ++s)
+			m_lastOctaveParams[s] = m_octaveParams[s]->get();	// where the host has them: the new G1's go to it
 		m_restoring = false;
 		m_presets.reset();
 		m_unstarted = false;
@@ -895,12 +904,14 @@ namespace g1plugin
 	{
 		bool renamed = false;
 		std::vector<std::pair<size_t, float>> edits;
+		std::vector<std::pair<size_t, int>> octaveEdits;
 		{
 			std::lock_guard<std::mutex> lifecycle(m_lifecycle);
 			if(m_engine)
 			{
 				auto& mc = m_engine->mc();
 				knobsToHost(mc, edits);
+				octavesToAndFromHost(mc, octaveEdits);
 				g1::KnobMap map(mc);
 				for(uint32_t k = 0; k < 18; ++k)
 					renamed = m_knobParams[k]->setInfo(map.read(k)) || renamed;
@@ -927,6 +938,7 @@ namespace g1plugin
 		// Outside the locks: the host may call back into the plugin from inside these calls (to
 		// learn the parameter, to keep an undo step, to ask for the new names).
 		tellHost(edits);
+		tellHostOctaves(octaveEdits);
 		if(renamed)
 			updateHostDisplay(ChangeDetails().withParameterInfoChanged(true));
 	}
@@ -1026,6 +1038,49 @@ namespace g1plugin
 			m_lastVolumeParam = v;
 			m_toHost[VolumeIndex].store(true, std::memory_order_release);
 			_edits.emplace_back(VolumeIndex, m_volumeParam->convertTo0to1(static_cast<float>(v)));
+		}
+	}
+
+	// Each slot's octave, both ways. A parameter the host moved since they last agreed is written to
+	// the G1 (under the engine lock: the worker runs it); otherwise a shift the G1 has elsewhere (the
+	// Oct keys, a patch loaded) goes to the host. While a project's state goes back in, what the host
+	// sets is let be: the restored patches carry the shifts, and they win once they are in.
+	void Processor::octavesToAndFromHost(g1::Microcontroller& _mc, std::vector<std::pair<size_t, int>>& _edits)
+	{
+		for(size_t s = 0; s < m_octaveParams.size(); ++s)
+		{
+			const int param = m_octaveParams[s]->get();
+			if(m_restoring)
+				m_lastOctaveParams[s] = param;
+			else if(param != m_lastOctaveParams[s])
+			{
+				m_lastOctaveParams[s] = param;
+				std::unique_lock<std::mutex> engineLock;
+				if(m_runner)
+					engineLock = m_runner->lockEngine();
+				g1app::MidiRouting::setShift(_mc, s, param);
+			}
+			else if(const int shift = g1app::MidiRouting::shift(_mc, s); shift != param)
+			{
+				m_lastOctaveParams[s] = shift;
+				_edits.emplace_back(s, shift);
+			}
+			// The shift is in the slot's patch and the OS tells no one of a change: the keeper reads
+			// the slot again, so a project saved now keeps it. Not while the slots go back in.
+			if(const int shift = g1app::MidiRouting::shift(_mc, s); shift != std::exchange(m_octaves[s], shift) && m_keeper && !m_restoring)
+				m_keeper->reread(s);
+		}
+	}
+
+	// Message thread, no lock held: each octave the G1 changed, as a gesture of its own.
+	void Processor::tellHostOctaves(const std::vector<std::pair<size_t, int>>& _edits)
+	{
+		for(const auto& [slot, shift] : _edits)
+		{
+			auto& p = *m_octaveParams[slot];
+			p.beginChangeGesture();
+			p.setValueNotifyingHost(p.convertTo0to1(static_cast<float>(shift)));
+			p.endChangeGesture();
 		}
 	}
 
