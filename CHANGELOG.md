@@ -43,6 +43,10 @@ Older entries cite their commit by hand.
   the knobs turning into place, and closer to how an LCD really looks turning on and off. Ticking
   Parameter Displays on or off in the extras fades them and the knob LEDs into each other in the
   same time. Checked by Mike Fiction in the standalone.
+- [GUI] **The display below the knobs lets a name linger (Mike Fiction, Claude).** When the mouse
+  leaves a control, its name and value stay on that display for half a second, then fade out in
+  60 ms, instead of going blank at once. Moving straight onto another control changes it at once.
+  Checked: builds on Windows.
 
 - [Docs] **Agent instructions: the shared CODE changelog is written with `cambios apuntar` (Claude, asked by
   Javier).** `AGENTS.md` now says to log in the maintainer's workspace changelog through that command and never
