@@ -7,6 +7,16 @@ Older entries cite their commit by hand.
 
 ## 2026-10-12
 
+- [Feature] **A log file, shared by the standalone and the plugin (Claude, issues #59, #63, #65,
+  asked by Javier).** New `app/hostlog.*`, in `g1Core` so every front end has it. Reports of "no
+  audio" or "connection lost" were a guess without knowing what the emulator actually saw at the
+  time; every instance now appends timestamped lines to `g1-emu.log` beside the settings file: at
+  startup (version, ROM, PC Port, direct link), at restart, on a DSP's JIT failure, and on a
+  dropout (the first one, then again every 100, with the load at the time). Kept under 256 KB by
+  halving it once past that. **Report issue** (`app/gui/Panel.cpp`) now also opens the log's
+  folder and asks in the pre-filled body to attach it, since GitHub's new-issue URL has no way to
+  attach a file by itself. Checked: builds on Windows; the standalone's and the plugin's logs both
+  show the expected lines on a normal start (tried by hand); `g1vst3check` still passes.
 - [Fix] **The plugin can raise its output gain, like the standalone's Output level (Claude, issue
   #65, asked by Javier).** `app/plugin/Processor.*`, `app/plugin/Editor.cpp`. The plugin had the
   same fixed +36 dB as the standalone (undoing the OS's -36 dB cap) but no way to go further for a

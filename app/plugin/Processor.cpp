@@ -2,6 +2,7 @@
 
 #include "Editor.h"
 
+#include "hostlog.h"
 #include "romfinder.h"
 #include "g1Lib/g1format.h"
 
@@ -177,6 +178,14 @@ namespace g1plugin
 		openLink();
 		findRom();
 		startTimerHz(20);
+
+		// A user's own account of "no audio" or "connection lost" (issues #59, #63, #65) is a
+		// guess without this: what the plugin actually found at this instant, in the log Report
+		// issue's folder opens.
+		g1app::logEvent("plugin start: " + std::string(G1_BUILD_VERSION) + ", instance " + std::to_string(m_instance)
+			+ "\n  ROM: " + (m_romProblem.empty() ? m_romPath : m_romProblem)
+			+ "\n  PC Port: " + (m_pcPort ? (m_pcPort->virtualPorts() ? "virtual port open" : m_pcPort->describe()) : m_pcProblem)
+			+ "\n  Direct link: " + (m_link.listening() ? m_link.name() + " on port " + std::to_string(m_link.port()) : m_linkProblem));
 	}
 
 	namespace

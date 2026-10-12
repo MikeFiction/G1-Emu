@@ -126,5 +126,6 @@ namespace g1app
 		std::mutex m_statsMutex;
 		HostStats m_stats;
 		std::atomic<uint64_t> m_midiIn{0}, m_midiOut{0}, m_pcIn{0}, m_pcOut{0}, m_xruns{0}, m_dropped{0};
+		uint64_t m_loggedXruns = 0;				// worker thread only: dropouts already written to the log
 	};
 }

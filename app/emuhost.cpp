@@ -1,6 +1,7 @@
 #include "emuhost.h"
 #include <ctime>
 
+#include "hostlog.h"
 #include "romfinder.h"
 
 #include "miditransport.h"
@@ -114,6 +115,7 @@ namespace g1app
 			const auto msg = missingRomMessage(search);
 			m_romProblem = msg;
 			_log += msg;
+			logEvent("start: " + msg);
 			return false;
 		}
 		m_options.rom = search.path;
@@ -209,6 +211,7 @@ namespace g1app
 			m_wavMaxFrames = static_cast<uint64_t>(std::atof(rec) * 96000.0);
 		}
 
+		logEvent("start:\n" + _log);
 		launch();
 		return true;
 	}
@@ -272,6 +275,7 @@ namespace g1app
 		m_lastReportTime = 0;
 		m_lastReportCycles = 0;
 
+		logEvent("restart");
 		launch();
 		return true;
 	}
@@ -626,7 +630,10 @@ namespace g1app
 					m_stats.dspOn[d] = mc.getDsp(d).booted();
 					m_stats.dspFailed[d] = mc.getDsp(d).jitFailed();
 					if(mc.getDsp(d).jitFailed() && m_stats.dspProblem.empty())
+					{
 						m_stats.dspProblem = "DSP " + std::to_string(d) + " stopped: the JIT could not generate its code (" + mc.getDsp(d).jitFailure() + ")";
+						logEvent(m_stats.dspProblem);
+					}
 				}
 				lastCpu = cpu;
 				busy = 0;

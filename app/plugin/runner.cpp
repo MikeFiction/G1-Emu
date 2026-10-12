@@ -1,5 +1,7 @@
 #include "runner.h"
 
+#include "hostlog.h"
+
 #include <algorithm>
 #include <string>
 #include <chrono>
@@ -49,6 +51,7 @@ namespace g1app
 			m_rate, m_latency, 1000.0 * static_cast<double>(m_latency) / m_rate, static_cast<double>(_gainDb));
 		m_stats.audio = buf;
 		m_stats.midi = "the DAW track";
+		g1app::logEvent(std::string("runner start: ") + buf);
 
 		m_thread = std::thread([this] { run(); });
 	}
@@ -270,11 +273,24 @@ namespace g1app
 					m_stats.dspOn[d] = mc.getDsp(d).booted();
 					m_stats.dspFailed[d] = mc.getDsp(d).jitFailed();
 					if(mc.getDsp(d).jitFailed() && m_stats.dspProblem.empty())
+					{
 						m_stats.dspProblem = "DSP " + std::to_string(d) + " stopped: the JIT could not generate its code (" + mc.getDsp(d).jitFailure() + ")";
+						g1app::logEvent(m_stats.dspProblem);
+					}
 				}
 				lastCycles = cycles;
 				lastStats = t1;
 				busy = 0;
+
+				// Dropouts (issues #63, #65): the first one, then again every 100, with the load at
+				// the time -- a user's own "it was fine, then it wasn't" needs this to mean anything.
+				if(const auto xruns = m_xruns.load(std::memory_order_relaxed); xruns > 0
+					&& (m_loggedXruns == 0 || xruns / 100 > m_loggedXruns / 100))
+				{
+					m_loggedXruns = xruns;
+					g1app::logEvent("dropout: " + std::to_string(xruns) + " total, load "
+						+ std::to_string(static_cast<int>(m_stats.load)) + "%");
+				}
 			}
 		}
 	}

@@ -3,6 +3,7 @@
 #include "LcdFont.h"
 #include "g1Lib/g1format.h"
 #include "G1Skin.h"
+#include "hostlog.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1953,7 +1954,15 @@ namespace g1gui
 			 << "- MIDI: " << juce::String(s.midi) << (s.rawMidi.empty() ? juce::String() : ", raw: " + juce::String(s.rawMidi)) << "\n"
 			 << "- " << juce::String::formatted("speed %.1f%%, load %.0f%%", s.speed, s.load)
 			 << ", dropouts " << juce::String(static_cast<juce::int64>(s.xruns)) << "\n"
-			 << (s.dspProblem.empty() ? juce::String() : "- " + juce::String(s.dspProblem) + "\n");
+			 << (s.dspProblem.empty() ? juce::String() : "- " + juce::String(s.dspProblem) + "\n")
+			 << "\nPlease attach **g1-emu.log**, just opened below: a few hundred KB at most of what "
+				"the emulator saw (startup, dropouts, DSP failures), timestamped, which is worth more "
+				"than this snapshot alone.\n";
+		// The log, open and selected, so it is right there to drag into the issue: the body above
+		// only says to attach it, GitHub's new-issue URL has no way to do that by itself.
+		const juce::File log(g1app::logPath());
+		if(log.existsAsFile())
+			log.revealToUser();
 		juce::URL("https://github.com/animatek/G1-Emu/issues/new?body=" + juce::URL::addEscapeChars(body, true)).launchInDefaultBrowser();
 	}
 
