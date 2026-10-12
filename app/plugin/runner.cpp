@@ -3,6 +3,8 @@
 #include "diaglog.h"
 #include "hostlog.h"
 
+#include "g1Lib/g1thread.h"
+
 #include <algorithm>
 #include <string>
 #include <chrono>
@@ -103,7 +105,7 @@ namespace g1app
 			{
 				const auto giveUp = std::chrono::steady_clock::now() + std::chrono::seconds(10);
 				while(m_bridge.queued() < m_debt + n && std::chrono::steady_clock::now() < giveUp)
-					std::this_thread::sleep_for(std::chrono::microseconds(50));
+					g1::preciseSleep(std::chrono::microseconds(50));
 			}
 
 			if(m_debt)
@@ -133,6 +135,7 @@ namespace g1app
 	void Runner::run()
 	{
 		auto& mc = m_engine.mc();
+		g1::keepThreadAtFullSpeed();
 		using clock = std::chrono::steady_clock;
 		auto lastStats = clock::now();
 		uint64_t lastCycles = mc.ucCycles();
@@ -234,7 +237,7 @@ namespace g1app
 			{
 				lock.unlock();
 				mc.setIdle(true);	// the DSP threads sleep too instead of spinning
-				std::this_thread::sleep_for(std::chrono::microseconds(200));
+				g1::preciseSleep(std::chrono::microseconds(200));	// sleep_for: 15.6 ms on Windows
 				mc.setIdle(false);
 			}
 			else

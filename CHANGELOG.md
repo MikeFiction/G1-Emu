@@ -7,6 +7,22 @@ Older entries cite their commit by hand.
 
 ## 2026-10-12
 
+- [Fix] **Windows: the emulator's sleeps lasted 15.6 ms, so the plugin dropped out (Claude, issues
+  #63 and #65, asked by Javier).** When it is ahead of the host the plugin's worker sleeps 200 us
+  and the standalone's 500 us, with `std::this_thread::sleep_for`, which on Windows takes the
+  system timer's period: 15.7 ms measured, unless something in the same process raised the timer
+  resolution (a DAW may, a plugin host process or a power-saving plan may not). Allowed only a
+  block plus 5 ms ahead, the worker fell behind at every sleep. New `g1Lib/g1thread.*`:
+  `preciseSleep` (a high-resolution waitable timer on Windows, ~0.5 ms; `sleep_for` elsewhere),
+  used by the runner, its offline wait and `EmuHost`; and `keepThreadAtFullSpeed`, which opts the
+  runner, the standalone's emulation thread and the four DSP threads out of Windows 11's EcoQoS
+  (slower, and on the efficiency cores of a hybrid CPU). `g1runnertest` paces its fake host the
+  same way (its own `sleep_until` asked for several blocks at once) and prints the cores the
+  process used. Checked on Windows (Ryzen 7 5700X), `g1runnertest --realtime --seconds 12
+  --program 0` (Drone_Patch01): 353 dropouts, 323 of them over sound, before; 9 after, all while
+  the program change loads its patch; the offline render of 12 s went from 31.1 s to 5.3 s.
+  In Ableton Live 12, sounding: no dropouts after the 31 of the start-up, ~2.1 cores for the
+  emulator's five threads. All 12 G1-Emu tests pass (`ctest -L g1`).
 - [Docs] **Release notes for v0.1.0-alpha.18 (Claude, asked by Javier).** `docs/release-notes.md`:
   the log's new `system` and `health` lines, and what to send for a "no sound" (one plugin copy,
   Test Audio, a few notes, the log, and a second log with `G1_THREADS=0`).

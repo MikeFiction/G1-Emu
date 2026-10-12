@@ -1,5 +1,7 @@
 #include "g1mc.h"
 
+#include "g1thread.h"
+
 #include "mc68k/memoryOps.h"
 
 #include <algorithm>
@@ -75,6 +77,7 @@ namespace g1
 	{
 		auto& job = m_jobs[_dsp];
 		uint64_t seen = 0;
+		keepThreadAtFullSpeed();
 		while(true)
 		{
 			std::chrono::steady_clock::time_point waitStart;

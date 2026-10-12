@@ -156,6 +156,7 @@ the four outputs and the links between DSPs; it also has probes for the panel (s
 | `g1Lib/g1duart.h` | The PC PORT: SCN2681 DUART on a parallel bus (GP port + port E). |
 | `g1Lib/g1dsp.*` | A DSP56303 with its HI08 boot ROM, attached to the CPU host port. |
 | `g1Lib/g1lcd.h` | The display (HD44780). |
+| `g1Lib/g1thread.*` | Precise sleeps (Windows' `sleep_for` takes 15.6 ms) and keeping the emulator's threads out of EcoQoS (#63, #65). |
 | `g1Lib/g1knobs.h` | What each panel knob is assigned to (module, parameter, names, value), read from the OS's tables. |
 | `cmake/Dsp56300.cmake`, `g1Lib/dsp56300.cpp` | DSP core fixes (JIT and DMA, and a JIT failure that returns instead of recursing, #17), applied to a build copy. |
 | `cmake/Mc68k.cmake` | 68331 timer (GPT) fixes: the prescaler and compares that match once (#22), applied to a build copy of `gpt.cpp`. |

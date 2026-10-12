@@ -19,6 +19,8 @@
 
 #include "romfinder.h"
 
+#include "g1Lib/g1thread.h"
+
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -27,8 +29,33 @@
 #include <iterator>
 #include <thread>
 
+#ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <sys/resource.h>
+#endif
+
 namespace
 {
+	// The CPU time of the whole process (all its threads), in seconds: how many cores the emulator
+	// takes is this over the wall time.
+	double processCpuSeconds()
+	{
+#ifdef _WIN32
+		FILETIME created, exited, kernel, user;
+		if(!GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user))
+			return 0;
+		const auto toS = [](const FILETIME& _t) { return static_cast<double>((static_cast<uint64_t>(_t.dwHighDateTime) << 32) | _t.dwLowDateTime) * 1e-7; };
+		return toS(kernel) + toS(user);
+#else
+		rusage u{};
+		getrusage(RUSAGE_SELF, &u);
+		return static_cast<double>(u.ru_utime.tv_sec + u.ru_stime.tv_sec) + static_cast<double>(u.ru_utime.tv_usec + u.ru_stime.tv_usec) * 1e-6;
+#endif
+	}
+
 	constexpr double g_rate = 48000.0;
 	constexpr size_t g_maxBlock = 512;
 	int g_program = -1;		// --program N: a Program Change on channel 1 at 2 s, before the note
@@ -53,6 +80,7 @@ namespace
 		double wallSeconds = 0;
 		size_t latency = 0;
 		double load = 0;
+		double cores = 0;			// CPU time over wall time, the whole process
 		std::string display;		// the G1's display at the end
 		std::vector<double> xrunAt;	// when the dropouts were, in seconds
 	};
@@ -73,6 +101,7 @@ namespace
 		uint32_t lcg = 12345;
 		size_t pos = 0;
 		const auto start = std::chrono::steady_clock::now();
+		const auto cpuStart = processCpuSeconds();
 		auto deadline = start;
 		while(pos < total)
 		{
@@ -102,7 +131,13 @@ namespace
 			if(_realtime)
 			{
 				deadline += std::chrono::nanoseconds(static_cast<int64_t>(1e9 * static_cast<double>(n) / g_rate));
-				std::this_thread::sleep_until(deadline);
+				// As a sound card would call it: on time. sleep_until on Windows wakes up to 15.6 ms late,
+				// which would ask the runner for several blocks at once.
+				const auto left = std::chrono::duration_cast<std::chrono::microseconds>(deadline - std::chrono::steady_clock::now());
+				if(left.count() > 600)
+					g1::preciseSleep(left - std::chrono::microseconds(500));
+				while(std::chrono::steady_clock::now() < deadline)
+					std::this_thread::yield();
 			}
 			runner.process(outs, 4, nullptr, 0, n, !_realtime);
 			if(_realtime)
@@ -115,6 +150,7 @@ namespace
 			pos += n;
 		}
 		r.wallSeconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+		r.cores = (processCpuSeconds() - cpuStart) / r.wallSeconds;
 		{
 			auto lock = runner.lockEngine();
 			r.display = engine->mc().getLcd().line(0, 16) + " | " + engine->mc().getLcd().line(1, 16);
@@ -207,8 +243,8 @@ int main(int _argc, char** _argv)
 	if(realtime)
 	{
 		const auto c = render(setup, seconds, 256, true);
-		std::printf("real time, blocks of 256:  %llu dropouts, worker load %.0f%%, after the note %.1f dBFS\n",
-			static_cast<unsigned long long>(c.xruns), c.load, dbfs(c.out[0], noteOn, c.out[0].size()));
+		std::printf("real time, blocks of 256:  %llu dropouts, worker load %.0f%%, %.2f cores, after the note %.1f dBFS\n",
+			static_cast<unsigned long long>(c.xruns), c.load, c.cores, dbfs(c.out[0], noteOn, c.out[0].size()));
 		// A dropout while the G1 is silent anyway (loading a patch mutes it, and loading is when
 		// the emulator runs slower than real time) hides nothing. One over sound is a failure.
 		size_t audible = 0;

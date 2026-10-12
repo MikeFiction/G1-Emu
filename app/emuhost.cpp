@@ -5,6 +5,8 @@
 #include "hostlog.h"
 #include "romfinder.h"
 
+#include "g1Lib/g1thread.h"
+
 #include "miditransport.h"
 
 #ifdef G1_BACKEND_JUCE
@@ -465,6 +467,7 @@ namespace g1app
 	void EmuHost::run()
 	{
 		auto& mc = m_engine->mc();
+		g1::keepThreadAtFullSpeed();
 		using clock = std::chrono::steady_clock;
 		const auto start = clock::now();
 		auto lastStats = start;
@@ -598,7 +601,7 @@ namespace g1app
 			if(mc.ucCycles() >= target)
 			{
 				mc.setIdle(true);	// the DSP threads sleep too instead of spinning through it
-				std::this_thread::sleep_for(std::chrono::microseconds(500));
+				g1::preciseSleep(std::chrono::microseconds(500));	// sleep_for: 15.6 ms on Windows
 				mc.setIdle(false);
 			}
 
