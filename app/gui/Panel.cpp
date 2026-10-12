@@ -2221,6 +2221,24 @@ namespace g1gui
 #endif
 		status += "   DSP " + dsp + "   output 1/2 ";
 		status += m_peakHold > 1e-6 ? juce::String::formatted("%+.0f dB", 20.0 * std::log10(m_peakHold)) : "silence";
+
+		// Issue #64: the DAW's own meter watches its audio callback, which the emulator does not
+		// run in; it can read near-idle while the G1 is actually dropping audio. Visible here
+		// instead, since a number among many others in white is too easy to miss: red for a
+		// dropout since the last look, amber for running close to it with none yet.
+		if(s.xruns != m_lastXruns)
+		{
+			m_lastXruns = s.xruns;
+			m_overloadHold = 30;		// ~1 s at the panel's 30 Hz, so a single dropout is seen
+		}
+		const bool overload = m_overloadHold > 0;
+		if(overload)
+			--m_overloadHold;
+		m_status.setColour(juce::Label::textColourId, overload ? juce::Colours::red
+			: s.load >= 90.0 ? juce::Colour(0xffffaa00) : juce::Colours::white);
+		if(overload)
+			status = "OVERLOAD   " + status;
+
 		m_status.setText(status + "   dropouts " + juce::String(static_cast<juce::int64>(s.xruns)) + "   |  " + juce::String(s.audio)
 			// The byte counters, not just the port names: when an editor says "no response from
 			// synth", the first thing anybody needs to know is whether its bytes ever arrived.

@@ -7,6 +7,14 @@ Older entries cite their commit by hand.
 
 ## 2026-10-12
 
+- [Fix] **An overload turns the status bar red, with "OVERLOAD" ahead of it (Claude, issue #64,
+  asked by Javier).** `app/gui/Panel.*`. The DAW's own meter watches its audio callback, which the
+  emulator does not run in, so it can read near-idle while the G1 is actually dropping audio — the
+  maintainer's own plan for this issue ("make an overload visible on the panel itself, so it
+  doesn't fail silently"). The status bar's speed/load/dropouts text turns red for about a second
+  on a new dropout (so an isolated one is still seen, not just a sustained one), amber at 90%
+  load with none yet. Checked: builds on Windows; `g1vst3check` still passes; the standalone starts
+  and shows the normal white text under no load (not tried under an actual overload).
 - [Feature] **A log file, shared by the standalone and the plugin (Claude, issues #59, #63, #65,
   asked by Javier).** New `app/hostlog.*`, in `g1Core` so every front end has it. Reports of "no
   audio" or "connection lost" were a guess without knowing what the emulator actually saw at the

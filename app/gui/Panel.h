@@ -502,6 +502,8 @@ namespace g1gui
 		double m_peakHold = 0;
 		uint64_t m_lastMidiIn = 0;
 		int m_midiHold = 0;
+		uint64_t m_lastXruns = 0;		// issue #64: a dropout the DAW's own meter does not show
+		int m_overloadHold = 0;			// ticks left showing red for an isolated dropout
 	};
 
 	// The panel at any size: it is laid out at Panel::Width and shown scaled to this view's width,
