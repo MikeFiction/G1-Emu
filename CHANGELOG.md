@@ -7,6 +7,11 @@ Older entries cite their commit by hand.
 
 ## 2026-10-12
 
+- [Docs] **Release notes for v0.1.0-alpha.16 (Claude, asked by Javier).** `docs/release-notes.md`:
+  the shared log file (#59, #63, #65), the plugin's new Output Gain (#65), and the status bar's
+  overload warning (#64), with a note to the "no audio"/"connection lost" reporters that Report
+  issue now opens the log's folder — tested on Windows in Ableton Live 12 (plugin loads, the gain
+  slider shows and moves, no crash), not yet under a real overload or on another platform.
 - [Fix] **An overload turns the status bar red, with "OVERLOAD" ahead of it (Claude, issue #64,
   asked by Javier).** `app/gui/Panel.*`. The DAW's own meter watches its audio callback, which the
   emulator does not run in, so it can read near-idle while the G1 is actually dropping audio — the

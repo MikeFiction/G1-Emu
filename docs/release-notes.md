@@ -1,30 +1,26 @@
-# G1-Emu v0.1.0-alpha.15
+# G1-Emu v0.1.0-alpha.16
 
-**The synth settings (each slot's MIDI channel, the clock, and the rest of Synth Settings) now
-travel with the project** (#46): saved as the OS has them, stored with Shift+Store or not, and
-sent back to the G1 as soon as it starts.
+**A log file now, shared by the standalone and the plugin** (#59, #63, #65): every instance
+writes timestamped lines to `g1-emu.log`, beside the settings file — startup (version, ROM, PC
+Port, direct link), a restart, a DSP's JIT failure, and a dropout (the first one, then again
+every 100, with the load at the time). If you've reported "no audio", "no signal" or "connection
+lost" without a clear way to reproduce it, this is for you: **please try again, and if it still
+happens, press Report issue** (bottom right of the panel) — it now also opens the log's folder,
+so it's right there to attach to the issue it opens for you.
 
-## Presets and the panel
+## Also in this build
 
-- A patch stored from Animatek NME now shows on the Presets page without leaving and coming back.
-- A patch loaded only (not stored) also shows in NME at once.
-- A knob assigned to a morph group follows the group's value on the panel.
-- Parameter displays fade on and off; a control's name and value linger half a second before
-  fading out.
-- Settings opens as a card over the panel, like About.
-
-## If you reported no notes from the DAW on Windows (#53)
-
-Tested on Windows 11 with Ableton Live 12 (VST3): notes from a clip, live from the keyboard, and
-after saving and reopening a project all reach the plugin correctly with this build. Please try
-this version and tell us if you still see it.
-
-## README
-
-A new Getting Started and FAQ, for people who only download the release: which archive to get,
-where the plugin goes, the macOS warning, the four ways to load a sound, and MIDI channels.
+- **The plugin can raise its output gain** (#65), like the standalone's "Output level" slider —
+  until now the plugin was stuck at a fixed +36 dB with no way to make up for a quiet patch
+  beyond the DAW's own fader. A new **Output Gain** control is on the plugin's Settings card,
+  host-automatable, saved with the project.
+- **An overload turns the status bar red** (#64), with "OVERLOAD" ahead of the line, for about a
+  second on a new dropout — so an isolated one is still seen, not just a sustained one. Amber at
+  90% load with none yet. The DAW's own meter watches its audio callback, which the emulator does
+  not run in, so it can read near-idle while the G1 is actually dropping audio; this is the first
+  place that shows the real picture.
 
 ## Known
 
-Same as alpha.14: on Windows the plugin has no PC Port of its own (it uses the direct link); the
+Same as alpha.15: on Windows the plugin has no PC Port of its own (it uses the direct link); the
 standalone still needs loopMIDI for the editor when the direct link is not used.
