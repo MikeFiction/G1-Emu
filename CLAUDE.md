@@ -100,10 +100,13 @@ clap-juce-extensions; `clap-validator` passes it. The design is
   and settings, with the OS in use, #25), gzip + base64 in XML, plus the 256 ADC values, the
   panel's two preferences, the last Bank Select/Program Change per channel (replayed at boot),
   **what each slot holds** (`<Slots>`, issue #25), and **the synth settings in use**
-  (`<SynthSettings>`, issue #46), stored with Shift+Store or not: the `SynthSettingsLink` reads
-  them again every 5 s of quiet and after an editor sends its own (`setReread`), and they are sent
-  back once the G1 is up, since the factory OS never loads stored ones and the update loads only
-  Shift+Store's. A state that cannot be applied is handed back
+  (`<SynthSettings>`, issue #46), stored with Shift+Store or not: the processor asks the
+  `SynthSettingsLink` for them every 2 s, and on a restore writes them back once the `SlotKeeper`
+  has put the slots back (a write during a slot's upload breaks it), checks they read back and
+  retries up to 5 times, while the track's notes are held back (at most 15 s). The factory OS never
+  loads stored ones and the update loads only Shift+Store's. The panel's knob turns come back as
+  part of the slots (the keeper also hears the OS's Info message for a knob), and so do the System
+  menu's patch settings (read again every 2 s while the System LED is lit). A state that cannot be applied is handed back
   untouched. A new instance copies the standalone's `flash.bin` (read only).
 - **Slots** (`app/slotkeeper.*`): the flash does not hold a slot's patch (sent by an editor,
   loaded from the panel or a Program Change, edited since), so the `SlotKeeper` asks the OS for

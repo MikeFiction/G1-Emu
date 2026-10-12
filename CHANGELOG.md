@@ -5,6 +5,20 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-12
+
+- [Merge] **Mike Fiction's pull requests #55, #56, #57, #58, #60, #61 and #62 (Claude, asked by
+  Javier).** #58 and the maintainer's fix of 2026-10-11 solved the same half of issue #46 (the
+  synth settings in the project) two ways; the merge keeps #58's restore in the plugin (settings
+  written once the slots are back, read back and retried, notes held meanwhile, read every 2 s),
+  which also brings the other half (knob turns, the System menu's patch settings), and keeps the
+  link's `setReread` with its tests. `g1synthsettingstest` had both versions' steps tangled; they
+  run together now, renumbered 1 to 7. `CLAUDE.md` says how the state is kept now. Checked: builds
+  on Linux, all 13 tests pass, `g1synthsettingstest` passes every step, `g1vst3check --settings`
+  passes. `g1vst3check` alone and `--slots` fail on this machine because the plugin's virtual PC
+  Port does not show, exactly as on `main` before the merge (built and run side by side): not
+  from this merge, still to be looked into.
+
 ## 2026-10-11
 
 - [Fix] **The plugin keeps the synth settings in the project (Claude, issue #46, reported by
@@ -34,6 +48,7 @@ Older entries cite their commit by hand.
   link on every system, the Presets page). Release notes: running a DAW under Rosetta (reported in a
   YouTube comment, alpha.13 in Cubase on an Apple Silicon Mac mini). Checked: the anchors match the
   headings, and each answer against the code, the release notes and `WINDOWS.md`.
+
 ## 2026-10-10
 
 - [Fix] **A knob on a morph group follows the group's value (Mike Fiction, Claude).**
@@ -41,7 +56,6 @@ Older entries cite their commit by hand.
   it was turned while the group's value changed elsewhere (the dial on the Morph page, the editor,
   another patch). It now turns to the value, as a knob on a parameter does. Checked by Mike
   Fiction in the standalone.
-## 2026-10-10
 
 - [Fix] **A patch loaded only, from the Presets page, shows in Animatek NME (Mike Fiction,
   Claude).** `app/presetslink.cpp`. The notice that tells the editor of the new patch went out
@@ -57,16 +71,19 @@ Older entries cite their commit by hand.
   the knobs turning into place, and closer to how an LCD really looks turning on and off. Ticking
   Parameter Displays on or off in the extras fades them and the knob LEDs into each other in the
   same time. Checked by Mike Fiction in the standalone.
+
 - [GUI] **The display below the knobs lets a name linger (Mike Fiction, Claude).** When the mouse
   leaves a control, its name and value stay on that display for half a second, then fade out in
   60 ms, instead of going blank at once. Moving straight onto another control changes it at once.
   Checked: builds on Windows.
+
 - [Fix] **A patch stored from NME shows on the Presets page (Mike Fiction, Claude).** The OS tells
   no one of a store, so a patch NME stored appeared on the page only after leaving it and coming
   back. The link that reads the banks now sees NME's store go by and reads that bank again once
   NME is quiet. Touches `app/presetslink.cpp` only (`PresetsLink::editorSent`), outside the GUI.
   Checked by Mike Fiction in the standalone: a patch stored from NME into the bank shown appears
   without leaving the page.
+
 - [GUI] **Settings on a card over the panel, like About (Mike Fiction, Claude).** **Touches the
   plugin:** `app/plugin/Editor.*` and the text of `Processor::describe()`. The Settings button
   and the panel's right-click menu (now Emulator Settings) opened a window of its own in the
@@ -78,6 +95,7 @@ Older entries cite their commit by hand.
   blank line before its PC Port) and the notice. `CardView` (`app/gui/Overlay.*`) holds what the
   host gives it: `PanelHost::showSettings()` became `createSettings()`. Checked by Mike Fiction in the
   standalone and the plugin.
+
 - [Fix] **A reopened project lets its notes in when rendered offline (Mike Fiction, Claude, issue
   #46).** **Touches the plugin:** `app/plugin/Processor.*` and `tools/vst3check`. The notes held
   back while a project's slots and synth settings go back in were only let in, and the settings
@@ -301,6 +319,7 @@ Older entries cite their commit by hand.
   later art updates keep them. Nothing else in the image changes. Saved as 8-bit RGB, like the
   previous file. Checked on Windows: it builds, and the PNG matches the master export pixel for
   pixel.
+
 - [Fix] **Switching between Presets and Settings no longer flashes the main panel (Claude,
   reported by Mike Fiction).** Pressing one page's key while the other page was open faded the
   open page out to the main panel and then faded the new one in, so the main panel showed for a
@@ -308,6 +327,7 @@ Older entries cite their commit by hand.
   once it's covered. Fading in from the main panel and out to it are unchanged. Checked on
   Windows: the standalone and the VST3 build, and the switch shows no main panel in between, both
   ways.
+
 - [New] **A click on an oscillator's pitch display toggles Hz (Claude, requested by Mike Fiction).**
   Found while fixing the entry below: in the editor, the display box of seven oscillators switches
   between Hz and notes with a click (the coarse pitch of OscA, OscB, OscC and the Master, Spectral,
@@ -323,6 +343,7 @@ Older entries cite their commit by hand.
   a note (C2). All four now read as notes, as OscA/B/C already did, with 60 = C4. Checked on
   Windows: `g1formattest` passes with four new cases, and Mike compared each knob display with the
   G1's display in the standalone.
+
 - [Imp] **The knob menu says what a click will do (Claude, requested by Mike Fiction).** On a knob
   excluded from Random its item now reads "Include in Random", where it read "Exclude from Random"
   either way; and "Include all knobs in Random" is only there when at least one knob is excluded,
@@ -396,6 +417,7 @@ Older entries cite their commit by hand.
   Clavia's and ships no ROM. The README's "License and credits" says the same, with the credit line
   Mike asked for: "Panel skin and GUI design by Mike Fiction". Checked: it builds and the tests
   pass; the licenses read in each part's own license file.
+
 - [Merge] **Mike Fiction's pull requests #29 to #35.** Original artwork for the knobs and buttons
   under CC BY 4.0 (#29), Synth Settings as a page of the panel (#30), the standalone's icon (#31),
   knob values as the G1 shows them (#32), Shift and the mode keys in Edit mode (#33), tooltips' delay
