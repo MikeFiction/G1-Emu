@@ -7,6 +7,13 @@ Older entries cite their commit by hand.
 
 ## 2026-10-12
 
+- [Docs] **Two standard test patches, `test-patches/` (Javier made them in NME, Claude added them,
+  issues #53, #59, #65).** `Test Audio.pch` (an oscillator to outputs 1/2: sounds with no notes)
+  and `Test MIDI.pch` (keyboard, AD envelope, filter: sounds only with a held note), so a "no
+  sound" report says whether the audio chain or the notes are the problem, with the same patch for
+  everybody. A README in the folder says how to read the result; the FAQ's "It makes no sound"
+  points to it. Checked: both files read as valid Nord Modular 3.0 patches; not yet measured with
+  `g1patchtest`.
 - [Docs] **Release notes for v0.1.0-alpha.16 (Claude, asked by Javier).** `docs/release-notes.md`:
   the shared log file (#59, #63, #65), the plugin's new Output Gain (#65), and the status bar's
   overload warning (#64), with a note to the "no audio"/"connection lost" reporters that Report

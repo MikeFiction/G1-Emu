@@ -279,7 +279,9 @@ this computer cannot keep up and you will hear dropouts.
 
 **It makes no sound.**
 A G1 starts with empty slots: load a patch first ([Getting started](#getting-started), step 4).
-Then check that the notes reach it: the **MIDI LED** on the panel flashes with each note, and
+To rule out the patch, use the two in [`test-patches/`](test-patches/): **Test Audio** sounds with
+no notes at all, **Test MIDI** only while a note is held, so which one stays silent says where the
+problem is. Then check that the notes reach it: the **MIDI LED** on the panel flashes with each note, and
 `MIDI in` in the status bar counts up. If they do and it is still silent, check the master volume
 knob and that the DAW routes the plugin's outputs.
 

@@ -1,0 +1,80 @@
+[Header]
+Version=Nord Modular patch 3.0
+0 127 0 127 2 0 0 1 4000 2 1 1 0 0 0 0 1 1 1 1 1 1 1 
+[/Header]
+[ModuleDump]
+1 
+1 7 0 20 
+3 4 0 40 
+2 19 0 26 
+4 1 0 18 
+5 84 0 28 
+6 51 0 31 
+[/ModuleDump]
+[ModuleDump]
+0 
+[/ModuleDump]
+[CurrentNoteDump]
+64 0 0 64 0 0 
+[/CurrentNoteDump]
+[CableDump]
+1 
+0 2 0 0 1 0 1 
+1 1 2 0 4 0 1 
+0 5 1 0 2 0 1 
+0 3 0 0 3 1 0 
+2 5 0 0 4 1 1 
+0 6 2 0 5 1 1 
+0 3 0 0 6 0 1 
+[/CableDump]
+[CableDump]
+0 
+[/CableDump]
+[ParameterDump]
+1 
+1 7 10 65 64 64 64 3 127 0 0 0 0 
+3 4 3 127 0 0 
+2 19 3 127 127 127 
+5 84 3 0 80 0 
+6 51 10 0 1 0 127 64 0 0 1 0 0 
+[/ParameterDump]
+[ParameterDump]
+0 
+[/ParameterDump]
+[MorphMapDump]
+0 0 0 0 
+[/MorphMapDump]
+[KeyboardAssignment]
+0 0 0 0 
+[/KeyboardAssignment]
+[KnobMapDump]
+1 2 0 0 
+1 5 1 1 
+1 1 0 3 
+1 6 3 6 
+[/KnobMapDump]
+[CtrlMapDump]
+[/CtrlMapDump]
+[CustomDump]
+1 
+1 1 0 
+6 1 0 
+[/CustomDump]
+[CustomDump]
+0 
+[/CustomDump]
+[NameDump]
+1 
+1 OscA
+3 2Output
+2 Mixer (3)
+4 Keyboard
+5 AD-Env
+6 FilterE
+[/NameDump]
+[NameDump]
+0 
+[/NameDump]
+[NME]
+Id=fb6d6286-104d-4b73-941d-c54b93b87bb4
+[/NME]
