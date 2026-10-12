@@ -7,6 +7,12 @@ Older entries cite their commit by hand.
 
 ## 2026-10-12
 
+- [Docs] **Release notes for v0.1.0-alpha.15 (Claude, asked by Javier).** `docs/release-notes.md`:
+  the synth settings in the project (#46), the Presets and panel fixes since alpha.14, and the
+  README's Getting Started and FAQ. Asks the Windows "no notes from the DAW" reporters (#53) to
+  try this build: rebuilt and tested by hand on Windows 11 with Ableton Live 12 (VST3) — a clip's
+  notes, live keyboard notes, and a saved-and-reopened project all reached the plugin correctly,
+  with no code change. Commented on #53 with the same finding.
 - [Merge] **Mike Fiction's pull requests #55, #56, #57, #58, #60, #61 and #62 (Claude, asked by
   Javier).** #58 and the maintainer's fix of 2026-10-11 solved the same half of issue #46 (the
   synth settings in the project) two ways; the merge keeps #58's restore in the plugin (settings
