@@ -7,6 +7,14 @@ Older entries cite their commit by hand.
 
 ## 2026-10-12
 
+- [Fix] **A knob moved by a MIDI controller or automation follows it smoothly (Mike Fiction,
+  Claude).** `app/gui/Panel.*` only. The panel's knobs ease into place at one slow rate, made for a
+  jump (another patch, Random), and the panel reads the G1 only 30 times a second, so a knob moved
+  continuously (a MIDI controller on what it moves, the host's automation, an editor) moved in
+  steps and lagged behind. A knob whose target moved by no more than 32 positions, or moved again
+  while being watched, is now read on every screen frame until it has been still for 300 ms, and
+  eases faster (half the remaining distance each 60th of a second); a big move from still still
+  turns into place as before. `ctest`: all G1 tests as on main.
 - [Docs] **Release notes for v0.1.0-alpha.18 (Claude, asked by Javier).** `docs/release-notes.md`:
   the log's new `system` and `health` lines, and what to send for a "no sound" (one plugin copy,
   Test Audio, a few notes, the log, and a second log with `G1_THREADS=0`).
