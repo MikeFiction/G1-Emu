@@ -79,6 +79,8 @@ namespace g1app
 		~Runner();	// stops the worker and detaches from the engine; the engine keeps its state
 
 		size_t latency() const { return m_latency; }
+		// The last MIDI controller from the host, for the panel's MIDI Learn (MidiRouting). Any thread.
+		bool lastController(int& _channel, int& _cc, uint32_t& _serial) const { return m_midiRouting.lastController(_channel, _cc, _serial); }
 		// MIDI CC Mode on Selected Slots: a controller on a selected slot's channel goes to every selected
 		// slot (MidiRouting). Any thread.
 		void setSelectedControllers(const bool _on) { m_selectedControllers = _on; }

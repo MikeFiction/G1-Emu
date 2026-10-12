@@ -62,6 +62,9 @@ namespace g1gui
 		virtual std::unique_ptr<juce::Component> createSettings() = 0;	// what Settings shows, on a card over the panel (CardView), at its own size
 		virtual g1app::SynthSettingsLink& synthSettings() = 0;	// the OS's, for the extras' overlay
 		virtual g1app::PresetsLink& presets() = 0;				// the OS's banks, for the Presets page
+		// The last MIDI controller that came in, and a serial that grows with each (the panel's MIDI
+		// Learn). False until one has, or where the host does not tell.
+		virtual bool lastController(int& _channel, int& _cc, uint32_t& _serial) { (void)_channel; (void)_cc; _serial = 0; return false; }
 		// MIDI CC Mode on the Synth Settings page: Selected Slots sends a controller on a selected slot's
 		// channel to every selected slot. The host's own setting, kept where it keeps its others.
 		virtual bool selectedControllers() const = 0;
@@ -212,6 +215,10 @@ namespace g1gui
 		void paint(juce::Graphics& _g) override;
 		void mouseUp(const juce::MouseEvent& _e) override;
 		void visibilityChanged() override { m_snap = true; }
+		// MIDI Learn on its knob: its light pulses, _level 0 to 1. -1: steady again, after a quick
+		// fade back up from wherever the pulse is (at once when hidden).
+		static constexpr double PulseEndSeconds = 0.15;
+		void setPulse(float _level);
 		std::function<void()> onClick;	// a click on a pitch that reads as a note or in Hz
 	private:
 		void fade(double _now);
@@ -219,6 +226,8 @@ namespace g1gui
 		juce::String m_top, m_bottom;	// kept while it goes dark, so its last words fade with it
 		bool m_assigned = false, m_switchable = false;
 		float m_lit = 0.0f;	// 0 dark, 1 lit; moves toward m_assigned
+		float m_pulse = -1.0f;	// MIDI Learn's pulse, or -1
+		bool m_pulseEnding = false;	// m_pulse fading up to 1, then -1
 		double m_fadeLast = -1.0;
 		std::optional<juce::VBlankAttachment> m_fade;	// while it fades
 	};
@@ -312,6 +321,7 @@ namespace g1gui
 		void getIdealPopupMenuSectionHeaderSizeWithOptions(const juce::String& _text, int _standardHeight, int& _w, int& _h,
 			const juce::PopupMenu::Options& _options) override;
 		int getPopupMenuBorderSizeWithOptions(const juce::PopupMenu::Options&) override { return 0; }
+		int getPopupMenuColumnSeparatorWidthWithOptions(const juce::PopupMenu::Options&) override;
 		juce::Font getPopupMenuFont() override;
 	private:
 		class Glass;
@@ -381,7 +391,17 @@ namespace g1gui
 		void placeDrawer();
 		void shiftAsideForKnobs(std::function<void()> _turn);	// Shift let go for the OS, then _turn
 		void randomizeKnobs();
-		void showKnobMenu(size_t _knob);	// right click: Exclude from Random, or Include
+		void showKnobMenu(size_t _knob);	// right click: Exclude from Random, or Include, and its MIDI CC
+		void waitForControls(size_t _knob, const g1::KnobInfo& _info, uint64_t _before, juce::uint32 _since);
+		void showKnobMenu(size_t _knob, const g1::KnobInfo& _info, const std::vector<g1app::PresetsLink::Control>* _controls);
+		void addControlMenu(juce::PopupMenu& _menu, size_t _knob, const g1::KnobInfo& _info, const std::vector<g1app::PresetsLink::Control>* _controls);
+		void startLearn(size_t _knob, const g1::KnobInfo& _info);
+		std::vector<g1app::PresetsLink::Control> learnControls() const;
+		void cancelLearn();
+		void updateLearn();	// from the timer: a CC come in is taken, and the knob pulses
+		void learned(int _cc);
+		void askToReassign(int _cc, const g1app::PresetsLink::Control& _other);
+		void askToReassign(const g1::KnobInfo& _param, int _cc, const g1app::PresetsLink::Control& _other, std::function<void()> _yes);
 		void showPanelMenu();				// right click anywhere else: GUI Scale, Emulator Settings, About
 		bool hasOwnRightClick(const juce::Component* _c) const;	// a control that answers a right click itself
 		void showMenu(juce::PopupMenu& _menu);		// on the glass, at the mouse
@@ -406,6 +426,17 @@ namespace g1gui
 		std::optional<juce::VBlankAttachment> m_knobTurn;	// while a knob turns into place
 		double m_knobTurnLast = -1.0;					// the last frame's time, while they turn
 		std::array<LedView*, 18> m_knobLeds{};
+
+		// MIDI Learn (the knob menu): the knob whose parameter takes the next CC that comes in.
+		struct Learn
+		{
+			int knob = -1;		// -1: not learning
+			g1::KnobInfo info;	// the parameter, as when it started
+			uint32_t serial = 0;	// the host's controller serial then: a newer one is a CC come in
+			bool asking = false;	// whether to take a CC another parameter has (askToReassign)
+		};
+		Learn m_learn;
+		bool m_clickEndedLearn = false;	// the click going on ended it (mouseDown): it does nothing else
 		std::vector<std::unique_ptr<PanelButton>> m_buttons;
 		std::vector<std::unique_ptr<LedView>> m_leds;
 		std::vector<std::pair<LedView*, MatrixBit>> m_ledMap;
@@ -474,16 +505,17 @@ namespace g1gui
 		LedView m_presetsLed, m_settingsLed;
 		SynthSettingsView m_synthView;	// over the knobs while open
 		PresetsView m_presetsView;		// the same place
-		ConfirmView m_confirm;			// the same, for a question (Restart)
+		ConfirmView m_confirm;			// the same, for a question (Restart, MIDI Learn taking a CC)
 		AboutView m_aboutView;			// and for About
 		CardView m_settingsCard;		// and for Settings, holding what the host gives it
 		juce::Random m_rng;
 		// A right click on a knob opens its menu; the slider still gets the click, which does not
-		// turn it.
+		// turn it. On a knob, the volume or the dial, a left click or the wheel ends MIDI Learn.
 		struct KnobMenuListener : juce::MouseListener
 		{
 			explicit KnobMenuListener(Panel& _panel) : panel(_panel) {}
 			void mouseDown(const juce::MouseEvent& _e) override;
+			void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override { panel.cancelLearn(); }
 			Panel& panel;
 		};
 		KnobMenuListener m_knobMenu{*this};

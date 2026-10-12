@@ -4,12 +4,15 @@
 //   2. Against an emulated G1, with a flash that has patches (G1_FLASH, or the standalone's
 //      flash.bin): bank 1 is read, and loading its first patch into slot A puts that patch's name
 //      on the G1's display, as a load from the panel would.
+//   3. A MIDI controller for what knob 1 moves, as the knob menu gives it: assigned, moving the
+//      parameter on slot A's channel, and taken away again; the editor is told each time.
 //
 // Exit code 77 (skipped) without a ROM or a flash with patches for part 2, 1 on any failure.
 
 #include "engine.h"
 #include "hostconfig.h"
 #include "presetslink.h"
+#include "g1Lib/g1knobs.h"
 #include "romfinder.h"
 
 #include <algorithm>
@@ -53,6 +56,32 @@ int main()
 		const auto f = g1app::PresetsLink::decodeList(full, 2, 0, nb, np);
 		check(f.size() == 2 && f[0].name == "Sixteen chars!!!" && f[1].name == "X" && f[1].position == 1 && nb == 2 && np == 2,
 			"decodeList: a 16-character name, then the next, and where to go on");
+		// A ControlMap: type 96, then 2 assignments of 7 + 2 + 7 + 7 bits: CC 20 on poly module 3
+		// parameter 1, CC 7 on common module 2 parameter 0.
+		std::vector<uint8_t> map = {96};
+		uint32_t acc = 0;
+		int held = 0;
+		const auto put = [&](const int _v, const int _bits)
+		{
+			for(int b = _bits - 1; b >= 0; --b)
+			{
+				acc = (acc << 1) | ((_v >> b) & 1);
+				if(++held == 8)
+				{
+					map.push_back(static_cast<uint8_t>(acc));
+					acc = 0;
+					held = 0;
+				}
+			}
+		};
+		put(2, 7);
+		put(20, 7); put(1, 2); put(3, 7); put(1, 7);
+		put(7, 7); put(0, 2); put(2, 7); put(0, 7);
+		if(held)
+			map.push_back(static_cast<uint8_t>(acc << (8 - held)));
+		const auto c = g1app::PresetsLink::decodeControls(map);
+		check(c.size() == 2 && c[0].ctrl == 20 && c[0].section == 1 && c[0].module == 3 && c[0].param == 1
+			&& c[1].ctrl == 7 && c[1].section == 0 && c[1].module == 2 && c[1].param == 0, "decodeControls: two MIDI controllers");
 	}
 
 	g1app::HostOptions options;
@@ -213,6 +242,70 @@ int main()
 	for(size_t i = 0; i + 7 < seen.size(); ++i)
 		told = told || (seen[i] == 0xf0 && seen[i + 1] == 0x33 && (seen[i + 2] >> 2) == 0x14 && seen[i + 5] == 0x38 && seen[i + 6] == 0);
 	check(told, "the editor is told of the new patch in slot A (NewPatchInSlot)");
+
+	// 3. A MIDI controller for what knob 1 moves in slot A, from the panel's knob menu: read what
+	//    the patch has, assign a free CC, see it there, move the parameter with it on slot A's
+	//    channel (1), and take it away again. The editor is told of the change each time.
+	g1::KnobMap knobs(mc);
+	const auto knob = knobs.read(0);
+	if(!knob.assigned)
+		std::printf("knob 1 moves nothing in this patch: the MIDI controllers are not checked\n");
+	else
+	{
+		auto readNow = [&](std::vector<g1app::PresetsLink::Control>& _list, const uint64_t _after)
+		{
+			uint64_t rev = 0;
+			for(int t = 0; t < 100; ++t)
+			{
+				greet(50);
+				if(link.controls(0, _list, rev) && rev > _after)
+					return rev;
+			}
+			return uint64_t(0);
+		};
+		const auto has = [&](const std::vector<g1app::PresetsLink::Control>& _list, const int _ctrl)
+		{
+			return std::any_of(_list.begin(), _list.end(), [&](const g1app::PresetsLink::Control& _c)
+				{ return _c.ctrl == _ctrl && _c.section == knob.section && _c.module == knob.module && _c.param == knob.param; });
+		};
+		std::vector<g1app::PresetsLink::Control> list;
+		link.readControls(0);
+		const auto r0 = readNow(list, 0);
+		check(r0 > 0, "slot A's MIDI controllers read: " + std::to_string(list.size()));
+		int previous = -1, free = -1;
+		for(const auto& c : list)
+			if(c.section == knob.section && c.module == knob.module && c.param == knob.param)
+				previous = c.ctrl;
+		for(int cc = 20; cc < 120 && free < 0; ++cc)
+			if(cc != 32 && cc != 64 && std::none_of(list.begin(), list.end(), [&](const g1app::PresetsLink::Control& _c) { return _c.ctrl == cc; }))
+				free = cc;
+
+		seen.clear();
+		link.assignControl(0, knob.section, knob.module, knob.param, free, previous);
+		const auto r1 = readNow(list, r0);
+		check(r1 > r0 && has(list, free), "CC " + std::to_string(free) + " given to knob 1's " + knob.moduleName + " " + knob.paramName);
+		greet(300);
+		bool toldOfIt = false;
+		for(size_t i = 0; i + 7 < seen.size(); ++i)
+			toldOfIt = toldOfIt || (seen[i] == 0xf0 && (seen[i + 2] >> 2) == 0x14 && seen[i + 5] == 0x38 && seen[i + 6] == 0);
+		check(toldOfIt, "the editor is told slot A's patch changed");
+
+		// The CC moves the parameter, as an external controller would: low, then high.
+		const auto value = [&] { return static_cast<int>(knobs.read(0).value); };
+		mc.getSci().write(std::vector<uint8_t>{0xb0, static_cast<uint8_t>(free), 0});
+		greet(200);
+		const int low = value();
+		mc.getSci().write(std::vector<uint8_t>{0xb0, static_cast<uint8_t>(free), 127});
+		greet(200);
+		const int high = value();
+		check(high > low, "CC " + std::to_string(free) + " on channel 1 moves it: " + std::to_string(low) + " at 0, " + std::to_string(high) + " at 127");
+
+		link.assignControl(0, knob.section, knob.module, knob.param, -1, free);
+		const auto r2 = readNow(list, r1);
+		check(r2 > r1 && !has(list, free), "CC " + std::to_string(free) + " taken away again: " + std::to_string(list.size()) + " left");
+		if(previous >= 0)
+			link.assignControl(0, knob.section, knob.module, knob.param, previous, -1);	// as it was
+	}
 
 	std::printf(failures ? "%d failure(s)\n" : "all ok\n", failures);
 	return failures ? 1 : 0;

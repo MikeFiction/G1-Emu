@@ -78,11 +78,22 @@ namespace g1
 				if(knob >= 18)
 					return k;
 			}
+			const uint32_t entry = SlotBase + os + k.slot * SlotStride + KnobTable + knob * 4;
+			return parameter(k.slot, m_mc.read8(entry), m_mc.read8(entry + 1), m_mc.read8(entry + 2));
+		}
+
+		// A parameter of the patch in _slot, by its section, module and number (as the knobs and the
+		// MIDI controllers name it): its names, value and range, as for a knob. Not assigned when it
+		// is not there.
+		KnobInfo parameter(const uint8_t _slot, const uint8_t _section, const uint8_t _module, const uint8_t _param)
+		{
+			KnobInfo k;
+			k.slot = static_cast<uint8_t>(_slot & 3);
+			k.section = _section;
+			k.module = _module;
+			k.param = _param;
+			const uint32_t os = osShift();
 			const uint32_t base = SlotBase + os + k.slot * SlotStride;
-			const uint32_t entry = base + KnobTable + knob * 4;
-			k.section = m_mc.read8(entry);
-			k.module = m_mc.read8(entry + 1);
-			k.param = m_mc.read8(entry + 2);
 
 			if(k.section == 2)
 			{

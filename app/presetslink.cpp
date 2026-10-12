@@ -22,6 +22,9 @@ namespace g1app
 		constexpr uint8_t ListEnd = 4;		// the end marker that says the whole list is done
 		constexpr uint8_t PacketAck = 0x36, LastPacketAck = 0x7f;	// an upload's packet taken
 		constexpr uint64_t PacketMs = 3000;	// the OS takes longer at some packets (it reloads the DSPs)
+		constexpr uint8_t PatchIdAck = 0x36;	// RequestPatch's answer: the patch's id after it
+		constexpr uint8_t GetControlMap = 0x61, ControlMapType = 96;
+		constexpr uint8_t AssignCtrl = 0x22, ChangeCtrl = 0x23;	// MidiCtrlAssignment, and its change or removal
 
 		// G1_PRESETS_TRACE=1: every message the link sends and every one it keeps, on stderr.
 		void traceMsg(const char* _dir, const uint64_t _nowMs, const std::vector<uint8_t>& _m)
@@ -119,6 +122,59 @@ namespace g1app
 		m_loads.push_back({_slot, _bank, _position});
 	}
 
+	void PresetsLink::readControls(const int _slot)
+	{
+		if(_slot < 0 || _slot > 3)
+			return;
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_controlJobs.push_back({_slot, false});
+	}
+
+	void PresetsLink::assignControl(const int _slot, const int _section, const int _module, const int _param, const int _ctrl, const int _previous)
+	{
+		if(_slot < 0 || _slot > 3 || (_ctrl < 0 && _previous < 0))
+			return;
+		std::lock_guard<std::mutex> lock(m_mutex);
+		m_controlJobs.push_back({_slot, true, _section, _module, _param, _ctrl, _previous});
+	}
+
+	bool PresetsLink::controls(const int _slot, std::vector<Control>& _out, uint64_t& _revision) const
+	{
+		if(_slot < 0 || _slot > 3)
+			return false;
+		std::lock_guard<std::mutex> lock(m_mutex);
+		const auto& c = m_controls[static_cast<size_t>(_slot)];
+		_out = c.list;
+		_revision = c.revision;
+		return c.known;
+	}
+
+	std::vector<PresetsLink::Control> PresetsLink::decodeControls(const std::vector<uint8_t>& _section)
+	{
+		std::vector<Control> list;
+		if(_section.empty() || _section[0] != ControlMapType)
+			return list;
+		size_t bit = 8;
+		const auto read = [&](const int _bits)
+		{
+			int v = 0;
+			for(int i = 0; i < _bits; ++i, ++bit)
+				v = (v << 1) | (bit / 8 < _section.size() ? (_section[bit / 8] >> (7 - bit % 8)) & 1 : 0);
+			return v;
+		};
+		const int count = read(7);
+		for(int i = 0; i < count && (bit + 23) / 8 <= _section.size(); ++i)
+		{
+			Control c;
+			c.ctrl = read(7);
+			c.section = read(2);
+			c.module = read(7);
+			c.param = read(7);
+			list.push_back(c);
+		}
+		return list;
+	}
+
 	void PresetsLink::upload(const int _slot, std::vector<std::vector<uint8_t>> _frames, std::vector<uint8_t> _abort, const int _bank, const int _position)
 	{
 		if(_slot < 0 || _slot > 3 || _frames.empty())
@@ -170,6 +226,10 @@ namespace g1app
 		m_uploads.clear();
 		m_uploadStatus = {};
 		m_uploadNext = false;
+		m_controlJobs.clear();
+		m_controls = {};
+		m_controlNext = false;
+		m_controlPackets.clear();
 		m_state = State::Idle;
 		m_readingBank = -1;
 		m_deadline = m_filterUntil = m_lastActivity = 0;
@@ -189,6 +249,8 @@ namespace g1app
 		m_state = State::Idle;
 		m_pendingNext = false;
 		m_uploadNext = false;
+		m_controlNext = false;
+		m_controlPackets.clear();
 		m_readingBank = -1;
 		m_filterUntil = _answered ? 0 : _nowMs + FilterTailMs;
 	}
@@ -254,7 +316,12 @@ namespace g1app
 	// hears of a load, and its answer, kept as the link's, made it wait seconds for a retry.
 	bool PresetsLink::hides(const std::vector<uint8_t>& _m, const uint64_t _nowMs) const
 	{
-		if(ccOf(_m) != CcAck || _m.size() < 7 || !(m_state != State::Idle || _nowMs < m_filterUntil))
+		if(!(m_state != State::Idle || _nowMs < m_filterUntil))
+			return false;
+		// The ControlMap's packets, for the slot the link asked about.
+		if(m_hideState == State::ControlsRead && isPacket(ccOf(_m)) && slotOf(_m) == m_controlJob.slot)
+			return true;
+		if(ccOf(_m) != CcAck || _m.size() < 7)
 			return false;
 		const uint8_t type = _m[5];
 		switch(m_hideState)
@@ -263,14 +330,63 @@ namespace g1app
 		case State::Storing:	return type == ListAckA || type == ListAckB;	// a store is answered with the list there
 		case State::Loading:	return type == LoadAck;
 		case State::Uploading:	return type == PacketAck || type == LastPacketAck;
+		case State::ControlsPid:
+		case State::ControlsAssign:
+		case State::ControlsRead:	return type == PatchIdAck || type == LastPacketAck;	// the patch's id, and the assignment's ACK if any
 		default:				return false;
 		}
 	}
 
 	void PresetsLink::takeReply(const std::vector<uint8_t>& _m, const uint64_t _nowMs)
 	{
+		// The ControlMap, as one or more packets: once whole, it is what the slot's patch has.
+		if(m_state == State::ControlsRead && isPacket(ccOf(_m)) && slotOf(_m) == m_controlJob.slot && _m.size() >= 7)
+		{
+			const auto cc = ccOf(_m);
+			if(cc & 1)		// the first packet
+				m_controlPackets.clear();
+			m_controlPackets.insert(m_controlPackets.end(), _m.begin() + 5, _m.end() - 2);	// after cmd/pid, before checksum
+			if(!(cc & 2))	// not the last one yet
+				return;
+			const auto list = decodeControls(unpack7(m_controlPackets));
+			{
+				std::lock_guard<std::mutex> lock(m_mutex);
+				auto& c = m_controls[static_cast<size_t>(m_controlJob.slot)];
+				c.known = true;
+				c.list = list;
+				++c.revision;
+			}
+			// The OS does not tell the editor of an assignment made through the PC Port, which it
+			// takes for the editor's own: the link tells it the patch changed, so it reads it again.
+			// After the read, so the editor's reading does not run into the link's. Twice, as the OS
+			// says it after a panel load: Animatek NME passes over one such message after its own
+			// upload or edit, also when the OS never sent it, and would miss a single one.
+			if(m_controlJob.assign)
+			{
+				const auto slot = static_cast<uint8_t>(m_controlJob.slot);
+				const auto notice = frame(CcInfo, slot, {0x01, InfoNewPatchInSlot, slot, m_controlPid});
+				m_toEditor = notice;
+				m_toEditor.insert(m_toEditor.end(), notice.begin(), notice.end());
+			}
+			return finish(_nowMs, true);
+		}
 		if(ccOf(_m) != CcAck || _m.size() < 7)
 			return;
+		if(m_state == State::ControlsPid)
+		{
+			if(_m[5] == PatchIdAck && slotOf(_m) == m_controlJob.slot)
+			{
+				m_controlPid = _m[6] & 0x7f;
+				m_controlNext = true;	// the assignment, or the read, at the next tick
+			}
+			return;
+		}
+		if(m_state == State::ControlsAssign)
+		{
+			if(_m[5] == LastPacketAck && slotOf(_m) == m_controlJob.slot)
+				m_controlNext = true;	// taken: the read, at the next tick
+			return;
+		}
 		if(m_state == State::Loading)
 		{
 			// The OS tells an editor of a patch loaded from the panel or by MIDI (NewPatchInSlot), but
@@ -373,6 +489,29 @@ namespace g1app
 			finish(_nowMs, true);
 			return;
 		}
+		// The patch's id came: the assignment goes, if there is one, and once the OS has taken it
+		// (it ignores a request sent before its ACK), the ControlMap is read, to show what the
+		// patch has now.
+		if((m_state == State::ControlsPid || m_state == State::ControlsAssign) && m_controlNext)
+		{
+			m_controlNext = false;
+			const auto slot = static_cast<uint8_t>(m_controlJob.slot);
+			if(m_state == State::ControlsPid && m_controlJob.assign)
+			{
+				// As Animatek NME: a new CC ($22), or the previous one changed for it or removed ($23).
+				std::vector<uint8_t> payload = {m_controlPid};
+				if(m_controlJob.previous >= 0)
+					payload.insert(payload.end(), {ChangeCtrl, static_cast<uint8_t>(m_controlJob.previous & 0x7f)});
+				if(m_controlJob.ctrl >= 0)
+					payload.insert(payload.end(), {AssignCtrl, static_cast<uint8_t>(m_controlJob.section & 0x7f), static_cast<uint8_t>(m_controlJob.module & 0x7f),
+						static_cast<uint8_t>(m_controlJob.param & 0x7f), static_cast<uint8_t>(m_controlJob.ctrl & 0x7f)});
+				request(frame(CcPatch, slot, payload), State::ControlsAssign, _nowMs, _toG1);
+				return;
+			}
+			m_controlPackets.clear();
+			request(frame(CcPatch, slot, {m_controlPid, GetControlMap}), State::ControlsRead, _nowMs, _toG1);
+			return;
+		}
 		if(m_state == State::Listing && m_pendingNext)
 		{
 			m_pendingNext = false;
@@ -408,7 +547,7 @@ namespace g1app
 		// An upload or a load first: it is what the user is waiting for, and it waits less for
 		// the editor to be quiet than a list does.
 		std::lock_guard<std::mutex> lock(m_mutex);
-		const bool userWaits = !m_uploads.empty() || !m_loads.empty();
+		const bool userWaits = !m_uploads.empty() || !m_loads.empty() || !m_controlJobs.empty();
 		if(_nowMs < m_lastActivity + (userWaits ? LoadQuietMs : QuietMs))
 			return;
 		if(!m_uploads.empty())
@@ -426,6 +565,13 @@ namespace g1app
 			m_loads.erase(m_loads.begin());
 			request(frame(CcPatch, static_cast<uint8_t>(l.slot), {0x41, 0x0a, static_cast<uint8_t>(l.slot), static_cast<uint8_t>(l.bank), static_cast<uint8_t>(l.position)}),
 				State::Loading, _nowMs, _toG1);
+			return;
+		}
+		if(!m_controlJobs.empty())
+		{
+			m_controlJob = m_controlJobs.front();
+			m_controlJobs.erase(m_controlJobs.begin());
+			request(frame(CcPatch, static_cast<uint8_t>(m_controlJob.slot), {0x41, 0x35}), State::ControlsPid, _nowMs, _toG1);	// RequestPatch
 			return;
 		}
 		for(int b = 0; b < Banks; ++b)

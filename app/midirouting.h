@@ -17,6 +17,7 @@
 // active slot and the selected ones (their LEDs) straight from the G1.
 
 #include <array>
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -49,6 +50,10 @@ namespace g1app
 		// selected slot.
 		void apply(g1::Microcontroller& _mc, const Layout& _layout, const uint8_t* _in, size_t _size, std::vector<uint8_t>& _out);
 
+		// Any thread: the last controller that came in (for the panel's MIDI Learn), and a serial
+		// that grows with each one. False until one has.
+		bool lastController(int& _channel, int& _cc, uint32_t& _serial) const;
+
 	private:
 		static constexpr int MaxCopies = 4;
 		struct Target { uint8_t channel; int slot; };	// a copy of a message: its channel, the slot it plays (-1: none)
@@ -67,5 +72,7 @@ namespace g1app
 		uint8_t m_data[2] = {};
 		int m_count = 0;
 		std::array<std::array<Sent, 128>, 16> m_sent{};	// per channel and note played
+		std::atomic<uint32_t> m_controllerSerial{0};
+		std::atomic<int> m_lastController{0};			// channel << 8 | CC number
 	};
 }
