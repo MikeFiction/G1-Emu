@@ -5,6 +5,18 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-13
+
+- [Fix] **Old 2.10 `.pch` files, most of Clavia's factory patches among them, loaded silent
+  (Claude, issue #65, reported by bacizone, asked by Javier).** Presets → Load .pch reads files
+  with NME's code (`app/nme/`), which copied three things from 2.10 files verbatim that 3.0 stores
+  differently: an inverted mute on the slave oscillators and a few others (they arrived muted),
+  nine one-based selectors, and the sequencers' steps packed in `BP0` (they arrived empty). Fixed
+  in NME (`17b3ffd`, where the rules and how they were found are described) and copied here.
+  Checked with `g1patchtest`, which loads files the same way: of 40 2.10 factory patches, 16 were
+  silent and 3 still are (sequencer patches, to look into), FM Dream 2 and In The Air now sound,
+  and FM Dream 3 (a 3.0 file) is unchanged.
+
 ## 2026-10-12
 
 - [Fix] **Windows: the emulator's sleeps lasted 15.6 ms, so the plugin dropped out (Claude, issues
