@@ -7,15 +7,25 @@ Older entries cite their commit by hand.
 
 ## 2026-10-13
 
-- [Fix] **Old 2.10 `.pch` files, most of Clavia's factory patches among them, loaded silent
-  (Claude, issue #65, reported by bacizone, asked by Javier).** Presets → Load .pch reads files
-  with NME's code (`app/nme/`), which copied three things from 2.10 files verbatim that 3.0 stores
-  differently: an inverted mute on the slave oscillators and a few others (they arrived muted),
-  nine one-based selectors, and the sequencers' steps packed in `BP0` (they arrived empty). Fixed
-  in NME (`17b3ffd`, where the rules and how they were found are described) and copied here.
-  Checked with `g1patchtest`, which loads files the same way: of 40 2.10 factory patches, 16 were
-  silent and 3 still are (sequencer patches, to look into), FM Dream 2 and In The Air now sound,
-  and FM Dream 3 (a 3.0 file) is unchanged.
+- [Fix] **Old 2.10 `.pch` files are converted as Clavia's editor converts them; most of Clavia's
+  factory patches loaded silent (Claude, issue #65, reported by bacizone, asked by Javier).**
+  Presets → Load .pch reads files with NME's code (`app/nme/`), which copied a 2.10 file's values
+  verbatim and dropped its morphs and assignments. Its rules now come from Clavia's editor 3.03
+  (read for its behaviour, not its code): selectors whose 0 meant "off" become a selector plus a
+  mute or bypass, inverted oscillator switches become 3.0's mute, sequencer steps packed in `BP0`
+  are unpacked, and the old morph module, morph assignments, knobs, MIDI controllers and notes
+  carry over. Fixed in NME (`17b3ffd`, `42221fb`, where the rules and their check are described)
+  and copied here. Checked with `g1patchtest`, which loads files the same way: of 40 2.10 factory
+  patches 16 were silent, and now all sound but five that are silent by design (two wait for the
+  MIDI clock and sound with it, one for knob 4, as its notes say, and two process the audio
+  inputs); FM Dream 3 (a 3.0 file) is unchanged.
+- [Docs] **The FAQ says what to do with a patch that is silent or strange, and issues ask for the
+  `.pch` (Claude, asked by Javier).** A new FAQ entry explains the 2.10 and 3.0 formats and that a
+  2.10 patch is converted, then: look at the patch in an editor first (outputs, inputs, mute,
+  clock, knobs), try it from Animatek NME, and attach the very `.pch` to the issue, since copies of
+  a patch differ and the one used may be damaged, old or routed elsewhere. Getting started,
+  "It makes no sound", "How do I report a bug?" and `CONTRIBUTING.md` point to it, and
+  **Report issue** now opens the issue with a "The patch" part asking for the same.
 
 ## 2026-10-12
 

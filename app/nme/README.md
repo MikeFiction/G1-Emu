@@ -1,7 +1,7 @@
 # Code from Animatek NME
 
 These files are a copy of part of [Animatek NME](https://github.com/animatek/Animatek-NME)
-(GPLv3, like G1-Emu, and by the same author), taken from its commit `17b3ffd` (2026-10-13). They
+(GPLv3, like G1-Emu, and by the same author), taken from its commit `42221fb` (2026-10-13). They
 turn a `.pch` file into the packets the G1 takes, for the Presets page's **Load .pch**: `PchFileIO` reads the file, `PatchSerializer` makes the sections, `UploadPacketizer`
 cuts and frames them. `modules.xml` is NME's `data/modules.xml`, the modules' descriptions those
 need, built into the program.

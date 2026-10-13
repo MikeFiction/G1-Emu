@@ -122,7 +122,9 @@ release archives):
    - They do, but no sound? Then slot A is not listening on that channel: check its MIDI channel
      in the synth settings.
 
-If both sound, the emulator works: any silence left is in a patch or your routing.
+If both sound, the emulator works: any silence left is in a patch or your routing. For a patch
+that does not sound, or sounds strange, see
+[the FAQ](#some-patches-do-not-sound-or-sound-strange).
 
 ## Building
 
@@ -306,7 +308,34 @@ Then go through the two test patches, step by step, in
 [Getting started, step 6](#getting-started): **Test Audio** sounds with no notes at all, **Test
 MIDI** only while a note is held, so which one stays silent says where the problem is. Then check that the notes reach it: the **MIDI LED** on the panel flashes with each note, and
 `MIDI in` in the status bar counts up. If they do and it is still silent, check the master volume
-knob and that the DAW routes the plugin's outputs.
+knob and that the DAW routes the plugin's outputs. If the test patches sound and yours do not, see
+the next question.
+
+<a id="some-patches-do-not-sound-or-sound-strange"></a>
+**Some patches do not sound, or sound strange.**
+`.pch` files come in two formats. The usual one is **3.0**, written by Clavia's editor 3.x and by
+Animatek NME. The older **2.10**, from Clavia's editor 2.x, is still common: many of Clavia's
+factory patches and many in the community archives are 2.10 (open the file in a text editor: its
+first lines say `Version=Nord Modular patch 2.10`). The G1 itself only takes 3.0, so **a 2.10
+patch is converted when it is loaded**, by Load .pch and by Animatek NME alike. Since G1-Emu
+alpha.19 (and in the Animatek NME release after 0.21) the conversion follows the rules of Clavia's
+own editor 3.03, morphs, knobs and MIDI controllers included, and these patches sound as they
+should ([#65](https://github.com/animatek/G1-Emu/issues/65)). A converted patch can still differ
+from what its author heard. If one is silent or odd:
+
+1. **Look at the patch in an editor first.** Open it in Animatek NME (or Clavia's editor) and
+   check what it needs: an output module that is connected and not muted, the outputs it goes to
+   (3/4 instead of 1/2 is silent in most setups), the audio inputs (an effect patch is silent with
+   nothing coming in), a keyboard or velocity range, the MIDI channel. **Sequencer patches often
+   wait for a clock**: one with a MIDI Global module needs the G1's MIDI clock running (in a DAW,
+   press play; standalone, set the clock to internal in the synth settings), and some start only
+   when a knob is turned, which their notes usually say. Many "silent" patches are one of these.
+2. **Send it from Animatek NME** instead of Load .pch. If it sounds from NME and not from Load
+   .pch, tell us: that is our bug.
+3. **Open an issue and attach the `.pch`** (zip it if GitHub refuses the file), the very file you
+   loaded, and say where it comes from. We need that file and not just the patch's name: copies of
+   the same patch differ, and the one you have may be damaged, in the old format, or sent to other
+   outputs. **Report issue** opens the issue for you.
 
 **The plugin gets no notes from my DAW.**
 Watch `MIDI in` in the status bar while you play. If it stays at 0, the notes are not reaching the
@@ -350,7 +379,8 @@ Not here: see [Please read this first](#please-read-this-first).
 **How do I report a bug?**
 With the **Report issue** button in the window's status bar: it opens a new issue with the
 version, system, audio and MIDI details already filled in. Say what you did, what you expected
-and what happened.
+and what happened. **If a patch is involved, attach its `.pch`** (zipped if GitHub refuses it):
+the file you used, not its name ([why](#some-patches-do-not-sound-or-sound-strange)).
 
 ## License and credits
 

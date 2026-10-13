@@ -1945,7 +1945,10 @@ namespace g1gui
 	{
 		const auto s = m_host.stats();
 		juce::String body;
-		body << "**What happens**\n\n\n**How to reproduce it** (attach the patch if one is involved)\n\n\n"
+		body << "**What happens**\n\n\n**How to reproduce it**\n\n\n"
+			 << "**The patch**, if one is involved: attach its .pch, the very file you loaded (zip it if "
+				"GitHub refuses it), and say where it comes from. Have you looked at it in an editor "
+				"(outputs, inputs, mute, clock)? Does it sound when sent from Animatek NME?\n\n\n"
 			 << "---\n"
 			 << "- G1-Emu: " << G1_BUILD_VERSION << "\n"
 			 << "- System: " << juce::SystemStats::getOperatingSystemName() << ", "

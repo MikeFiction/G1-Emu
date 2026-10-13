@@ -12,7 +12,9 @@ G1-Emu is pre-alpha and there is plenty to do. Everything in the repo is in Engl
 ## Before you start
 
 - **There is no support and no ROMs.** Issues are for bug reports with details (what you did, what
-  you expected, what happened, ideally with the `.pch`) and for concrete proposals. Requests for
+  you expected, what happened) and for concrete proposals. When a patch is involved, attach the
+  `.pch` you loaded, the file itself, after looking at it in an editor (see the README's FAQ,
+  "Some patches do not sound, or sound strange"). Requests for
   help, builds or ROMs will be closed without an answer. The project is not affiliated with Clavia
   DMI.
 
