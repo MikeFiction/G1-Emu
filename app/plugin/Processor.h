@@ -205,7 +205,11 @@ namespace g1plugin
 		// it if the host is playing. Message thread, or before anything runs.
 		void createEngine(const juce::MemoryBlock* _state);
 		void destroyEngine();
-		void startRunner();
+		// Under m_lifecycle. The runner's latency, or -1 with none started: the caller gives it to
+		// the host with setLatencySamples once the lock is released, as a Steinberg host answers a
+		// latency change at once, by calling releaseResources and prepareToPlay from inside it (#66).
+		int startRunner();
+		void reportLatency(int _latency);
 		bool applyState(g1app::Engine& _engine, const juce::MemoryBlock& _state);
 		juce::MemoryBlock snapshotState();
 		juce::MemoryBlock settingsOnlyState();

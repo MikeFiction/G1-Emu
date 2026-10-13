@@ -1,6 +1,6 @@
 // g1vst3check: loads the built G1-Emu.vst3 through JUCE's VST3 host, as a DAW would, and plays it.
 //
-//   g1vst3check path/to/G1-Emu.vst3 [--slots | --settings | --window | --clock packets-dir]
+//   g1vst3check path/to/G1-Emu.vst3 [--slots | --settings | --window | --buffer-change | --clock packets-dir]
 //
 // Two instances at once in one process, each with its own Program Change and a note, rendered
 // offline block by block and interleaved; then the first one's state goes into a third instance,
@@ -18,18 +18,26 @@
 //
 // --settings, alone (issue #46): the synth settings in use are in the project, and a project's
 // own (slot A put on channel 5) are the ones a new instance opened from it runs with.
+//
+// --buffer-change, alone (issue #66): the buffer size changed as Cubase and Nuendo change it, the
+// plugin deactivated and reactivated from inside its own prepareToPlay when its latency changes.
 
 #include <juce_audio_devices/juce_audio_devices.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <pluginterfaces/vst/ivstcomponent.h>
 
+#include <atomic>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace
@@ -628,6 +636,92 @@ namespace
 		return 0;
 	}
 
+	// Issue #66 (--buffer-change), in a process of its own, as it hangs when it fails: Cubase and
+	// Nuendo answer a latency change at once, in the same call stack, by deactivating and
+	// reactivating the plugin. A new buffer size changes the latency inside prepareToPlay, so
+	// setActive comes back into the plugin while it is still in there. Called on the plugin's
+	// IComponent itself, as those hosts do: JUCE's host holds a lock of its own around its
+	// prepareToPlay, and going through it would hang the host, not the plugin.
+	struct ReactivateOnLatency final : juce::AudioProcessorListener
+	{
+		explicit ReactivateOnLatency(juce::AudioPluginInstance& _p) : p(_p) {}
+		void audioProcessorChanged(juce::AudioProcessor*, const ChangeDetails& _details) override
+		{
+			auto* component = static_cast<Steinberg::Vst::IComponent*>(p.getPlatformSpecificData());
+			if(!_details.latencyChanged || inside || !component)
+				return;
+			inside = true;
+			++count;
+			component->setActive(false);
+			component->setActive(true);
+			inside = false;
+		}
+		void audioProcessorParameterChanged(juce::AudioProcessor*, int, float) override {}
+		juce::AudioPluginInstance& p;
+		int count = 0;
+		bool inside = false;
+	};
+
+	int checkBufferChange(juce::AudioPluginFormatManager& _formats, const juce::String& _path)
+	{
+		Voice f;
+		f.plugin = load(_formats, _path);
+		if(!f.plugin)
+			return 1;
+		auto& p = *f.plugin;
+		p.setNonRealtime(true);
+		ReactivateOnLatency host(p);
+		p.addListener(&host);
+
+		// Before the fix it never came back: a watchdog says so instead of hanging.
+		std::atomic<bool> done{false};
+		std::thread watchdog([&done]
+		{
+			for(int i = 0; i < 600 && !done; ++i)
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+			if(!done)
+			{
+				std::printf("FAIL: the plugin did not come back from a reactivation inside prepareToPlay (a deadlock)\n");
+				std::fflush(stdout);
+				std::_Exit(1);
+			}
+		});
+
+		int failed = 0;
+		for(const int block : {256, 1024, 128})
+		{
+			const int before = host.count;
+			p.prepareToPlay(g_rate, block);
+			const int latency = p.getLatencySamples();
+			float peak = 0;
+			for(int i = 0; i < 50; ++i)
+			{
+				juce::AudioBuffer<float> buffer(std::max(p.getTotalNumInputChannels(), p.getTotalNumOutputChannels()), block);
+				buffer.clear();
+				juce::MidiBuffer midi;
+				p.processBlock(buffer, midi);
+				peak = std::max(peak, buffer.getMagnitude(0, 0, block));
+			}
+			std::printf("issue #66: buffer %d: reactivated %d time(s) inside prepareToPlay, latency %d frames, %.1f dBFS\n",
+				block, host.count - before, latency, db(peak));
+			if(latency < block)
+			{
+				std::printf("FAIL: the latency reported (%d) is less than the block\n", latency);
+				failed = 1;
+			}
+		}
+		if(host.count == 0)
+		{
+			std::printf("FAIL: no latency change was reported, so nothing was checked\n");
+			failed = 1;
+		}
+		p.releaseResources();
+		done = true;
+		watchdog.join();
+		p.removeListener(&host);
+		return failed;
+	}
+
 	int checkWindow(juce::AudioPluginFormatManager& _formats, const juce::String& _path)
 	{
 		const KeepPreferences keep;
@@ -740,6 +834,18 @@ int main(int _argc, char** _argv)
 	formats.addFormat(new juce::VST3PluginFormat());
 	const juce::String path(_argv[1]);
 	int failed = 0;
+	// No PC Port is needed for it, so none is made, and another G1-Emu open is no matter.
+	if(_argc > 2 && juce::String(_argv[2]) == "--buffer-change")
+	{
+#if defined(_WIN32)
+		_putenv_s("G1_PLUGIN_PC_PORT", "0");
+#else
+		setenv("G1_PLUGIN_PC_PORT", "0", 1);
+#endif
+		failed = checkBufferChange(formats, path);
+		std::printf("%s\n", failed ? "FAILED" : "all good");
+		return failed;
+	}
 	// The PC Ports are found by name, and another G1-Emu (a DAW with the plugin open) has the same
 	// names: the check would greet that one and upload patches to its slot A.
 	for(const auto& d : juce::MidiOutput::getAvailableDevices())

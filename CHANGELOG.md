@@ -7,6 +7,20 @@ Older entries cite their commit by hand.
 
 ## 2026-10-13
 
+- [Fix] **Changing the buffer size crashed Cubase and Nuendo (Claude, issue #66, reported by
+  Waltercalling, asked by Javier).** A new buffer size is a new latency, which the plugin told the
+  host from inside `prepareToPlay` while holding its own lock. Steinberg's hosts answer a latency
+  change at once, in the same call stack, by deactivating and reactivating the plugin, so
+  `releaseResources` came back for that lock on the same thread: a deadlock, which on Windows is an
+  exception nobody catches, and the DAW goes down. Live and Bitwig answer later, which is why
+  only Cubase and Nuendo crashed. `startRunner` now returns the latency, and `prepareToPlay`,
+  `setStateInformation` and a ROM chosen by hand tell it to the host once the lock is released
+  (`app/plugin/Processor.*`). New `g1vst3check plugin.vst3 --buffer-change`: three buffer sizes,
+  each with the plugin's own `IComponent` deactivated and reactivated from inside the latency
+  change, as those hosts do it (needs no PC Port, so it runs with a DAW open). Checked on Linux:
+  without the fix it hangs, and gdb shows `setActive(false)` waiting on the lock `prepareToPlay`
+  holds; with it, all three come back, report a latency over the block and play. The 12 G1 tests
+  pass. Not yet tried in Cubase itself.
 - [Merge] **Mike Fiction's pull requests #67, #68, #69, #70 and #71 (Claude, asked by Javier).**
   Merged one by one, in the order asked for (#67 Keyboard Mode and MIDI CC Mode, #68 MIDI CC
   assign and MIDI Learn, #69 octave shift per slot), then #70 (a knob follows a controller) and

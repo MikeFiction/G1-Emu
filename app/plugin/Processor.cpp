@@ -351,12 +351,14 @@ namespace g1plugin
 		m_romPath = options.rom;
 		m_romProblem.clear();
 
+		int latency = -1;
 		suspendProcessing(true);
 		{
 			std::lock_guard<std::mutex> lock(m_lifecycle);
 			createEngine(m_haveState ? &m_state : nullptr);
-			startRunner();
+			latency = startRunner();
 		}
+		reportLatency(latency);
 		suspendProcessing(false);
 	}
 
@@ -428,20 +430,27 @@ namespace g1plugin
 			m_origin = "the factory flash: no patches yet";
 	}
 
-	void Processor::startRunner()
+	int Processor::startRunner()
 	{
 		m_runner.reset();
 		if(!m_engine || !m_prepared)
-			return;
+			return -1;
 		m_lastGainDb = m_gainParam->get();
 		m_runner = std::make_unique<g1app::Runner>(*m_engine, m_rate, static_cast<size_t>(m_maxBlock), m_lastGainDb,
 			m_pcPort && m_pcPort->virtualPorts() ? m_pcPort.get() : nullptr, m_pcIndex, m_keeper.get(),
 			&m_synthSettings, m_link.listening() ? &m_link : nullptr, &m_presets);
 		m_runner->setSelectedControllers(m_selectedControllers);
-		setLatencySamples(static_cast<int>(m_runner->latency()));
 		m_unstarted = false;
 		if(std::exchange(m_engineFresh, false))
 			replayPrograms();
+		return static_cast<int>(m_runner->latency());
+	}
+
+	// The latency startRunner() gave, told to the host with no lock held (#66).
+	void Processor::reportLatency(const int _latency)
+	{
+		if(_latency >= 0)
+			setLatencySamples(_latency);
 	}
 
 	// Queued before the host's first block, half a second into the G1's life: the OS takes them
@@ -508,14 +517,20 @@ namespace g1plugin
 
 	void Processor::prepareToPlay(const double _rate, const int _maxBlock)
 	{
-		std::lock_guard<std::mutex> lock(m_lifecycle);
-		m_rate = _rate;
-		m_maxBlock = std::max(_maxBlock, 1);
-		m_prepared = true;
-		m_inputs.setSize(2, m_maxBlock);
-		if(!m_engine)
-			createEngine(m_haveState ? &m_state : nullptr);
-		startRunner();
+		int latency = -1;
+		{
+			std::lock_guard<std::mutex> lock(m_lifecycle);
+			m_rate = _rate;
+			m_maxBlock = std::max(_maxBlock, 1);
+			m_prepared = true;
+			m_inputs.setSize(2, m_maxBlock);
+			if(!m_engine)
+				createEngine(m_haveState ? &m_state : nullptr);
+			latency = startRunner();
+		}
+		// A new buffer size is a new latency, and Cubase or Nuendo reactivate the plugin from
+		// inside this call (#66): no lock may be held here.
+		reportLatency(latency);
 	}
 
 	void Processor::releaseResources()
@@ -847,6 +862,7 @@ namespace g1plugin
 
 		if(auto* editor = dynamic_cast<Editor*>(getActiveEditor()))
 			editor->engineGoing();
+		int latency = -1;
 		suspendProcessing(true);
 		{
 			std::lock_guard<std::mutex> lock(m_lifecycle);
@@ -861,9 +877,10 @@ namespace g1plugin
 			else
 			{
 				createEngine(&m_state);
-				startRunner();
+				latency = startRunner();
 			}
 		}
+		reportLatency(latency);
 		suspendProcessing(false);
 		// The knobs took the project's positions: the host reads the parameters again, as after
 		// loading a preset (CLAP asks for that, or it takes them for its own changes).

@@ -118,6 +118,9 @@ clap-juce-extensions; `clap-validator` passes it. The design is
   old may be missing). `g1slotkeepertest` and `g1vst3check plugin.vst3 --slots` test it.
 - **Engine swaps** (a project's state arriving) happen on the message thread with processing
   suspended; the editor drops its panel first (`Editor::engineGoing`).
+- **Latency** goes to the host (`setLatencySamples`) only once `m_lifecycle` is released: Cubase
+  and Nuendo answer a latency change, which a new buffer size is, by deactivating and reactivating
+  the plugin from inside that call (#66). `g1vst3check plugin.vst3 --buffer-change` checks it.
 - Known: a patch load runs slower than real time (host-port syncs), ~0.3 s of dropouts at the
   Program Change while the G1 is muted anyway. The G1's MIDI OUT still goes nowhere.
 
