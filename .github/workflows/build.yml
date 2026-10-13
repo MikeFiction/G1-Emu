@@ -154,10 +154,31 @@ jobs:
           Copy-Item build/app/plugin/g1plugin_artefacts/Release/CLAP/G1-Emu.clap package/
           Copy-Item G1-Emu/README.md, G1-Emu/WINDOWS.md, G1-Emu/LICENSE package/
 
+      # The installer, from the same files as the zip (packaging/windows/G1-Emu.iss). Named after
+      # the tag on a release, after the commit otherwise.
+      - name: Installer (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          $version = if ('${{ github.ref_type }}' -eq 'tag') { '${{ github.ref_name }}' } else { 'dev-' + '${{ github.sha }}'.Substring(0, 7) }
+          & $iscc "/DAppVersion=$version" "/DPackageDir=$PWD\package" "/O$PWD" G1-Emu/packaging/windows/G1-Emu.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
       - uses: actions/upload-artifact@v4
         with:
           name: G1-Emu-${{ matrix.artifact }}
           path: ${{ runner.os == 'Windows' && 'package/*' || format('G1-Emu-{0}.tar.gz', matrix.artifact) }}
+          if-no-files-found: error
+          retention-days: 30
+
+      # On its own, so the release job does not zip it with the rest.
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: G1-Emu-${{ matrix.artifact }}-setup
+          path: G1-Emu-${{ matrix.artifact }}-setup.exe
           if-no-files-found: error
           retention-days: 30
 
@@ -184,6 +205,7 @@ jobs:
           mkdir -p release
           find artifacts -name '*.tar.gz' -exec cp {} release/ \;
           (cd artifacts/G1-Emu-windows-x86_64 && zip -r "$GITHUB_WORKSPACE/release/G1-Emu-windows-x86_64.zip" .)
+          cp artifacts/G1-Emu-windows-x86_64-setup/G1-Emu-windows-x86_64-setup.exe release/
           ls -l release
 
       # Pre-release on purpose: it is a test build, and it must not look like a finished one.

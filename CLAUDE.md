@@ -175,6 +175,7 @@ the four outputs and the links between DSPs; it also has probes for the panel (s
 | `app/alsamidi.h`, `app/alsaaudio.h`, `app/jackaudio.h` | The native Linux backend: ALSA MIDI (a `MidiTransport`), ALSA audio, JACK audio. |
 | `app/juceaudio.h`, `app/jucemidi.h` | The JUCE backend: every system, and the only one off Linux. `JuceMidi` is a `MidiTransport`. |
 | `app/windowsmidi.*` | The experimental Windows MIDI Services `MidiTransport`, opt-in. |
+| `packaging/windows/G1-Emu.iss` | The Windows installer (Inno Setup 6), built by CI from the same files as the zip: replaces the previous version and removes hand-made copies of the plugins. |
 | `tools/g1boot.cpp` | Headless boot and disassembler. |
 | `tools/patchtest/` | `g1patchtest`: the test bench. |
 | `tools/battery/` | `battery.py`: one patch per module type, played and measured (`docs/module-battery.md`). |

@@ -7,6 +7,18 @@ Older entries cite their commit by hand.
 
 ## 2026-10-13
 
+- [Feature] **A Windows installer, built by CI next to the zip (Claude, asked by Javier).**
+  `packaging/windows/G1-Emu.iss` (Inno Setup 6) makes `G1-Emu-windows-x86_64-setup.exe` from the
+  same files as the zip: the standalone in Program Files with a Start menu entry, and the VST3 and
+  CLAP in `Common Files`, each one optional. A new version replaces the old one in place, and
+  copies of the plugins left by hand in `AppData\Local\Programs\Common` are removed, since a DAW
+  that finds two may load the old one (#53, #59, #65). The ROM, banks and settings in
+  `%APPDATA%\Animatek\G1-Emu` are never touched, not even by the uninstaller. Unsigned, so
+  SmartScreen still warns. The release job publishes it from the next tag on; README (Getting
+  started) and `WINDOWS.md` say so. Checked on Javier's machine, which had both copies of the
+  VST3: a silent install of a local build left one, in `Common Files`, put the standalone and its
+  uninstaller in Program Files with its Windows entry (version and publisher), and kept
+  `flash.bin` and the settings. CI's step is checked by the next push's build.
 - [Docs] **Release notes for v0.1.0-alpha.19 (Claude, asked by Javier).** `docs/release-notes.md`:
   2.10 patches converted as Clavia's editor does, Windows sleeps, the new FAQ entry and the `.pch`
   in issues, and that `G1_THREADS=0` is no longer needed.

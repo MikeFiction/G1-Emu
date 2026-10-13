@@ -17,12 +17,15 @@ G1-Emu includes no ROM. You need your own 512 KB ROM dump from a Nord Modular **
 
 ## 1. Install the programs
 
-1. Extract the G1-Emu Windows ZIP to a normal folder.
+1. Run the installer, `G1-Emu-windows-x86_64-setup.exe` (from alpha.20): it installs the
+   standalone, and the VST3 and CLAP plugins in `C:\Program Files\Common Files`, replacing an
+   earlier version and removing copies left by hand. Or extract the G1-Emu Windows ZIP to a normal
+   folder.
 2. Install and start loopMIDI from its official site.
 3. Install or extract a G1 editor. These steps use
    [Animatek NME](https://github.com/animatek/Animatek-NME).
 
-The executables are unsigned. Windows SmartScreen may show an unidentified-developer warning;
+The executables and the installer are unsigned. Windows SmartScreen may show an unidentified-developer warning;
 choose **More info**, verify that the file is the one downloaded from the G1-Emu GitHub release,
 then choose **Run anyway**.
 

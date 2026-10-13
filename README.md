@@ -53,12 +53,19 @@ is always readable in **Settings**, which is also where to put it back at startu
 | System | Archive |
 | --- | --- |
 | macOS (Apple Silicon and Intel) | `G1-Emu-macos-universal.tar.gz` |
-| Windows | `G1-Emu-windows-x86_64.zip` |
+| Windows | `G1-Emu-windows-x86_64-setup.exe`, the installer (from alpha.20), or `G1-Emu-windows-x86_64.zip` |
 | Linux | `G1-Emu-linux-x86_64-native.tar.gz` (or `-juce`); Raspberry Pi and other arm64: `G1-Emu-linux-arm64-native.tar.gz` |
 
 Each one has the **standalone** (`G1-Emu`, `G1-Emu.app` or `G1-Emu.exe`: the synth in its own
 window) and the **plugin** (`G1-Emu.vst3` and `G1-Emu.clap`: the synth inside your DAW). Use
 either, or both.
+
+**On Windows, the installer does steps 1 and 2 for you**: run `G1-Emu-windows-x86_64-setup.exe`,
+choose what to install (the standalone, the VST3, the CLAP) and press Next until it is done. It
+puts the plugins where every DAW looks, **replaces the previous version**, and removes old copies
+you put by hand in `AppData\Local\Programs\Common` (a DAW that finds two may load the old one).
+Your ROM, banks and settings are not touched, also not when you uninstall it (Settings → Apps). The
+zip is still there for those who prefer copying by hand.
 
 **2. Install the plugin**, if you want it, by copying it to your plugin folder, and let the DAW
 rescan:
