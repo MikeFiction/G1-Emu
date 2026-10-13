@@ -1,26 +1,33 @@
-# G1-Emu v0.1.0-alpha.18
+# G1-Emu v0.1.0-alpha.19
 
-**The log now says where a "no sound" stops** (#65). `g1-emu.log` (Report issue opens its
-folder) gets two new kinds of line:
+Two fixes for "no sound" and "it drops out" (#63, #65).
 
-- At start, **the machine**: the CPU, its cores (performance and efficiency ones on a hybrid
-  CPU), the instruction sets the DSP emulation picks its code by, and whether the four DSPs run
-  on their own threads or one after another (`G1_THREADS=0`).
-- A moment after you play a note, **how far the sound gets**: the output's level, each DSP's
-  state, the level on each link between the four DSPs, and how often a DSP had to go on without
-  the previous one's audio, which is what we suspect goes wrong on some machines.
+**Old patches sound again.** Most of Clavia's factory patches, and many in the community archives,
+are in the old **2.10** format, and **Presets → Load .pch** converted them wrong: the slave
+oscillators arrived muted, sequencers empty, waveforms and outputs one step off, morphs and knob
+assignments gone. The conversion now follows the rules of Clavia's own editor 3.03, morph module,
+morph and knob assignments and MIDI controllers included. Of 40 2.10 factory patches, 16 were
+silent; now every one sounds, except the five that are silent by design (two wait for the MIDI
+clock, one for a knob its notes name, two process the audio inputs). The same conversion goes into
+the next Animatek NME. Patches in the 3.0 format, Test Audio and Test MIDI among them, load exactly
+as before.
 
-Every line also carries the process id, since a DAW may run each plugin in a process of its own.
+**Windows: no more dropouts from the emulator's own sleeps.** When the plugin was ahead of the host
+it slept 0.2 ms, but on Windows such a sleep lasts 15.6 ms unless something in the process asked
+for more: the plugin fell behind and dropped out, most of all on a power-saving plan. It now
+sleeps with a high-resolution timer, and its threads opt out of Windows 11's power throttling
+(EcoQoS). In our test, dropouts in real time went from 353 to 9, and offline rendering got six
+times faster.
 
-**If you have no sound** (#53, #59, #65): please install this build, keep only one copy of the
-plugin (look in both `C:\Program Files\Common Files\VST3` and
-`C:\Users\<you>\AppData\Local\Programs\Common\VST3`), load **Test Audio** from
-[`test-patches/`](https://github.com/animatek/G1-Emu/tree/main/test-patches)
-([Getting started, step 6](https://github.com/animatek/G1-Emu#getting-started)), **play a few
-notes**, wait a couple of seconds, then press **Report issue** and attach `g1-emu.log`. If you
-can, do it once more with the environment variable `G1_THREADS=0` set, and attach both logs.
+**If a patch is silent or strange**, see the new FAQ entry,
+[Some patches do not sound, or sound strange](https://github.com/animatek/G1-Emu#some-patches-do-not-sound-or-sound-strange):
+look at it in an editor first (outputs, inputs, mute, clock, knobs), try it from Animatek NME, and
+**attach the very `.pch` to the issue**. **Report issue** now asks for it.
+
+If you were asked to try `G1_THREADS=0`: there is no need any more. That mode cannot keep up in
+real time and drops out.
 
 ## Known
 
-Same as alpha.17: on Windows the plugin has no PC Port of its own (it uses the direct link); the
+Same as alpha.18: on Windows the plugin has no PC Port of its own (it uses the direct link); the
 standalone still needs loopMIDI for the editor when the direct link is not used.

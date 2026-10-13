@@ -7,6 +7,9 @@ Older entries cite their commit by hand.
 
 ## 2026-10-13
 
+- [Docs] **Release notes for v0.1.0-alpha.19 (Claude, asked by Javier).** `docs/release-notes.md`:
+  2.10 patches converted as Clavia's editor does, Windows sleeps, the new FAQ entry and the `.pch`
+  in issues, and that `G1_THREADS=0` is no longer needed.
 - [Fix] **Old 2.10 `.pch` files are converted as Clavia's editor converts them; most of Clavia's
   factory patches loaded silent (Claude, issue #65, reported by bacizone, asked by Javier).**
   Presets → Load .pch reads files with NME's code (`app/nme/`), which copied a 2.10 file's values
