@@ -122,7 +122,7 @@ namespace g1app
 		AudioBridge m_bridge;
 		HealthProbe m_health;			// worker thread, and DSP 3's for output()
 		SpscQueue<Event, 1024> m_events;
-		MidiRouting m_midiRouting;		// the worker's: the track's notes and controllers, to the slots that play them
+		MidiRouting m_midiRouting;		// the worker's: the track's notes, by each slot's octave shift
 		std::atomic<bool> m_selectedControllers{false};	// MIDI CC Mode on Selected Slots (setSelectedControllers)
 		std::vector<uint8_t> m_routed;
 

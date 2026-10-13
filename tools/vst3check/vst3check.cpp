@@ -913,6 +913,45 @@ int main(int _argc, char** _argv)
 		}
 	}
 
+	// A slot's octave shift as a parameter: the host sets slot A's to +1, the G1 takes it (its
+	// patch carries it, so the keeper reads slot A again), and a project saved after that brings
+	// it back in a new instance once its slots are restored. Slower than a knob's: the keeper
+	// reads the slot after a quiet second, and a reopened project restores its slots first.
+	{
+		const int oct = parameterIndex(*c.plugin, "Slot A Octave");
+		auto settle = [](Voice& _v, const int _steps)
+		{
+			for(int i = 0; i < _steps; ++i)
+			{
+				play({&_v}, 0.5);
+				juce::MessageManager::getInstance()->runDispatchLoopUntil(300);	// the plugin's timers, as in a DAW
+			}
+		};
+		auto shift = [&](Voice& _v) { return juce::roundToInt(_v.plugin->getParameters()[oct]->getValue() * 4.0f) - 2; };
+		int kept = -9, restored = -9;
+		if(oct >= 0)
+		{
+			c.plugin->getParameters()[oct]->setValueNotifyingHost(0.75f);	// +1
+			settle(c, 12);
+			kept = shift(c);
+			juce::MemoryBlock state;
+			c.plugin->getStateInformation(state);
+			Voice d;
+			d.plugin = load(formats, path);
+			d.plugin->setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+			settle(d, 20);
+			restored = shift(d);
+			c.plugin->getParameters()[oct]->setValueNotifyingHost(0.5f);	// back to 0 for what follows
+			settle(c, 2);
+		}
+		std::printf("slot A's octave set to +1 by the host: %+d after playing, %+d in a project reopened\n", kept, restored);
+		if(oct < 0 || kept != 1 || restored != 1)
+		{
+			std::printf("FAIL: the octave shift as a parameter\n");
+			failed = 1;
+		}
+	}
+
 	// The master volume as a parameter, the same way: 0-127, set to 64 by the host.
 	{
 		const int vol = parameterIndex(*c.plugin, "Master Volume");

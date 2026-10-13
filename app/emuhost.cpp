@@ -484,7 +484,7 @@ namespace g1app
 		std::ofstream pcLog(std::filesystem::path(m_flashPath).parent_path() / "pcport-in.bin", std::ios::binary | std::ios::app);
 
 		std::vector<std::vector<uint8_t>> incoming;
-		std::vector<uint8_t> routed;	// the MIDI port's bytes, as MidiRouting passes them on
+		std::vector<uint8_t> routed;	// the MIDI port's bytes, the notes moved by their slot's octave shift
 		std::vector<uint8_t> out, toEditor, toG1, linkIn;
 		constexpr uint64_t msCycles = g1::g_ucClock / 1000;	// the G1's own time, for the settings link
 
@@ -540,7 +540,7 @@ namespace g1app
 			{
 				m_midiIn += incoming[m_midiPort].size();
 				logMidi("in ", "MIDI", incoming[m_midiPort]);
-				// With Keyboard Mode or MIDI CC Mode on Selected Slots, played by every selected slot.
+				// Each note moved by its slot's octave shift, which the OS keeps but does not apply.
 				routed.clear();
 				m_midiRouting.apply(mc, MidiRouting::layout(&m_synthSettings, m_selectedControllers), incoming[m_midiPort].data(), incoming[m_midiPort].size(), routed);
 				mc.getSci().write(routed);

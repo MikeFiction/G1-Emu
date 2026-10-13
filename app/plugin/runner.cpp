@@ -222,7 +222,7 @@ namespace g1app
 			{
 				if(e->frame > produced)
 					break;
-				// With Keyboard Mode or MIDI CC Mode on Selected Slots, played by every selected slot.
+				// Each note moved by its slot's octave shift, which the OS keeps but does not apply.
 				m_routed.clear();
 				m_midiRouting.apply(mc, MidiRouting::layout(m_settings, m_selectedControllers), e->bytes, e->size, m_routed);
 				for(const auto b : m_routed)

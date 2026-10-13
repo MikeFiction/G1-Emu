@@ -10,8 +10,9 @@
 //      keeper reads slot B afterwards.
 //   4. Knob 1 is turned on the panel: the keeper reads slot A again (#46).
 //   5. Bend Range is changed on the System menu: the keeper reads slot A again when asked (reread()).
-//   6. MidiRouting: with Keyboard Mode on Selected Slots it layers the notes on the selected
-//      slots, and with MIDI CC Mode on Selected Slots the controllers too.
+//   6. Oct Up on the panel: the patch carries the shift, and MidiRouting moves the notes; with
+//      Keyboard Mode on Selected Slots it layers them on the selected slots, and with MIDI CC
+//      Mode on Selected Slots the controllers too.
 //   7. pack()/unpack() keep the slots as they are.
 //
 // Exit code 77 (skipped) without a ROM, 1 on any failure.
@@ -318,10 +319,9 @@ int main()
 		check(after.size() > 1 && before.size() > 1 && after[1] != before[1], "slot A's header has the new Bend Range");
 	}
 
-	// 6. Keyboard Mode: Selected Slots, A and B selected: a note on A's channel plays both, each on
-	//    its own channel, with the sustain pedal; another CC stays on its channel; the note off
-	//    releases both. With Active Slot again, only A. MIDI CC Mode: Selected Slots sends the CCs
-	//    to both, but Bank Select.
+	// 6. Oct Up on the panel: the OS steps the active slot's shift, which the patch carries, and
+	//    MidiRouting moves the notes on that slot's channel; a note off follows its note on after
+	//    the shift has changed, and a note moved off the keyboard is not played, on or off.
 	{
 		auto& mc = engine.mc();
 		auto press = [&](const uint32_t _row, const uint32_t _bit)
@@ -331,13 +331,45 @@ int main()
 			mc.setButton(_row, _bit, false);
 			bench.run(300);
 		};
-		g1app::MidiRouting router;
+		// The 3 bits after the header's first 61 (NME's octaveShift): the shift + 2.
+		auto headerShift = [&]
+		{
+			const auto slots = second.slots();
+			if(slots[0].sections.size() < 2 || slots[0].sections[1].size() < 11)
+				return -99;
+			const auto& h = slots[0].sections[1];
+			int v = 0;
+			for(int b = 8 + 61; b < 8 + 64; ++b)
+				v = (v << 1) | ((h[static_cast<size_t>(b / 8)] >> (7 - b % 8)) & 1);
+			return v - 2;
+		};
+		bench.keeper = &second;
+		const int start = g1app::MidiRouting::shift(mc, 0);
+		press(2, 5);	// Oct Up
+		check(g1app::MidiRouting::shift(mc, 0) == start + 1, "Oct Up steps slot A's octave shift");
+		second.reread(0);
+		check(bench.runUntilSettled(10000) && headerShift() == start + 1, "slot A's patch carries the shift");
+
+		g1app::MidiRouting shifter;
 		g1app::MidiRouting::Layout layout;	// channels 1 to 4, Keyboard Mode: Active Slot
 		std::vector<uint8_t> out;
-		auto send = [&](std::initializer_list<uint8_t> _in) { out.clear(); const std::vector<uint8_t> in(_in); router.apply(mc, layout, in.data(), in.size(), out); return out; };
-		check(send({0x90, 60, 100}) == std::vector<uint8_t>{0x90, 60, 100} && send({0x80, 60, 0}) == std::vector<uint8_t>{0x80, 60, 0},
-			"Active Slot: a note on slot A's channel goes through as it is");
+		auto send = [&](std::initializer_list<uint8_t> _in) { out.clear(); const std::vector<uint8_t> in(_in); shifter.apply(mc, layout, in.data(), in.size(), out); return out; };
+		const auto up = static_cast<uint8_t>(60 + 12 * (start + 1));
+		check(send({0x90, 60, 100}) == std::vector<uint8_t>{0x90, up, 100}, "a note on slot A's channel is moved by its shift");
+		press(2, 4);	// Oct Down while it is held
+		check(send({0x80, 60, 0}) == std::vector<uint8_t>{0x80, up, 0}, "its note off follows it after the shift changed");
+		check(send({0x99, 60, 100}) == std::vector<uint8_t>{0x99, 60, 100}, "a note on a channel no slot has is left alone");
 		check(send({0xf8, 0xb0, 7, 90}) == std::vector<uint8_t>{0xf8, 0xb0, 7, 90}, "clock and controllers go through");
+		while(g1app::MidiRouting::shift(mc, 0) < g1app::MidiRouting::MaxShift)
+			press(2, 5);
+		check(send({0x90, 120, 100}).empty() && send({0x80, 120, 0}).empty(), "a note moved off the keyboard is not played, on or off");
+		while(g1app::MidiRouting::shift(mc, 0) > start)
+			press(2, 4);
+
+		// Keyboard Mode: Selected Slots, A and B selected, B an octave up: a
+		// note on A's channel plays both, each on its own channel and by its own shift, with the
+		// sustain pedal; another CC stays on its channel; the note off releases both. With Active
+		// Slot again, only A.
 
 		// The slots whose LEDs light over 800 ms (the active one blinks), bit s for slot s.
 		const auto lit = [&]
@@ -368,16 +400,22 @@ int main()
 		bench.run(150);
 		const int active = mc.read8(g1::KnobMap::ActiveSlot + g1::KnobMap(mc).osShift()) & 3;
 		check(lit() == 3 && active == 0, "slots A and B selected, A active (B held, A pressed)");
+		const int bShift = g1app::MidiRouting::shift(mc, 1);
+		g1app::MidiRouting::setShift(mc, 0, 0);
+		g1app::MidiRouting::setShift(mc, 1, 1);
 		layout.selectedSlots = true;
-		check(send({0x90, 60, 100}) == std::vector<uint8_t>{0x90, 60, 100, 0x91, 60, 100}, "Selected Slots: a note on A's channel plays A and B");
+		check(send({0x90, 60, 100}) == std::vector<uint8_t>{0x90, 60, 100, 0x91, 72, 100}, "Selected Slots: a note on A's channel plays A and B, B an octave up");
 		check(send({0xb0, 64, 127}) == std::vector<uint8_t>{0xb0, 64, 127, 0xb1, 64, 127}, "the sustain pedal goes to both");
 		check(send({0xb0, 7, 90}) == std::vector<uint8_t>{0xb0, 7, 90}, "another CC stays on its channel");
-		check(send({0x80, 60, 0}) == std::vector<uint8_t>{0x80, 60, 0, 0x81, 60, 0}, "the note off releases both");
+		g1app::MidiRouting::setShift(mc, 1, 0);
+		check(send({0x80, 60, 0}) == std::vector<uint8_t>{0x80, 60, 0, 0x81, 72, 0}, "the note off releases both, where they went");
 		// Whichever is active: B pressed (both stay selected, B active), a note on A's channel still plays both.
+		g1app::MidiRouting::setShift(mc, 1, 1);
 		press(0, 3);
 		check((mc.read8(g1::KnobMap::ActiveSlot + g1::KnobMap(mc).osShift()) & 3) == 1 && lit() == 3, "B pressed: B active, A and B still selected");
-		check(send({0x90, 60, 100}) == std::vector<uint8_t>{0x91, 60, 100, 0x90, 60, 100}, "with B active, a note on A's channel still plays A and B");
+		check(send({0x90, 60, 100}) == std::vector<uint8_t>{0x91, 72, 100, 0x90, 60, 100}, "with B active, a note on A's channel still plays A and B, each by its own shift");
 		send({0x80, 60, 0});
+		g1app::MidiRouting::setShift(mc, 1, 0);
 		press(0, 2);	// A active again
 		layout.selectedSlots = false;
 		check(send({0x90, 60, 100}) == std::vector<uint8_t>{0x90, 60, 100}, "Active Slot: only A plays it");
@@ -388,6 +426,7 @@ int main()
 		check(send({0xb1, 74, 50}) == std::vector<uint8_t>{0xb0, 74, 50, 0xb1, 74, 50}, "MIDI CC Selected Slots: a CC on B's channel goes to A and B");
 		check(send({0xb0, 0, 1}) == std::vector<uint8_t>{0xb0, 0, 1}, "Bank Select stays on its channel");
 		layout.selectedControllers = false;
+		g1app::MidiRouting::setShift(mc, 1, bShift);
 	}
 
 	// 7. Project bytes.

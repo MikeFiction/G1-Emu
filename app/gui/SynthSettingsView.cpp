@@ -347,7 +347,7 @@ namespace g1gui
 		choices(m_program, {"Off", "Receive", "Send", "Send and receive"});
 		choices(m_leds, {"Active", "Off"});
 		choices(m_keyboardMode, {"Active Slot", "Selected Slots"});
-		m_keyboardMode.setTooltip("Selected Slots: a note on a selected slot's channel plays every selected slot, each on its own channel");
+		m_keyboardMode.setTooltip("Selected Slots: a note on a selected slot's channel plays every selected slot, each on its own channel and in its own octave");
 		label(m_keyboardModeLabel, "KEYB MODE");
 		choices(m_midiCc, {"Active Slot", "Selected Slots"});
 		m_midiCc.setTooltip("Selected Slots: a controller on a selected slot's channel goes to every selected slot, each on its own channel. "

@@ -84,6 +84,15 @@ namespace g1plugin
 			juce::NormalisableRange<float>(0.0f, 60.0f, 1.0f), DefaultDb, juce::AudioParameterFloatAttributes().withLabel("dB")) {}
 	};
 
+	// A slot's octave shift (-2 to +2), as the Oct keys step it and its patch keeps it (MidiRouting).
+	class OctaveParameter final : public juce::AudioParameterInt
+	{
+	public:
+		explicit OctaveParameter(const int _slot)
+			: juce::AudioParameterInt(juce::ParameterID{juce::String("octave") + static_cast<char>('A' + _slot), 1},
+				juce::String("Slot ") + static_cast<char>('A' + _slot) + " Octave", -g1app::MidiRouting::MaxShift, g1app::MidiRouting::MaxShift, 0) {}
+	};
+
 	class Processor : public juce::AudioProcessor, private juce::AsyncUpdater, private juce::Timer
 	{
 	public:
@@ -179,6 +188,10 @@ namespace g1plugin
 		std::array<int, 18> m_lastAdc{};				// the position each knob was last seen at
 		std::array<float, 18> m_lastParam{};			// the value each parameter was last seen at
 		VolumeParameter* m_volumeParam = nullptr;
+		// The slots' octave shifts, both ways: the host's changes go to the G1, the Oct keys' to the host
+		// (octavesToAndFromHost). What each was when they last agreed; under m_lifecycle.
+		std::array<OctaveParameter*, 4> m_octaveParams{};
+		std::array<int, 4> m_lastOctaveParams{};
 		int m_lastVolumeAdc = -1, m_lastVolumeParam = -1;
 		GainParameter* m_gainParam = nullptr;
 		float m_lastGainDb = GainParameter::DefaultDb;		// audio thread only: the value last given to the runner
@@ -201,6 +214,10 @@ namespace g1plugin
 		// The knobs something other than the host turned: (index, value) for the host, VolumeIndex
 		// for the volume. Under m_lifecycle; the host is told after (tellHost).
 		void knobsToHost(g1::Microcontroller& _mc, std::vector<std::pair<size_t, float>>& _edits);
+		// Under m_lifecycle: the host's octave changes written to the G1, and the G1's, in _edits, for
+		// tellHostOctaves() to pass on once no lock is held.
+		void octavesToAndFromHost(g1::Microcontroller& _mc, std::vector<std::pair<size_t, int>>& _edits);
+		void tellHostOctaves(const std::vector<std::pair<size_t, int>>& _edits);
 		void restoreStep();			// m_lifecycle held
 		void writePendingSettings();	// m_lifecycle held
 		void tellHost(const std::vector<std::pair<size_t, float>>& _edits);
@@ -244,6 +261,7 @@ namespace g1plugin
 		uint64_t m_settingsRevision = 0;		// the link's revision before the write: a later one is its reading back
 		juce::uint32 m_polledAt = 0;			// when the OS's settings were last asked for
 		bool m_systemMenu = false;				// the System key's LED was lit at the last look
+		std::array<int, 4> m_octaves{};		// each slot's octave shift at the last look
 		// A project's state going back in (slots, then synth settings): the track's notes are left
 		// out meanwhile, so none is played on a slot whose MIDI channel is about to change and then
 		// hangs, its note off arriving on the channel the slot no longer hears. At most

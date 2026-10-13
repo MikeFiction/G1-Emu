@@ -1,6 +1,7 @@
 #include "Panel.h"
 
 #include "LcdFont.h"
+#include "midirouting.h"
 #include "g1Lib/g1format.h"
 #include "G1Skin.h"
 #include "hostlog.h"
@@ -26,9 +27,14 @@ namespace g1gui
 		constexpr MatrixBit g_btnStore{0, 6}, g_btnSystem{0, 7}, g_btnEdit{1, 2}, g_btnPatchLoad{1, 3};
 		constexpr MatrixBit g_btnUp{1, 4}, g_btnLeft{1, 5}, g_btnDown{1, 6}, g_btnRight{1, 7};
 		constexpr MatrixBit g_btnPanelSplit{2, 2}, g_btnFind{2, 3}, g_btnAssign{2, 6}, g_btnShift{2, 7};
-		// Oct Shift -/+ ({2, 4} and {2, 5}) and their five LEDs belong to the keyboard model: the
-		// rack's OS keeps the value per slot but neither lights the LEDs nor transposes anything,
-		// so the window leaves them out (#11). See NOTES.md, "The panel".
+		// Oct Shift -/+ belong to the keyboard model: the rack's OS steps the active slot's shift
+		// with them but neither lights their five LEDs nor transposes anything (NOTES.md, "The
+		// panel"). The window lights the LEDs from the shift, and the hosts move the notes
+		// (MidiRouting).
+		constexpr MatrixBit g_btnOctDown{2, 4}, g_btnOctUp{2, 5};
+		constexpr std::array<float, 5> g_octLedX = {96.0f, 144.0f, 192.0f, 240.0f, 288.0f};	// -2 to +2
+		constexpr float g_octLedY = 748.5f;
+		constexpr float g_octaveShiftX = 75.0f, g_octaveShiftY = 766.0f;	// its label and strip (skin/octave_shift.png), over the background
 
 		// LEDs (active low). Knob LEDs: knob k (0-17) in row k%3, bit 1+k/3.
 		constexpr std::array<MatrixBit, 4> g_slotLeds = {MatrixBit{0, 7}, MatrixBit{1, 7}, MatrixBit{2, 7}, MatrixBit{3, 7}};
@@ -188,6 +194,7 @@ namespace g1gui
 		Sprite led{G1Skin::led_png, G1Skin::led_pngSize, 70, 70, 2};					// off, on
 		Sprite smallLcd{G1Skin::small_lcd_png, G1Skin::small_lcd_pngSize, 170, 57, 1};				// a knob's parameter display
 		Sprite smallLcdDark{G1Skin::small_lcd_dark_png, G1Skin::small_lcd_dark_pngSize, 170, 57, 1};	// the same, nothing assigned
+		Sprite octaveShift{G1Skin::octave_shift_png, G1Skin::octave_shift_pngSize, 235, 99, 1};		// OCT SHIFT and its keys' red strip, over the background
 	};
 
 	namespace
@@ -220,7 +227,7 @@ namespace g1gui
 		// The knobs are at 1:1, their pivot (56, 56 in the frame) on the centre of the background's
 		// red ring, measured ring by ring: the rows are not quite straight.
 		struct Centre { float x, y; };
-		constexpr Centre g_masterKnob{177.5f, 276.5f};
+		constexpr Centre g_masterKnob{192.5f, 276.5f};
 		constexpr Centre g_knobs[18] = {
 			{448.5f, 276.5f}, {448.5f, 516.5f}, {448.5f, 751.5f},		// 1-3
 			{672.5f, 276.5f}, {672.5f, 516.5f}, {672.5f, 750.5f},		// 4-6
@@ -1309,6 +1316,12 @@ namespace g1gui
 		m_panelSplit = &addButton("Panel Split", g_btnPanelSplit);
 		m_panelSplit->setLatchable(false);	// a toggle: held, it does nothing more
 		m_find = &addButton("Find", g_btnFind);
+		m_octDown = &addButton("Oct Down", g_btnOctDown);
+		m_octUp = &addButton("Oct Up", g_btnOctUp);
+		for(auto* b : {m_octDown, m_octUp})
+			b->setLatchable(false);	// a step each press: held, it does nothing more
+		for(auto& led : m_octLeds)
+			led = &addLed({});	// lit by the window from the active slot's shift (timerCallback)
 
 		const char* modes[] = {"Store", "System", "Edit", "Patch/Load"};
 		const MatrixBit modeBits[] = {g_btnStore, g_btnSystem, g_btnEdit, g_btnPatchLoad};
@@ -1599,6 +1612,7 @@ namespace g1gui
 		_g.fillAll(g_face);
 		const auto& s = *m_skin;
 		s.background.draw(_g, 0, {0.0f, 0.0f, static_cast<float>(Width), 1238.0f * SkinScale});
+		s.octaveShift.draw(_g, 0, skf(g_octaveShiftX, g_octaveShiftY, 235, 99));
 		s.dialShadow.draw(_g, 0, skf(g_dialX - 136.5f, g_dialY + 8.0f - 124.5f, 289, 289));
 		// Under each knob, the shadow's disk under the cap: only its soft edge shows, down and right.
 		const auto shadowAt = [&](const Centre _c) { s.knobShadow.draw(_g, 0, skf(_c.x - 33, _c.y - 33, 100, 101)); };
@@ -1629,9 +1643,13 @@ namespace g1gui
 		// Left column
 		place(m_volume, knobAt(g_masterKnob));
 		place(*m_panelSplitLed, ledAt(142, 401));
-		place(*m_panelSplit, wideAt(123, 424));	// centred (177) under "Find" and Master Volume
-		place(*m_find, wideAt(123, 531));
+		place(*m_panelSplit, wideAt(139, 424));	// centred (193) under "Find" and Master Volume
+		place(*m_find, wideAt(139, 531));
 		place(*m_midiLed, ledAt(142, 673));
+		for(size_t i = 0; i < m_octLeds.size(); ++i)
+			place(*m_octLeds[i], ledAt(g_octLedX[i], g_octLedY));
+		place(*m_octDown, wideAt(79, 798));		// side by side, centred (193) under "OCT SHIFT"
+		place(*m_octUp, wideAt(198, 798));
 
 		// Knobs: 1-3 and 4-6 in the first group, 7-12 in the second, 13-15 and 16-18 in the others
 		for(size_t i = 0; i < m_knobs.size(); ++i)
@@ -2388,6 +2406,10 @@ namespace g1gui
 		updateLcdTips(info);
 		for(auto& [led, bit] : m_ledMap)
 			led->setOn(ledLit(bit));
+		// The OS does not light the octave's LEDs on the rack: the active slot's shift, -2 to +2.
+		const auto octave = g1app::MidiRouting::shift(m_mc, static_cast<size_t>(activeSlot()));
+		for(size_t i = 0; i < m_octLeds.size(); ++i)
+			m_octLeds[i]->setOn(static_cast<int>(i) - g1app::MidiRouting::MaxShift == octave);
 		updateLearn();
 		updateStatus();
 	}
@@ -2510,6 +2532,11 @@ namespace g1gui
 		for(size_t i = 0; i < m_knobs.size(); ++i)
 			setLcdTip(m_knobs[i], shift ? shiftedKnobTip(_info[i]) : knobTip(_info[i], showsHz(_info[i])));
 		setLcdTip(m_volume, "Master Volume\t" + juce::String(m_mc.adc(VolumeAdc) / 2));
+		// The active slot's octave shift, as its LEDs show it: -2 to +2.
+		const int octave = g1app::MidiRouting::shift(m_mc, static_cast<size_t>(activeSlot()));
+		const auto octaveText = (octave > 0 ? "+" : "") + juce::String(octave);
+		setLcdTip(*m_octDown, "Oct Down\t" + octaveText);
+		setLcdTip(*m_octUp, "Oct Up\t" + octaveText);
 		for(const auto& s : m_shiftNames)
 			setLcdTip(*s.button, s.name(shift));
 		// Where the G1 is, from its display. In Edit mode the end of the first line says which part

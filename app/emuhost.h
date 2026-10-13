@@ -116,7 +116,7 @@ namespace g1app
 		DirectLink m_link;	// the PC Port for Animatek NME over a local socket, beside the MIDI one
 		SynthSettingsLink m_synthSettings;
 		PresetsLink m_presets;
-		MidiRouting m_midiRouting;	// the MIDI port's notes and controllers, to the slots that play them
+		MidiRouting m_midiRouting;	// the notes from the MIDI port, by each slot's octave shift
 		std::atomic<bool> m_selectedControllers{false};	// m_options's, for the thread that runs the G1
 		bool m_rawMidiBound = false;
 		std::string m_romProblem;
