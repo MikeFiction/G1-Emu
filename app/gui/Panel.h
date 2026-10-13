@@ -378,6 +378,7 @@ namespace g1gui
 		void timerCallback() override;
 		void updateKnobs(const std::array<g1::KnobInfo, 18>& _info);
 		void turnKnobs(double _now);		// one frame of the knobs turning to their targets
+		void retargetKnob(size_t _knob, const g1::KnobInfo& _k, juce::uint32 _now);	// where a knob goes now
 		void startKnobTurn();				// turnKnobs on each frame, until the knobs are in place
 		void setKnobTurning(size_t _knob, int _position);	// Random and its reset: set at once, drawn turning
 		void updateLcdTips(const std::array<g1::KnobInfo, 18>& _info);
@@ -423,6 +424,8 @@ namespace g1gui
 		std::array<juce::Slider, 18> m_knobs;
 		std::array<juce::uint32, 18> m_knobTurnedAt{};	// when the window last turned each (0: never)
 		std::array<double, 18> m_knobTarget{};			// where each knob is going (updateKnobs)
+		std::array<juce::uint32, 18> m_knobFollowUntil{};	// being moved continuously until then: read each frame (turnKnobs)
+		std::array<bool, 18> m_knobJump{};				// its last move was a jump from still: it turns into place
 		std::optional<juce::VBlankAttachment> m_knobTurn;	// while a knob turns into place
 		double m_knobTurnLast = -1.0;					// the last frame's time, while they turn
 		std::array<LedView*, 18> m_knobLeds{};

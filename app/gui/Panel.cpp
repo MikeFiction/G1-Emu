@@ -424,6 +424,14 @@ namespace g1gui
 		// automated desk, as Mike Fiction's Waldorf Wave does it: this share of the remaining
 		// distance each 60th of a second, whatever the frame rate (95 % of the way in 0.14 s).
 		constexpr double g_knobTurnShare = 0.3;
+		// But a knob moved a little at a time (a MIDI controller on what it moves, the host's
+		// automation, an editor) is read at each frame while it moves and eases faster, this share
+		// each 60th of a second: at the slow rate it lags behind a target that keeps moving, and the
+		// panel's 30 looks a second alone make it step. A target moved by no more than
+		// g_knobFollowSteps since the last look counts; it is read so until still for g_knobFollowHoldMs.
+		constexpr double g_knobFollowShare = 0.5;
+		constexpr double g_knobFollowSteps = 32.0;
+		constexpr juce::uint32 g_knobFollowHoldMs = 300;
 	}
 
 	void PanelButton::setAutoRepeat(const bool _on)
@@ -2437,23 +2445,11 @@ namespace g1gui
 	// group's value. A knob with nothing assigned shows its position.
 	void Panel::updateKnobs(const std::array<g1::KnobInfo, 18>& _info)
 	{
-		const bool follow = m_followToggle.getToggleState();
 		const auto now = juce::Time::getMillisecondCounter();
 		for(size_t i = 0; i < m_knobs.size(); ++i)
 		{
-			if(m_knobs[i].isMouseButtonDown())
-				continue;
-			const auto& k = _info[i];
-			const bool settling = m_knobTurnedAt[i] != 0 && now - m_knobTurnedAt[i] < g_knobSettleMs;
-			const bool fromPatch = follow && k.assigned && !settling;
-			if(!fromPatch)
-				m_knobTarget[i] = m_mc.adc(g_knobAdc[i]);
-			else if(!givesValue(static_cast<int>(m_knobTarget[i]), k))
-				m_knobTarget[i] = g1::KnobMap::positionFor(k.value, k.max);
-			// else it stays: a position that already gives the value (a stepped knob turned or
-			// set by Random anywhere in its value's slice) is not moved to the slice's middle.
-			if(m_knobTarget[i] != m_knobs[i].getValue())
-				startKnobTurn();
+			if(!m_knobs[i].isMouseButtonDown())
+				retargetKnob(i, _info[i], now);
 		}
 		if(!m_volume.isMouseButtonDown())
 			m_volume.setValue(m_mc.adc(VolumeAdc), juce::dontSendNotification);
@@ -2462,22 +2458,58 @@ namespace g1gui
 				m_knobDisplays[k].set(_info[k], showsHz(_info[k]));
 	}
 
+	// Where knob _knob goes now, from _k (what it moves, and its value).
+	void Panel::retargetKnob(const size_t _knob, const g1::KnobInfo& _k, const juce::uint32 _now)
+	{
+		const bool settling = m_knobTurnedAt[_knob] != 0 && _now - m_knobTurnedAt[_knob] < g_knobSettleMs;
+		const bool fromPatch = m_followToggle.getToggleState() && _k.assigned && !settling;
+		auto& target = m_knobTarget[_knob];
+		const double before = target;
+		if(!fromPatch)
+			target = m_mc.adc(g_knobAdc[_knob]);
+		else if(!givesValue(static_cast<int>(target), _k))
+			target = g1::KnobMap::positionFor(_k.value, _k.max);
+		// else it stays: a position that already gives the value (a stepped knob turned or set by
+		// Random anywhere in its value's slice) is not moved to the slice's middle.
+		// Moved, it is looked at each frame for a while (turnKnobs). Moved far at once, from still, it
+		// is a jump (another patch, Random) and turns into place; moved again while looked at, or a
+		// little, it is being moved continuously (a controller, even thrown fast) and follows.
+		if(const double moved = std::abs(target - before); moved > 0)
+		{
+			const bool watched = _now < m_knobFollowUntil[_knob];
+			m_knobJump[_knob] = !watched && moved > g_knobFollowSteps;
+			m_knobFollowUntil[_knob] = _now + g_knobFollowHoldMs;
+		}
+		if(target != m_knobs[_knob].getValue())
+			startKnobTurn();
+	}
+
 	// Each knob still away from its target eases toward it (g_knobTurnShare), the last positions
 	// one a frame. Only the picture moves: the G1's position is not written (dontSendNotification).
-	// A knob taken by the mouse stops.
+	// A knob taken by the mouse stops. One being moved continuously reads where it goes at each
+	// frame (the panel's timer looks only 30 times a second, and it would move in steps) and eases
+	// faster (g_knobFollowShare), so it neither steps nor lags.
 	void Panel::turnKnobs(const double _now)
 	{
 		const double dt = m_knobTurnLast < 0 ? 1.0 / 60.0 : std::clamp(_now - m_knobTurnLast, 0.0, 0.1);
 		m_knobTurnLast = _now;
 		const double share = 1.0 - std::pow(1.0 - g_knobTurnShare, dt * 60.0);
+		const double followShare = 1.0 - std::pow(1.0 - g_knobFollowShare, dt * 60.0);
+		const auto now = juce::Time::getMillisecondCounter();
 		bool moving = false;
 		for(size_t i = 0; i < m_knobs.size(); ++i)
 		{
 			auto& knob = m_knobs[i];
+			const bool following = now < m_knobFollowUntil[i];
+			if(following && !knob.isMouseButtonDown())
+			{
+				retargetKnob(i, m_knobMap.read(static_cast<uint32_t>(i)), now);
+				moving = true;	// still looked at, each frame, until it has been still for a while
+			}
 			const double from = knob.getValue(), to = m_knobTarget[i];
 			if(knob.isMouseButtonDown() || from == to)
 				continue;
-			double step = (to - from) * share;
+			double step = (to - from) * (following && !m_knobJump[i] ? followShare : share);
 			if(std::abs(step) < 1.0)
 				step = std::clamp(to - from, -1.0, 1.0);
 			knob.setValue(from + step, juce::dontSendNotification);
