@@ -7,6 +7,8 @@ Older entries cite their commit by hand.
 
 ## 2026-10-13
 
+- [Docs] **ROADMAP: a macOS installer, for later (Claude, asked by Javier).** A `.pkg` like the
+  Windows installer, which would also do away with the `xattr` step; waits for a Mac to test on.
 - [Feature] **A Windows installer, built by CI next to the zip (Claude, asked by Javier).**
   `packaging/windows/G1-Emu.iss` (Inno Setup 6) makes `G1-Emu-windows-x86_64-setup.exe` from the
   same files as the zip: the standalone in Program Files with a Start menu entry, and the VST3 and

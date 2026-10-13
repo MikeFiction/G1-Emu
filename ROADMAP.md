@@ -163,6 +163,16 @@ addressed before multi-instance use.
 
 ## Ideas for later
 
+### A macOS installer
+
+Like the Windows one (`packaging/windows/G1-Emu.iss`): a `.pkg` built by CI's macOS job with
+Apple's `pkgbuild`/`productbuild`, putting the app in `/Applications` and the plugins in
+`/Library/Audio/Plug-Ins/VST3` and `/CLAP`, with a postinstall script that removes old copies from
+`~/Library/Audio/Plug-Ins` so a DAW never finds two. The gain is larger than on Windows: what a
+`.pkg` installs is not quarantined, so the README's `xattr` commands would go. Unsigned, the `.pkg`
+itself still needs **System Settings → Privacy & Security → Open Anyway** once (signing and
+notarising cost an Apple Developer account). Needs a Mac to test it on before it ships.
+
 ### Use the emulated G1 to improve NME
 
 With the real OS running in the emulator there is a "lab" G1 without switching on the synth:
