@@ -21,6 +21,10 @@ Older entries cite their commit by hand.
   without the fix it hangs, and gdb shows `setActive(false)` waiting on the lock `prepareToPlay`
   holds; with it, all three come back, report a latency over the block and play. The 12 G1 tests
   pass. Not yet tried in Cubase itself.
+- [Docs] **The README's picture is the panel as it is now (Claude, asked by Javier).**
+  `docs/g1gui.png` was the first panel, from September; it is now Mike Fiction's skin, with the
+  OCT SHIFT keys and the Presets and Settings keys, taken with `G1_SNAPSHOTS` and cropped to the
+  panel.
 - [Merge] **Mike Fiction's pull requests #67, #68, #69, #70 and #71 (Claude, asked by Javier).**
   Merged one by one, in the order asked for (#67 Keyboard Mode and MIDI CC Mode, #68 MIDI CC
   assign and MIDI Learn, #69 octave shift per slot), then #70 (a knob follows a controller) and
