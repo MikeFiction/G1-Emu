@@ -7,6 +7,18 @@ Older entries cite their commit by hand.
 
 ## 2026-10-13
 
+- [Merge] **Mike Fiction's pull requests #67, #68, #69, #70 and #71 (Claude, asked by Javier).**
+  Merged one by one, in the order asked for (#67 Keyboard Mode and MIDI CC Mode, #68 MIDI CC
+  assign and MIDI Learn, #69 octave shift per slot), then #70 (a knob follows a controller) and
+  #71 (smaller text); their own entries are under 2026-10-12. #67, #70 and #71 met `main` only in
+  this file, kept whole. Checked at each merge: builds on Linux (Release), the 12 G1 tests pass,
+  with the new steps of `g1slotkeepertest` (layering, octave shift) and `g1presetstest` (CC 20
+  assigned to knob 1 on the emulated G1, moves it, removed); `g1vst3check` passes #69's octave
+  check and fails only where `main` already did (the PC Ports, a silent program 1 on this
+  machine). Not yet tried by hand: the knob menu, MIDI Learn and the OCT SHIFT keys. Note: the
+  octave shift is always applied, so a patch saved with a shift (on a keyboard G1) plays
+  transposed here, where a rack would not.
+
 - [Docs] **ROADMAP: a macOS installer, for later (Claude, asked by Javier).** A `.pkg` like the
   Windows installer, which would also do away with the `xattr` step; waits for a Mac to test on.
 - [Feature] **A Windows installer, built by CI next to the zip (Claude, asked by Javier).**
@@ -46,6 +58,11 @@ Older entries cite their commit by hand.
 
 ## 2026-10-12
 
+- [GUI] **Smaller text on the Emulator Settings card and in the menus' titles (Mike Fiction,
+  Claude).** `app/gui/Settings.*` and `app/gui/Panel.cpp`. On the Emulator Settings card the rows'
+  titles, the selections in the boxes and the output level's value are 2 px smaller (a small
+  LookAndFeel of the card's own); the controls keep their size. The section titles in the panel's
+  right-click menus are 1 px smaller, still bold capitals. GUI only.
 - [Fix] **A knob moved by a MIDI controller or automation follows it smoothly (Mike Fiction,
   Claude).** `app/gui/Panel.*` only. The panel's knobs ease into place at one slow rate, made for a
   jump (another patch, Random), and the panel reads the G1 only 30 times a second, so a knob moved
