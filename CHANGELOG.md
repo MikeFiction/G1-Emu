@@ -7,6 +7,11 @@ Older entries cite their commit by hand.
 
 ## 2026-10-13
 
+- [Docs] **Release notes for v0.1.0-alpha.20 (Claude, asked by Javier).** `docs/release-notes.md`:
+  Mike Fiction's MIDI CC assign and MIDI Learn, Keyboard Mode and MIDI CC Mode, octave shift per
+  slot (and that a patch saved with a shift now plays shifted), smoother knobs and smaller text;
+  the Cubase and Nuendo crash on a buffer change (#66); and the first release with the Windows
+  installer, with what SmartScreen says about it.
 - [Fix] **Changing the buffer size crashed Cubase and Nuendo (Claude, issue #66, reported by
   Waltercalling, asked by Javier).** A new buffer size is a new latency, which the plugin told the
   host from inside `prepareToPlay` while holding its own lock. Steinberg's hosts answer a latency
