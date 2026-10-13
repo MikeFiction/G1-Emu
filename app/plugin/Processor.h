@@ -144,6 +144,7 @@ namespace g1plugin
 		// The Settings card's gain slider (issue #65): the host's own automatable parameter, the
 		// same one processBlock reads, so the slider and host automation never fight each other.
 		juce::RangedAudioParameter& gainParameter() { return *m_gainParam; }
+		bool lastController(int& _channel, int& _cc, uint32_t& _serial);	// for MIDI Learn: the runner's, while there is one
 		// MIDI CC Mode on Selected Slots (MidiRouting): the project's, not a new instance's preference.
 		bool selectedControllers() const { return m_selectedControllers; }
 		void setSelectedControllers(bool _on);

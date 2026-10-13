@@ -46,6 +46,27 @@ Older entries cite their commit by hand.
 
 ## 2026-10-12
 
+- [Feature] **MIDI CC assign and MIDI Learn in a knob's right-click menu (Mike Fiction, Claude).**
+  **Touches the plugin and `EmuHost`:** `app/plugin/Processor.*`, `app/plugin/runner.h`,
+  `app/plugin/Editor.*` and `app/emuhost.h` pass the panel the last MIDI controller that came in
+  (recorded by `app/midirouting.*`), for MIDI Learn; and the shared `app/presetslink.*` gets the CC
+  jobs (read a slot's ControlMap, assign). Also `app/gui/Panel.*`, `app/gui/Main.cpp` and
+  `g1Lib/g1knobs.h` (`KnobMap::parameter()`). Under Assign MIDI CC to the knob's parameter in the
+  active slot: MIDI Learn, None, then CC 0-119 (but 32, Bank Change, and 64, Sustain, which a patch
+  cannot have) in three submenus of three columns. The parameter's own CC is ticked; one another
+  parameter has is greyed out and says which on hover and on the display below the knobs. The menu
+  first reads what the patch has, and a choice is assigned over the PC Port as Animatek NME does it
+  ($22, $23), read back, and the editor told the patch changed (NewPatchInSlot, twice, as the OS
+  does after a panel load: NME passes over one after its own upload or edit; `NOTES.md`, "A MIDI CC
+  assigned from the panel, and the editor", has why and what NME could do instead). MIDI Learn
+  gives what the knob moves the next CC that comes in. While it waits, the knob's parameter display
+  pulses gently, or its LED blinks when the displays are off. Escape ends it, as do taking a knob,
+  the volume or the dial by hand, clicking the display, a knob's display or LED, or the menu's
+  Cancel MIDI Learn. A CC a patch cannot use is said on the display below the knobs; one another
+  parameter has asks first, on a card over the panel, whether to take it from that parameter, and
+  so does clicking a greyed-out CC. `g1presetstest` gets a part: a free CC given to knob 1's
+  parameter, moving it on slot A's channel, and taken away again. Checked by Mike Fiction in the
+  standalone with an Arturia KeyLab and Animatek NME.
 - [Feature] **Keyboard Mode and MIDI CC Mode on the Synth Settings page (Mike Fiction, Claude).**
   **Touches the plugin and `EmuHost`:** `app/plugin/runner.*` (the track's MIDI goes through the new
   routing), `app/plugin/Processor.*` and `app/plugin/Editor.*` (MIDI CC Mode kept in the project

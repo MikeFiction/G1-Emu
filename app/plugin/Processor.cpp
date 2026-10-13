@@ -944,6 +944,13 @@ namespace g1plugin
 			m_restoring = false;
 	}
 
+	bool Processor::lastController(int& _channel, int& _cc, uint32_t& _serial)
+	{
+		std::lock_guard<std::mutex> lock(m_lifecycle);
+		_serial = 0;
+		return m_runner && m_runner->lastController(_channel, _cc, _serial);
+	}
+
 	void Processor::setSelectedControllers(const bool _on)
 	{
 		{

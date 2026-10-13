@@ -80,6 +80,8 @@ namespace g1app
 		// The OS's synth settings (MIDI channels, clock...), through the PC Port between the editor's messages.
 		SynthSettingsLink& synthSettings() { return m_synthSettings; }
 		PresetsLink& presets() { return m_presets; }
+		// The last MIDI controller that came in, for the panel's MIDI Learn (MidiRouting).
+		bool lastController(int& _channel, int& _cc, uint32_t& _serial) const { return m_midiRouting.lastController(_channel, _cc, _serial); }
 		// MIDI CC Mode on Selected Slots: a controller on a selected slot's channel goes to every selected
 		// slot (MidiRouting). Kept in the options, for the window to save.
 		bool selectedControllers() const { return m_selectedControllers; }

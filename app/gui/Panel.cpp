@@ -401,6 +401,15 @@ namespace g1gui
 		constexpr juce::uint32 g_knobsAfterShiftMs = 60;
 		// How long after Store the Presets page reads its bank again, for a store to be in it.
 		constexpr int g_storeRereadMs = 1500;
+		// The knob menu's MIDI controllers: the CCs a patch may use (the manual, "MIDI controllers"), in
+		// groups, and how long the menu waits for what the patch has.
+		constexpr int g_lastControl = 119, g_controlsPerGroup = 40, g_controlColumns = 3, g_bankChangeCc = 32, g_sustainCc = 64;
+		constexpr juce::uint32 g_controlsWaitMs = 600;
+		constexpr int g_takenItemId = 0x7fff0001;	// a taken CC's item: never chosen (it does not trigger)
+		// MIDI Learn: its knob's display or LED pulses this many times a second, the display gently,
+		// down to g_pulseLow of its light.
+		constexpr double g_learnDisplayHz = 0.6, g_learnLedHz = 1.5;
+		constexpr float g_pulseLow = 0.6f;
 		// A knob the window has just turned (by hand, Random) shows its own position this long
 		// before it follows the patch again: until the OS has read it, the patch's value is the old.
 		constexpr juce::uint32 g_knobSettleMs = 500;
@@ -908,6 +917,16 @@ namespace g1gui
 				m_blurred = blurredGlass(m_look.m_behind, (onPanel.toFloat() * s).getSmallestIntegerContainer(), s);
 			}
 			drawGlass(_g, m_blurred, getLocalBounds().toFloat());
+			// The rules between columns (the CC lists): JUCE draws them on the window, under the
+			// glass, so here, in the gap left of each column's items.
+			std::set<int> columns;
+			for(auto* c : getParentComponent()->getChildren())
+				if(c != this && c->getX() > 0)
+					columns.insert(c->getX());
+			const int gap = m_look.getPopupMenuColumnSeparatorWidthWithOptions({});
+			_g.setColour(juce::Colours::white.withAlpha(0.25f));
+			for(const int x : columns)
+				_g.fillRect(juce::Rectangle<float>(std::floor(static_cast<float>(x) - gap * 0.5f), 0.0f, 1.0f, static_cast<float>(getHeight())).reduced(0.0f, gap / 2.0f));
 		}
 	private:
 		MenuLook& m_look;
@@ -947,7 +966,18 @@ namespace g1gui
 		int& _w, int& _h, const juce::PopupMenu::Options&)
 	{
 		_h = _separator ? g_menuSeparatorH : g_menuItemH;
-		_w = juce::roundToInt(juce::GlyphArrangement::getStringWidth(getPopupMenuFont(), _text)) + 2 * (g_menuPadX + g_menuMarkW);
+		// The CC lists' items are all as wide as the last CC, with no room for a submenu's arrow, so
+		// the three lists are the same size and open the same way beside the menu.
+		const bool cc = _text.startsWith("CC ") && _text.substring(3).containsOnly("0123456789");
+		const auto text = cc ? "CC " + juce::String(g_lastControl) : _text;
+		_w = static_cast<int>(std::ceil(juce::GlyphArrangement::getStringWidth(getPopupMenuFont(), text))) + 2 * g_menuPadX + (cc ? 1 : 2) * g_menuMarkW
+			+ (cc ? 4 : 0);	// the last CC whole, never cut to "..."
+	}
+
+	// The gap between a menu's columns (the CC lists), where the glass draws a rule.
+	int MenuLook::getPopupMenuColumnSeparatorWidthWithOptions(const juce::PopupMenu::Options&)
+	{
+		return g_menuPadX;
 	}
 
 	void MenuLook::drawPopupMenuItemWithOptions(juce::Graphics& _g, const juce::Rectangle<int>& _area, const bool _highlighted,
@@ -1153,6 +1183,8 @@ namespace g1gui
 			{
 				m_fade.reset();
 				m_lit = m_assigned ? 1.0f : 0.0f;
+				if(std::exchange(m_pulseEnding, false))
+					m_pulse = -1.0f;	// its fade went with the rest
 			}
 			repaint();
 		}
@@ -1163,14 +1195,44 @@ namespace g1gui
 		repaint();
 	}
 
+	void KnobDisplay::setPulse(const float _level)
+	{
+		if(_level >= 0.0f || !isShowing())
+		{
+			m_pulseEnding = false;
+			if(_level != m_pulse)
+			{
+				m_pulse = _level;
+				repaint();
+			}
+			return;
+		}
+		if(m_pulse < 0.0f || m_pulseEnding)
+			return;
+		m_pulseEnding = true;
+		m_fadeLast = -1.0;
+		if(!m_fade)
+			m_fade.emplace(this, [this](const double _now) { fade(_now); });
+	}
+
+	// A frame of the light's fade (on or off), and of the pulse's way back up.
 	void KnobDisplay::fade(const double _now)
 	{
 		const double dt = m_fadeLast < 0 ? 1.0 / 60.0 : std::clamp(_now - m_fadeLast, 0.0, 0.1);
 		m_fadeLast = _now;
 		const float step = static_cast<float>(dt / FadeSeconds);
 		m_lit = m_assigned ? std::min(1.0f, m_lit + step) : std::max(0.0f, m_lit - step);
+		if(m_pulseEnding)
+		{
+			m_pulse = std::min(1.0f, m_pulse + static_cast<float>(dt / PulseEndSeconds));
+			if(m_pulse >= 1.0f)
+			{
+				m_pulse = -1.0f;
+				m_pulseEnding = false;
+			}
+		}
 		repaint();
-		if(m_lit == (m_assigned ? 1.0f : 0.0f))
+		if(m_lit == (m_assigned ? 1.0f : 0.0f) && !m_pulseEnding)
 			m_fade.reset();
 	}
 
@@ -1183,14 +1245,16 @@ namespace g1gui
 	void KnobDisplay::paint(juce::Graphics& _g)
 	{
 		const auto r = spriteArea(*this);
-		if(m_lit < 1.0f)
+		// MIDI Learn's pulse dims the light down to g_pulseLow and back.
+		const float lit = m_pulse < 0 ? m_lit : m_lit * (g_pulseLow + (1.0f - g_pulseLow) * m_pulse);
+		if(lit < 1.0f)
 			skin().smallLcdDark.draw(_g, 0, r);
-		if(m_lit <= 0.0f)
+		if(lit <= 0.0f)
 			return;	// unlit: the knob moves nothing
 		// Lit, or on its way: the light and its words over the dark glass, as bright as it is lit.
-		const bool fading = m_lit < 1.0f;
+		const bool fading = lit < 1.0f;
 		if(fading)
-			_g.beginTransparencyLayer(m_lit);
+			_g.beginTransparencyLayer(lit);
 		skin().smallLcd.draw(_g, 0, r);
 		const auto glass = r.withSizeKeepingCentre(r.getWidth() * g_knobLcdGlassW / g_knobLcdW, r.getHeight() * g_knobLcdGlassH / g_knobLcdH);
 		const float cellW = glass.getWidth() / g_knobLcdCols, cellH = glass.getHeight() / g_knobLcdRows;
@@ -1237,6 +1301,8 @@ namespace g1gui
 			m_knobs[i].addMouseListener(&m_knobMenu, false);
 			m_knobLeds[i] = &addLed({static_cast<int>(i % 3), 1 + static_cast<int>(i / 3)});
 		}
+		m_volume.addMouseListener(&m_knobMenu, false);	// for MIDI Learn: taking them by hand ends it
+		m_dial.addMouseListener(&m_knobMenu, false);
 
 		m_midiLed = &addLed({});
 		m_panelSplitLed = &addLed(g_panelSplitLed);
@@ -1339,6 +1405,8 @@ namespace g1gui
 			// every knob on the same module's pitch follows.
 			m_knobDisplays[k].onClick = [this, k]
 			{
+				if(m_clickEndedLearn)
+					return;
 				const auto info = m_knobMap.read(k);
 				const auto key = pitchKey(info);
 				if(!m_hzPitches.erase(key))
@@ -1388,7 +1456,11 @@ namespace g1gui
 		};
 		if(m_host.canRestart())
 			m_drawer.addAndMakeVisible(m_restart);
-		m_confirm.onClose = [this] { grabKeyboardFocus(); };
+		m_confirm.onClose = [this]
+		{
+			m_learn.asking = false;
+			grabKeyboardFocus();
+		};
 		addChildComponent(m_confirm);
 
 		m_about.setTooltip("About G1-Emu: who made it, its licenses, and Animatek NME");
@@ -1828,15 +1900,46 @@ namespace g1gui
 	void Panel::KnobMenuListener::mouseDown(const juce::MouseEvent& _e)
 	{
 		if(!_e.mods.isPopupMenu())
-			return;
+			return panel.cancelLearn();	// a knob, the volume or the dial taken by hand
 		for(size_t k = 0; k < panel.m_knobs.size(); ++k)
 			if(_e.eventComponent == &panel.m_knobs[k])
 				panel.showKnobMenu(k);
 	}
 
-	// Some knobs are better left where they are when the rest go random: an output level, say.
-	// Which ones is the host's to keep (a project keeps its own in the plugin).
+	// A knob that moves something: what its patch has for MIDI controllers is read first (the knob
+	// menu greys out the CCs taken), and the menu waits for it, a moment at most.
 	void Panel::showKnobMenu(const size_t _knob)
+	{
+		const auto info = m_knobMap.read(static_cast<uint32_t>(_knob));
+		if(!info.assigned)
+			return showKnobMenu(_knob, info, nullptr);
+		auto& link = m_host.presets();
+		std::vector<g1app::PresetsLink::Control> list;
+		uint64_t before = 0;
+		link.controls(info.slot, list, before);
+		link.readControls(info.slot);
+		waitForControls(_knob, info, before, juce::Time::getMillisecondCounter());
+	}
+
+	void Panel::waitForControls(const size_t _knob, const g1::KnobInfo& _info, const uint64_t _before, const juce::uint32 _since)
+	{
+		std::vector<g1app::PresetsLink::Control> list;
+		uint64_t revision = 0;
+		const bool known = m_host.presets().controls(_info.slot, list, revision) && revision > _before;
+		if(known || juce::Time::getMillisecondCounter() - _since > g_controlsWaitMs)
+			return showKnobMenu(_knob, _info, known ? &list : nullptr);
+		juce::Timer::callAfterDelay(20, [panel = juce::Component::SafePointer<Panel>(this), _knob, _info, _before, _since]
+		{
+			if(panel != nullptr)
+				panel->waitForControls(_knob, _info, _before, _since);
+		});
+	}
+
+	// Some knobs are better left where they are when the rest go random: an output level, say.
+	// Which ones is the host's to keep (a project keeps its own in the plugin). And what the knob
+	// moves can be given a MIDI controller, as an editor would (_controls: what its patch has,
+	// null when it could not be read).
+	void Panel::showKnobMenu(const size_t _knob, const g1::KnobInfo& _info, const std::vector<g1app::PresetsLink::Control>* _controls)
 	{
 		const auto excluded = m_host.randomExcluded();
 		const auto bit = 1u << _knob;
@@ -1855,7 +1958,245 @@ namespace g1gui
 				m_host.setRandomExcluded(0);
 				updateRandomExcluded();
 			});
+		if(_info.assigned)
+			addControlMenu(menu, _knob, _info, _controls);
 		showMenu(menu);
+	}
+
+	namespace
+	{
+		using Control = g1app::PresetsLink::Control;
+		using Controls = std::vector<Control>;
+
+		// A CC a patch may have: 0-119 but Bank Change and Sustain (the manual, "MIDI controllers").
+		bool assignable(const int _cc)
+		{
+			return _cc >= 0 && _cc <= g_lastControl && _cc != g_bankChangeCc && _cc != g_sustainCc;
+		}
+
+		bool isOf(const Control& _c, const g1::KnobInfo& _param)
+		{
+			return _c.section == _param.section && _c.module == _param.module && _c.param == _param.param;
+		}
+
+		// _param's CC in _controls, or -1.
+		int controlOf(const Controls& _controls, const g1::KnobInfo& _param)
+		{
+			const auto it = std::find_if(_controls.begin(), _controls.end(), [&](const Control& _c) { return isOf(_c, _param); });
+			return it == _controls.end() ? -1 : it->ctrl;
+		}
+
+		// The parameter other than _param that has _cc, or null.
+		const Control* otherWith(const Controls& _controls, const g1::KnobInfo& _param, const int _cc)
+		{
+			const auto it = std::find_if(_controls.begin(), _controls.end(), [&](const Control& _c) { return _c.ctrl == _cc && !isOf(_c, _param); });
+			return it == _controls.end() ? nullptr : &*it;
+		}
+
+		// A parameter by its names, as a knob shows them.
+		juce::String nameOf(const g1::KnobInfo& _param)
+		{
+			return _param.assigned ? juce::String(_param.moduleName) + " " + juce::String(_param.paramName) : juce::String("another parameter");
+		}
+
+		juce::String nameOf(g1::KnobMap& _map, const uint8_t _slot, const Control& _c)
+		{
+			return nameOf(_map.parameter(_slot, static_cast<uint8_t>(_c.section), static_cast<uint8_t>(_c.module), static_cast<uint8_t>(_c.param)));
+		}
+
+		// A CC another parameter of the patch has: greyed out as a menu item would be, and saying
+		// which parameter, as a tooltip and on the display below the knobs (a plain menu item has no
+		// tooltip). Clicked, it closes the menu and runs _takeOver.
+		class TakenControlItem : public juce::PopupMenu::CustomComponent, public juce::SettableTooltipClient
+		{
+		public:
+			TakenControlItem(const juce::String& _text, const juce::String& _usedBy, std::function<void()> _takeOver)
+				: juce::PopupMenu::CustomComponent(false), m_takeOver(std::move(_takeOver))
+			{
+				m_item.text = _text;
+				m_item.isEnabled = false;
+				setTooltip(_text + " is used by " + _usedBy + "\nClick to reassign");
+				setLcdTip(*this, _text + "\t" + _usedBy);
+			}
+			void getIdealSize(int& _w, int& _h) override
+			{
+				getLookAndFeel().getIdealPopupMenuItemSizeWithOptions(m_item.text, false, -1, _w, _h, juce::PopupMenu::Options());
+			}
+			void paint(juce::Graphics& _g) override
+			{
+				getLookAndFeel().drawPopupMenuItemWithOptions(_g, getLocalBounds(), false, m_item, juce::PopupMenu::Options());
+			}
+			void mouseUp(const juce::MouseEvent&) override
+			{
+				juce::PopupMenu::dismissAllActiveMenus();
+				juce::MessageManager::callAsync(m_takeOver);
+			}
+		private:
+			juce::PopupMenu::Item m_item;
+			std::function<void()> m_takeOver;
+		};
+	}
+
+	// The MIDI controller of what the knob moves, in the active slot's patch: MIDI Learn first, a
+	// separator, None, then the CCs a patch may use (assignable) in three groups, in three columns
+	// each. Its own is ticked; one another parameter has is greyed out and says which
+	// (TakenControlItem). A choice is the editor's assignment.
+	void Panel::addControlMenu(juce::PopupMenu& _menu, const size_t _knob, const g1::KnobInfo& _info, const std::vector<g1app::PresetsLink::Control>* _controls)
+	{
+		const int current = _controls ? controlOf(*_controls, _info) : -1;
+		const auto assign = [this, info = _info, current](const int _cc)
+		{
+			if(_cc != current)
+				m_host.presets().assignControl(info.slot, info.section, info.module, info.param, _cc, current);
+		};
+
+		_menu.addSectionHeader("Assign MIDI CC to " + nameOf(_info));
+		if(!_controls)
+			_menu.addItem("(This patch's CCs could not be read)", false, false, nullptr);
+		// MIDI Learn: the next CC that comes in. The same item ends it while it waits for this knob.
+		if(m_learn.knob == static_cast<int>(_knob))
+			_menu.addItem("Cancel MIDI Learn", [this] { cancelLearn(); });
+		else
+			_menu.addItem("MIDI Learn", [this, _knob, info = _info] { startLearn(_knob, info); });
+		_menu.addSeparator();
+		_menu.addItem("None", true, _controls && current < 0, [assign] { assign(-1); });
+		for(int first = 0; first <= g_lastControl; first += g_controlsPerGroup)
+		{
+			const int last = std::min(first + g_controlsPerGroup - 1, g_lastControl);
+			juce::PopupMenu group;
+			int count = 0;
+			for(int cc = first; cc <= last; ++cc)
+				count += assignable(cc) ? 1 : 0;
+			const int perColumn = (count + g_controlColumns - 1) / g_controlColumns;	// in even columns, so it stays short
+			for(int cc = first, row = 0; cc <= last; ++cc)
+			{
+				if(!assignable(cc))
+					continue;
+				if(row++ == perColumn)
+				{
+					group.addColumnBreak();
+					row = 1;
+				}
+				if(const auto* other = _controls ? otherWith(*_controls, _info, cc) : nullptr)
+				{
+					// Clicked: asked as MIDI Learn asks, then the CC leaves the other parameter for this one.
+					const auto takeOver = [this, info = _info, cc, other = *other, current]
+					{
+						askToReassign(info, cc, other, [this, info, cc, other, current]
+						{
+							m_host.presets().assignControl(info.slot, other.section, other.module, other.param, -1, cc);
+							m_host.presets().assignControl(info.slot, info.section, info.module, info.param, cc, current);
+							m_tip.flash("CC " + juce::String(cc) + " to " + nameOf(info));
+						});
+					};
+					group.addCustomItem(g_takenItemId, std::make_unique<TakenControlItem>("CC " + juce::String(cc), nameOf(m_knobMap, _info.slot, *other), takeOver), nullptr, "CC " + juce::String(cc));
+				}
+				else
+					group.addItem("CC " + juce::String(cc), true, cc == current, [assign, cc] { assign(cc); });
+			}
+			_menu.addSubMenu("CC " + juce::String(first) + "-" + juce::String(last), group, true, nullptr, current >= first && current <= last);
+		}
+	}
+
+	// The knob's parameter takes the next CC that comes in (on any channel: the patch's CCs are
+	// read on its slot's), the way its menu would give it. Starting it on one knob ends it on another.
+	void Panel::startLearn(const size_t _knob, const g1::KnobInfo& _info)
+	{
+		cancelLearn();
+		int channel = 0, cc = 0;
+		m_learn.knob = static_cast<int>(_knob);
+		m_learn.info = _info;
+		m_host.lastController(channel, cc, m_learn.serial);
+		m_tip.flash("MIDI Learn");
+	}
+
+	// What the learning parameter's patch has for CCs, as last read (none, if never: the reading
+	// after each assignment keeps it current).
+	std::vector<g1app::PresetsLink::Control> Panel::learnControls() const
+	{
+		Controls list;
+		uint64_t revision = 0;
+		m_host.presets().controls(m_learn.info.slot, list, revision);
+		return list;
+	}
+
+	void Panel::cancelLearn()
+	{
+		if(m_learn.knob < 0)
+			return;
+		m_knobDisplays[static_cast<size_t>(m_learn.knob)].setPulse(-1.0f);
+		const bool asking = m_learn.asking;
+		m_learn = {};
+		if(asking)
+			m_confirm.close();	// its question goes with it
+	}
+
+	// _cc goes to the learning parameter (in place of its own), and learning ends.
+	void Panel::learned(const int _cc)
+	{
+		const auto& info = m_learn.info;
+		if(const int current = controlOf(learnControls(), info); _cc != current)
+			m_host.presets().assignControl(info.slot, info.section, info.module, info.param, _cc, current);
+		m_tip.flash("CC " + juce::String(_cc) + " to " + nameOf(info));
+		cancelLearn();
+	}
+
+	// A CC another parameter of the patch has: taken from it for _param only if the user says so
+	// (_yes). Asked by MIDI Learn and by a click on a taken CC in the knob's menu.
+	void Panel::askToReassign(const g1::KnobInfo& _param, const int _cc, const g1app::PresetsLink::Control& _other, std::function<void()> _yes)
+	{
+		const auto other = nameOf(m_knobMap, _param.slot, _other);
+		const auto self = nameOf(_param);
+		m_confirm.open(*this, FaceHeight, sk(0, g_sectionsTop, 3000, 1238 - g_sectionsTop), "Reassign CC " + juce::String(_cc) + "?",
+			"CC " + juce::String(_cc) + " is assigned to " + other + ".\n\nAssign it to " + self + " instead? " + other + " will have no CC.",
+			"Reassign", std::move(_yes));
+	}
+
+	// While learning: taken only if the user says so. Otherwise it goes on learning.
+	void Panel::askToReassign(const int _cc, const g1app::PresetsLink::Control& _other)
+	{
+		m_learn.asking = true;	// until the question closes (m_confirm.onClose)
+		askToReassign(m_learn.info, _cc, _other, [this, knob = m_learn.knob, _cc, _other]
+		{
+			if(m_learn.knob != knob)
+				return;
+			m_host.presets().assignControl(m_learn.info.slot, _other.section, _other.module, _other.param, -1, _cc);
+			learned(_cc);
+		});
+	}
+
+	// Each tick while learning: a CC come in since it started goes to the parameter, unless a patch
+	// cannot use it (said on the display) or another parameter has it (askToReassign). It ends
+	// when the knob no longer moves that parameter. Meanwhile the knob's display pulses, or its LED
+	// when the displays are off (after the LEDs are set from the G1, for this one to win).
+	void Panel::updateLearn()
+	{
+		if(m_learn.knob < 0)
+			return;
+		const auto k = static_cast<size_t>(m_learn.knob);
+		if(!sameAssignment(m_learn.info, m_knobMap.read(static_cast<uint32_t>(k))))
+			return cancelLearn();
+
+		int channel = 0, cc = 0;
+		uint32_t serial = 0;
+		// While it asks whether to take a CC from another parameter, what comes in is passed over.
+		if(m_host.lastController(channel, cc, serial) && std::exchange(m_learn.serial, serial) != serial && !m_learn.asking)
+		{
+			const auto controls = learnControls();
+			if(!assignable(cc))
+				m_tip.flash("CC " + juce::String(cc) + " cannot be assigned");
+			else if(const auto* other = otherWith(controls, m_learn.info, cc))
+				askToReassign(cc, *other);
+			else
+				return learned(cc);
+		}
+
+		const double t = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+		const auto level = [t](const double _hz) { return 0.5f + 0.5f * static_cast<float>(std::cos(t * juce::MathConstants<double>::twoPi * _hz)); };
+		const bool displays = m_host.knobDisplays();
+		m_knobDisplays[k].setPulse(displays ? level(g_learnDisplayHz) : -1.0f);
+		if(!displays)
+			m_knobLeds[k]->setOn(level(g_learnLedHz) > 0.5f);
 	}
 
 	// The menu of the panel itself, for a right click on whatever has no menu of its own.
@@ -1978,6 +2319,11 @@ namespace g1gui
 
 	bool Panel::keyPressed(const juce::KeyPress& _key)
 	{
+		if(_key == juce::KeyPress::escapeKey && m_learn.knob >= 0)
+		{
+			cancelLearn();
+			return true;
+		}
 		// A-D are the slot buttons, with or without Shift: taken here so the host does not act on them.
 		const int code = juce::CharacterFunctions::toUpperCase(static_cast<juce::juce_wchar>(_key.getKeyCode()));
 		return std::find(g_slotKeys.begin(), g_slotKeys.end(), code) != g_slotKeys.end();
@@ -1993,6 +2339,20 @@ namespace g1gui
 	{
 		if(!hasKeyboardFocus(true))
 			grabKeyboardFocus();
+		// A click on the display, a knob's display or a knob's LED ends MIDI Learn (and does only
+		// that: a display does not switch to Hz with it).
+		m_clickEndedLearn = false;
+		if(!_e.mods.isPopupMenu() && m_learn.knob >= 0)
+		{
+			const auto at = _e.getEventRelativeTo(this).getPosition();
+			const bool display = std::any_of(m_knobDisplays.begin(), m_knobDisplays.end(), [&](const KnobDisplay& _d) { return _e.eventComponent == &_d; });
+			const bool led = std::any_of(m_knobLeds.begin(), m_knobLeds.end(), [&](const LedView* _l) { return _l->isVisible() && _l->getBounds().contains(at); });
+			if(display || led || _e.eventComponent == &m_lcd)
+			{
+				m_clickEndedLearn = display;
+				cancelLearn();
+			}
+		}
 		if(_e.mods.isPopupMenu() && !hasOwnRightClick(_e.eventComponent) && _e.eventTime != m_menuClickAt)
 		{
 			m_menuClickAt = _e.eventTime;
@@ -2028,6 +2388,7 @@ namespace g1gui
 		updateLcdTips(info);
 		for(auto& [led, bit] : m_ledMap)
 			led->setOn(ledLit(bit));
+		updateLearn();
 		updateStatus();
 	}
 

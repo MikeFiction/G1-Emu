@@ -124,6 +124,7 @@ namespace g1plugin
 	bool Editor::extrasOpen() const { return m_processor.extrasOpen(); }
 	g1app::SynthSettingsLink& Editor::synthSettings() { return m_processor.synthSettings(); }
 	g1app::PresetsLink& Editor::presets() { return m_processor.presets(); }
+	bool Editor::lastController(int& _channel, int& _cc, uint32_t& _serial) { return m_processor.lastController(_channel, _cc, _serial); }
 	bool Editor::selectedControllers() const { return m_processor.selectedControllers(); }
 	void Editor::setSelectedControllers(const bool _on) { m_processor.setSelectedControllers(_on); }
 	void Editor::setExtrasOpen(const bool _open) { m_processor.setExtrasOpen(_open); }

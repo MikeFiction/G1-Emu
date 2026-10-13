@@ -33,6 +33,15 @@ namespace g1app
 		return l;
 	}
 
+	bool MidiRouting::lastController(int& _channel, int& _cc, uint32_t& _serial) const
+	{
+		_serial = m_controllerSerial.load(std::memory_order_acquire);
+		const int last = m_lastController.load(std::memory_order_relaxed);
+		_channel = last >> 8;
+		_cc = last & 0x7f;
+		return _serial > 0;
+	}
+
 	void MidiRouting::apply(g1::Microcontroller& _mc, const Layout& _layout, const uint8_t* _in, const size_t _size, std::vector<uint8_t>& _out)
 	{
 		for(size_t i = 0; i < _size; ++i)
@@ -133,6 +142,11 @@ namespace g1app
 		};
 
 		std::array<Target, MaxCopies> to{};
+		if(type == 0xb0)
+		{
+			m_lastController.store((channel << 8) | m_data[0], std::memory_order_relaxed);
+			m_controllerSerial.fetch_add(1, std::memory_order_release);
+		}
 		if(type != 0x80 && type != 0x90 && type != 0xa0)
 		{
 			// What goes with the notes (and the channel mode messages, All Notes Off...) goes to every

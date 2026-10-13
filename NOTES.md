@@ -275,6 +275,34 @@ first note-off. `g1patchtest` shows it with `G1_SEQ=+60,+64,-64,-60 G1_CHORD=1`.
   the upload ends: a pause of 0.1 s between an editor's packets became 10 s of G1 time. Anything
   that times out on G1 time between an editor's packets will fire; the keeper does not.
 
+## A MIDI CC assigned from the panel, and the editor
+
+- The knob menu's Assign MIDI CC and MIDI Learn send what Animatek NME sends (`app/presetslink.*`):
+  RequestPatch for the slot's pid, then `$22` (MidiCtrlAssignment: section, module, parameter, CC)
+  and/or `$23` (the previous CC changed or removed), then GetPatch `$61` to read the ControlMap back.
+  The OS takes all of it for the editor's own and **tells the editor nothing**.
+- So the link tells it: a **NewPatchInSlot** Info message (cc `$14`, sc `$38`), which makes NME read
+  the whole patch again and so see the new CC. **It is sent twice**, as the OS itself does after a
+  load from the panel. A single one is often lost: NME skips some NewPatchInSlot notices as echoes
+  of its own actions, and those skips can go stale:
+  - after an upload, NME arms a one-shot skip (`suppressNextAutoFetch`, `ConnectionManager.cpp`)
+    that only clears when a notice arrives; if the G1 never announces the uploaded patch, the skip
+    stays armed and eats the next real notice;
+  - after a module or cable edit, `expectSyncEcho()` (`PatchSynchronizer.cpp`) counts one expected
+    echo; the G1 confirms these only on some paths, so the count can build up and swallow later
+    notices. With more than one stale echo, two notices are still not enough.
+- The second notice usually arrives while the first read is going on; NME marks that read as
+  superseded and reads again once it ends. The cost is a second read of the patch (13 sections, a
+  fraction of a second) and a second redraw in NME. Either way NME takes it as a new patch in the
+  slot, and forgets which bank position it came from.
+- **What would let one notice do, or none:** on NME's side, the skips expiring after a second or
+  two (each edit refreshing its own), so a notice after that window is always read. Matching the
+  skip on the pid is not enough: an assignment keeps the patch's pid, the same as the upload's.
+  The same stale skips also hide a patch loaded from the G1's own panel after an upload or an
+  edit, so it is worth fixing in NME on its own terms. Later, NME could also take a lighter
+  message from G1-Emu for an assignment (the CC change alone), with no full read and no lost
+  bank position.
+
 ## How each DSP processes audio
 
 - **Clocks, from the OS itself.** All four programs write `PCTL=$3C001A`: MF+1=27, PD+1=4. With a

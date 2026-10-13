@@ -47,6 +47,7 @@ namespace g1gui
 		std::unique_ptr<juce::Component> createSettings() override { return std::make_unique<SettingsView>(m_host); }
 		g1app::SynthSettingsLink& synthSettings() override { return m_host.synthSettings(); }
 		g1app::PresetsLink& presets() override { return m_host.presets(); }
+		bool lastController(int& _channel, int& _cc, uint32_t& _serial) override { return m_host.lastController(_channel, _cc, _serial); }
 		bool selectedControllers() const override { return m_host.selectedControllers(); }
 		void setSelectedControllers(const bool _on) override { m_host.setSelectedControllers(_on); save(); }
 		bool canRestart() const override { return true; }
