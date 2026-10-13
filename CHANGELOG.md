@@ -46,6 +46,28 @@ Older entries cite their commit by hand.
 
 ## 2026-10-12
 
+- [Feature] **Keyboard Mode and MIDI CC Mode on the Synth Settings page (Mike Fiction, Claude).**
+  **Touches the plugin and `EmuHost`:** `app/plugin/runner.*` (the track's MIDI goes through the new
+  routing), `app/plugin/Processor.*` and `app/plugin/Editor.*` (MIDI CC Mode kept in the project
+  as `midiCcSelectedSlots` and given to each runner), `app/emuhost.*` (the MIDI port's bytes go
+  through the routing), `app/hostconfig.*` (`midiCcSelectedSlots` in `settings.conf`), and a new
+  MIDI routing between the MIDI port (or the track) and the G1, `app/midirouting.*`, in `g1Core`.
+  Keyboard Mode is the OS's own setting (Active Slot or Selected Slots), which on the rack only the
+  editor's Keyboard Floater follows: set to Selected Slots, a note on any selected slot's channel
+  now plays every selected slot, each on its own channel, as the keyboard model's manual describes
+  it, and sustain, the mod wheel, pitch bend, aftertouch and All Notes Off go with it. MIDI CC Mode
+  (Active Slot or Selected Slots) is G1-Emu's own, for the MIDI controllers: on Active Slot, as on
+  the hardware, a CC reaches only the slot on its channel; on Selected Slots, a CC on any selected
+  slot's channel goes to every selected slot, each on its own channel, so a controller sending on
+  one channel moves the parameters each selected slot's patch has assigned to that CC, whatever
+  Keyboard Mode is. Bank Select stays on its channel. For now the two boxes and their labels are
+  placed and drawn in code (`app/gui/SynthSettingsView.*`), a temporary layout until the page's
+  art is rearranged for them; the display below the knobs shows Selected Slots as Sel.Slots, so
+  the name fits. `NOTES.md`'s notes on selected slots and Keyboard Mode say what G1-Emu does now.
+  `g1slotkeepertest` gets a step (slots A and B selected on the emulated panel: a
+  note on A's channel plays both, with the sustain pedal, whichever is active; another CC stays on
+  its channel; with MIDI CC Mode on Selected Slots it goes to both, Bank Select does not). Checked
+  by Mike Fiction in the standalone with an Arturia KeyLab, two slots on channels 1 and 2.
 - [Fix] **Windows: the emulator's sleeps lasted 15.6 ms, so the plugin dropped out (Claude, issues
   #63 and #65, asked by Javier).** When it is ahead of the host the plugin's worker sleeps 200 us
   and the standalone's 500 us, with `std::this_thread::sleep_for`, which on Windows takes the

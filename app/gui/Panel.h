@@ -62,6 +62,10 @@ namespace g1gui
 		virtual std::unique_ptr<juce::Component> createSettings() = 0;	// what Settings shows, on a card over the panel (CardView), at its own size
 		virtual g1app::SynthSettingsLink& synthSettings() = 0;	// the OS's, for the extras' overlay
 		virtual g1app::PresetsLink& presets() = 0;				// the OS's banks, for the Presets page
+		// MIDI CC Mode on the Synth Settings page: Selected Slots sends a controller on a selected slot's
+		// channel to every selected slot. The host's own setting, kept where it keeps its others.
+		virtual bool selectedControllers() const = 0;
+		virtual void setSelectedControllers(bool _on) = 0;
 		// Switching the G1 off and on, where the host can: the panel shows its Restart button only
 		// then. The host deletes this panel and makes a new one, so it must do it later, not inside
 		// the call.

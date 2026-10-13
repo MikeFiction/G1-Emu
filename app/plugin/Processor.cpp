@@ -428,6 +428,7 @@ namespace g1plugin
 		m_runner = std::make_unique<g1app::Runner>(*m_engine, m_rate, static_cast<size_t>(m_maxBlock), m_lastGainDb,
 			m_pcPort && m_pcPort->virtualPorts() ? m_pcPort.get() : nullptr, m_pcIndex, m_keeper.get(),
 			&m_synthSettings, m_link.listening() ? &m_link : nullptr, &m_presets);
+		m_runner->setSelectedControllers(m_selectedControllers);
 		setLatencySamples(static_cast<int>(m_runner->latency()));
 		m_unstarted = false;
 		if(std::exchange(m_engineFresh, false))
@@ -651,6 +652,7 @@ namespace g1plugin
 		xml.setAttribute("knobDisplays", m_knobDisplays);
 		xml.setAttribute("panelScale", static_cast<double>(m_panelScale));
 		xml.setAttribute("knobFollowsPatch", m_knobFollowsPatch);
+		xml.setAttribute("midiCcSelectedSlots", m_selectedControllers);
 		xml.setAttribute("randomExclude", juce::String(g1app::knobListToString(m_randomExclude)));
 		xml.setAttribute("programs", juce::String(programsToString()));
 		xml.setAttribute("gainDb", static_cast<double>(m_gainParam->get()));
@@ -667,6 +669,7 @@ namespace g1plugin
 		// with, not the new default, so its mix does not jump 12 dB.
 		m_gainParam->setValueNotifyingHost(m_gainParam->convertTo0to1(
 			static_cast<float>(_xml.getDoubleAttribute("gainDb", GainParameter::LegacyDb))));
+		m_selectedControllers = _xml.getBoolAttribute("midiCcSelectedSlots", false);	// the project's alone
 		if(_xml.hasAttribute("randomExclude"))
 			m_randomExclude = g1app::knobListFromString(_xml.getStringAttribute("randomExclude").toStdString());
 	}
@@ -939,6 +942,18 @@ namespace g1plugin
 		if(m_restoring && ((!m_pendingSettings && m_keeper && m_keeper->settled())
 			|| juce::Time::getMillisecondCounter() - m_restoreStart > RestoreHoldMs))
 			m_restoring = false;
+	}
+
+	void Processor::setSelectedControllers(const bool _on)
+	{
+		{
+			std::lock_guard<std::mutex> lock(m_lifecycle);
+			if(std::exchange(m_selectedControllers, _on) == _on)
+				return;
+			if(m_runner)
+				m_runner->setSelectedControllers(_on);
+		}
+		stateChanged();
 	}
 
 	// The project's synth settings, once the keeper has put the slots back: written, then compared

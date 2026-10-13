@@ -16,6 +16,7 @@
 
 #include "engine.h"
 #include "hostconfig.h"
+#include "midirouting.h"
 #include "presetslink.h"
 #include "synthsettings.h"
 
@@ -79,6 +80,10 @@ namespace g1app
 		// The OS's synth settings (MIDI channels, clock...), through the PC Port between the editor's messages.
 		SynthSettingsLink& synthSettings() { return m_synthSettings; }
 		PresetsLink& presets() { return m_presets; }
+		// MIDI CC Mode on Selected Slots: a controller on a selected slot's channel goes to every selected
+		// slot (MidiRouting). Kept in the options, for the window to save.
+		bool selectedControllers() const { return m_selectedControllers; }
+		void setSelectedControllers(const bool _on) { m_options.selectedControllers = _on; m_selectedControllers = _on; }
 
 		Stats stats();
 
@@ -109,6 +114,8 @@ namespace g1app
 		DirectLink m_link;	// the PC Port for Animatek NME over a local socket, beside the MIDI one
 		SynthSettingsLink m_synthSettings;
 		PresetsLink m_presets;
+		MidiRouting m_midiRouting;	// the MIDI port's notes and controllers, to the slots that play them
+		std::atomic<bool> m_selectedControllers{false};	// m_options's, for the thread that runs the G1
 		bool m_rawMidiBound = false;
 		std::string m_romProblem;
 		std::vector<uint8_t> m_rom;		// kept for a restart

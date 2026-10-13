@@ -84,6 +84,7 @@ namespace g1app
 	bool EmuHost::start(const std::string& _romPath, const std::string& _flashPath, std::string& _log)
 	{
 		m_options.load(defaultSettingsPath());
+		m_selectedControllers = m_options.selectedControllers;
 
 		// The environment wins over whatever the window asked for: the scripts and the test bench
 		// are driven that way and must keep working with the settings file in place.
@@ -483,6 +484,7 @@ namespace g1app
 		std::ofstream pcLog(std::filesystem::path(m_flashPath).parent_path() / "pcport-in.bin", std::ios::binary | std::ios::app);
 
 		std::vector<std::vector<uint8_t>> incoming;
+		std::vector<uint8_t> routed;	// the MIDI port's bytes, as MidiRouting passes them on
 		std::vector<uint8_t> out, toEditor, toG1, linkIn;
 		constexpr uint64_t msCycles = g1::g_ucClock / 1000;	// the G1's own time, for the settings link
 
@@ -538,7 +540,10 @@ namespace g1app
 			{
 				m_midiIn += incoming[m_midiPort].size();
 				logMidi("in ", "MIDI", incoming[m_midiPort]);
-				mc.getSci().write(incoming[m_midiPort]);
+				// With Keyboard Mode or MIDI CC Mode on Selected Slots, played by every selected slot.
+				routed.clear();
+				m_midiRouting.apply(mc, MidiRouting::layout(&m_synthSettings, m_selectedControllers), incoming[m_midiPort].data(), incoming[m_midiPort].size(), routed);
+				mc.getSci().write(routed);
 				// A note on with a velocity, the way it arrives (running status aside).
 				const auto& in = incoming[m_midiPort];
 				for(size_t i = 0; i + 2 < in.size(); ++i)

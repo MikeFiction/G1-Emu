@@ -10,13 +10,16 @@
 //      keeper reads slot B afterwards.
 //   4. Knob 1 is turned on the panel: the keeper reads slot A again (#46).
 //   5. Bend Range is changed on the System menu: the keeper reads slot A again when asked (reread()).
-//   6. pack()/unpack() keep the slots as they are.
+//   6. MidiRouting: with Keyboard Mode on Selected Slots it layers the notes on the selected
+//      slots, and with MIDI CC Mode on Selected Slots the controllers too.
+//   7. pack()/unpack() keep the slots as they are.
 //
 // Exit code 77 (skipped) without a ROM, 1 on any failure.
 
 #include "engine.h"
 #include "hostconfig.h"
 #include "romfinder.h"
+#include "midirouting.h"
 #include "slotkeeper.h"
 #include "g1Lib/g1knobs.h"
 
@@ -315,7 +318,79 @@ int main()
 		check(after.size() > 1 && before.size() > 1 && after[1] != before[1], "slot A's header has the new Bend Range");
 	}
 
-	// 6. Project bytes.
+	// 6. Keyboard Mode: Selected Slots, A and B selected: a note on A's channel plays both, each on
+	//    its own channel, with the sustain pedal; another CC stays on its channel; the note off
+	//    releases both. With Active Slot again, only A. MIDI CC Mode: Selected Slots sends the CCs
+	//    to both, but Bank Select.
+	{
+		auto& mc = engine.mc();
+		auto press = [&](const uint32_t _row, const uint32_t _bit)
+		{
+			mc.setButton(_row, _bit, true);
+			bench.run(150);
+			mc.setButton(_row, _bit, false);
+			bench.run(300);
+		};
+		g1app::MidiRouting router;
+		g1app::MidiRouting::Layout layout;	// channels 1 to 4, Keyboard Mode: Active Slot
+		std::vector<uint8_t> out;
+		auto send = [&](std::initializer_list<uint8_t> _in) { out.clear(); const std::vector<uint8_t> in(_in); router.apply(mc, layout, in.data(), in.size(), out); return out; };
+		check(send({0x90, 60, 100}) == std::vector<uint8_t>{0x90, 60, 100} && send({0x80, 60, 0}) == std::vector<uint8_t>{0x80, 60, 0},
+			"Active Slot: a note on slot A's channel goes through as it is");
+		check(send({0xf8, 0xb0, 7, 90}) == std::vector<uint8_t>{0xf8, 0xb0, 7, 90}, "clock and controllers go through");
+
+		// The slots whose LEDs light over 800 ms (the active one blinks), bit s for slot s.
+		const auto lit = [&]
+		{
+			int seen = 0;
+			for(int i = 0; i < 16; ++i)
+			{
+				bench.run(50);
+				for(int s = 0; s < 4; ++s)
+					if(!(mc.ledRow(static_cast<uint32_t>(s)) & 0x80))
+						seen |= 1 << s;
+			}
+			return seen;
+		};
+		// As on the panel: Shift + B leaves B out; B held and A pressed selects both, A active.
+		mc.setButton(2, 7, true);
+		bench.run(100);
+		press(0, 3);
+		mc.setButton(2, 7, false);
+		bench.run(150);
+		mc.setButton(0, 3, true);
+		bench.run(150);
+		mc.setButton(0, 2, true);
+		bench.run(150);
+		mc.setButton(0, 2, false);
+		bench.run(150);
+		mc.setButton(0, 3, false);
+		bench.run(150);
+		const int active = mc.read8(g1::KnobMap::ActiveSlot + g1::KnobMap(mc).osShift()) & 3;
+		check(lit() == 3 && active == 0, "slots A and B selected, A active (B held, A pressed)");
+		layout.selectedSlots = true;
+		check(send({0x90, 60, 100}) == std::vector<uint8_t>{0x90, 60, 100, 0x91, 60, 100}, "Selected Slots: a note on A's channel plays A and B");
+		check(send({0xb0, 64, 127}) == std::vector<uint8_t>{0xb0, 64, 127, 0xb1, 64, 127}, "the sustain pedal goes to both");
+		check(send({0xb0, 7, 90}) == std::vector<uint8_t>{0xb0, 7, 90}, "another CC stays on its channel");
+		check(send({0x80, 60, 0}) == std::vector<uint8_t>{0x80, 60, 0, 0x81, 60, 0}, "the note off releases both");
+		// Whichever is active: B pressed (both stay selected, B active), a note on A's channel still plays both.
+		press(0, 3);
+		check((mc.read8(g1::KnobMap::ActiveSlot + g1::KnobMap(mc).osShift()) & 3) == 1 && lit() == 3, "B pressed: B active, A and B still selected");
+		check(send({0x90, 60, 100}) == std::vector<uint8_t>{0x91, 60, 100, 0x90, 60, 100}, "with B active, a note on A's channel still plays A and B");
+		send({0x80, 60, 0});
+		press(0, 2);	// A active again
+		layout.selectedSlots = false;
+		check(send({0x90, 60, 100}) == std::vector<uint8_t>{0x90, 60, 100}, "Active Slot: only A plays it");
+		send({0x80, 60, 0});
+		// MIDI CC Mode: Selected Slots, whatever Keyboard Mode is: a controller on B's channel goes to A
+		// too, but Bank Select stays on its channel.
+		layout.selectedControllers = true;
+		check(send({0xb1, 74, 50}) == std::vector<uint8_t>{0xb0, 74, 50, 0xb1, 74, 50}, "MIDI CC Selected Slots: a CC on B's channel goes to A and B");
+		check(send({0xb0, 0, 1}) == std::vector<uint8_t>{0xb0, 0, 1}, "Bank Select stays on its channel");
+		layout.selectedControllers = false;
+	}
+
+	// 7. Project bytes.
 	g1app::SlotKeeper::Slots back;
 	check(g1app::SlotKeeper::unpack(g1app::SlotKeeper::pack(got), back) && back == got, "pack/unpack keep the slots");
 	check(!g1app::SlotKeeper::unpack({1, 2, 3}, back), "unpack refuses what is not its format");

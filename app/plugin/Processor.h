@@ -144,6 +144,9 @@ namespace g1plugin
 		// The Settings card's gain slider (issue #65): the host's own automatable parameter, the
 		// same one processBlock reads, so the slider and host automation never fight each other.
 		juce::RangedAudioParameter& gainParameter() { return *m_gainParam; }
+		// MIDI CC Mode on Selected Slots (MidiRouting): the project's, not a new instance's preference.
+		bool selectedControllers() const { return m_selectedControllers; }
+		void setSelectedControllers(bool _on);
 		bool extrasOpen() const { return m_extrasOpen; }
 		void setExtrasOpen(bool _open) { if(std::exchange(m_extrasOpen, _open) != _open) { stateChanged(); savePreferences(); } }
 		bool knobDisplays() const { return m_knobDisplays; }
@@ -265,6 +268,7 @@ namespace g1plugin
 		juce::AudioBuffer<float> m_inputs;		// the inputs, copied before the outputs overwrite them
 
 		bool m_extrasOpen = false, m_knobDisplays = false, m_knobFollowsPatch = false;
+		bool m_selectedControllers = false;		// MIDI CC Mode on Selected Slots: given to each runner
 		uint32_t m_randomExclude = 0;			// the knobs Random leaves alone: bit k for knob k + 1
 		float m_panelScale = 1.25f;				// the editor's size: 1 is the panel's 1200 pixels wide; 1.25 is half the skin's
 
