@@ -7,6 +7,14 @@ Older entries cite their commit by hand.
 
 ## 2026-10-14
 
+- [Docs] **A plan to move to upstream's DSP56300 core (Claude, asked by Javier).**
+  `docs/core-upgrade-plan.md`: what upstream has fixed since our fork (CMPM, GT/LE, `x:aa`
+  cycles, DMA by request, the moving loop end), which of our 45 core patches still apply (19),
+  are already there (2) or no longer find their code (24, the ESSI clock the real work), and the
+  steps and test gate, with the JIT's block linking as the speed step after it. New
+  `tools/overlaycheck.py`, which reports that per patch for any core tree (all 45 apply to the
+  current fork). Nothing in the build changes.
+
 - [Fix] **Crackles in patches that fill the DSPs, such as BellsMorph (Claude, reported on YouTube
   by Sergio Frías, asked by Javier).** `BellsMorph.pch` (factory presets 1.10, eight voices with
   two Delays each) crackled, less without its Delays. DSP 0 lost ~60 sample clocks a second: its
