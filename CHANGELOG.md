@@ -7,6 +7,21 @@ Older entries cite their commit by hand.
 
 ## 2026-10-14
 
+- [Perf] **~30 % faster: the ESSIs' transmitters are served once per sample (Claude, asked by
+  Javier).** What the ESSIs transmit is never used: the links between DSPs and the outputs are read
+  from the DSPs' memory. Serving the transmitters once per sample instead of once per word keeps
+  them running at the sample rate and saves most of the clock's work (`g1Lib/g1dsp.cpp`,
+  `drainAudio`; `G1_ESSI_TX_PER_WORD=1` brings back every word). Step 4 of
+  `docs/core-upgrade-plan.md`: the JIT's limits were tried first, one at a time, and are kept
+  (linked or longer blocks lose sample clocks and add noise; more loop iterations per block and
+  dropping our LA check change nothing measurable); `G1_JIT_LINK` and `G1_DO_ITERS` stay as
+  switches, and `G1_JITBLOCK=0` now means no limit. Checked: golden WAVs re-recorded from the new
+  `main` first, then all ten byte-identical (threaded, serial, reference); interleaved 10 s runs
+  BellsMorph 3.29× → 4.33×, SimpleOSC 3.19× → 4.09×, WavetableSynth 3.12× → 4.08× (Bitwig open on the
+  same machine), bench 0 overruns; `ctest` 12/12; module battery identical line by line; the
+  18-upload session gives the same WAV as before; korg.pch as before; `upload-e2e.sh` 6 of 6;
+  `g1vst3check --settings` and `--buffer-change` pass.
+
 - [Core] **The DSP56300 core from upstream, branch `core-upstream` (Claude, asked by Javier).** The DSP core now builds from a clone of `dsp56300/dsp56300`
   (`G1_DSP56300_DIR`, default `~/src/dsp56300-upstream`, pinned to `da2ff232` in CI); the 68k core
   still comes from gearmulator-md-mm. G1-Emu had also used API only joelanders' fork has (ESSI

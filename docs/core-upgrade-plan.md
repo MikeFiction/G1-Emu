@@ -65,7 +65,19 @@ on the G1; a REP skipped the block limit. Five of the 23 are candidates for upst
 (fixed-point ratio, several slots per call, peripherals in `execInterrupts`, `getSlotClock`, the
 REP limit).
 
-Gate results are in the CHANGELOG entry of the change. Step 4 (speed) not started.
+Gate results are in the CHANGELOG entry of the change. Merged into `main` (PR #72).
+
+**Step 4, measured (branch `jit-speed`):** the JIT's limits are not where the time goes. Each one
+was tried alone on the ten bench patches against the golden WAVs (`G1_JIT_LINK`, `G1_JITBLOCK`,
+`G1_DO_ITERS`, `G1_NO_LA_FIX`, kept as switches): linked blocks and longer blocks gain little and
+break the sound (BellsMorph loses 271 and 1,638 sample clocks, noise above 20 kHz up to 25 dB
+louder), because the peripherals are only served between blocks and the G1 needs them every ~96
+cycles; four loop iterations per block change nothing (the hot loop is the DO FOREVER, which
+leaves the block every iteration anyway); dropping our LA check is identical and within the noise
+(+0-5 %). The time is in the ESSI clock: what the ESSIs **transmit** is never used (links and
+outputs are read from memory), and serving the transmitters once per sample instead of once per
+word makes it **~30 % faster with every golden WAV byte-identical**. That is the change kept.
+
 
 ## Plan
 

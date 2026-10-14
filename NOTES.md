@@ -465,6 +465,12 @@ and keeps 23 small patches. What changed, and what the move turned up:
   block is compiled), CMPM, GT/LE on both architectures, the volatile-P marks (`JitConfig::
   trackVolatilePMemory`, off for the G1), and the idle link port that deadlocked on `korg.pch` (its
   clock moves for every port at once, so a port that was off owes nothing).
+- **The transmitters are served once per sample**, not once per word (`drainAudio`): what they
+  send is never used, since the links and the outputs are read from the DSP's memory. ~30 % of
+  the emulator's time, with byte-identical output. `G1_ESSI_TX_PER_WORD=1` brings back every word.
+- **The JIT's limits stay** (unlinked blocks of 32, one loop iteration per block): longer or linked
+  blocks serve the peripherals too late for the G1 and lose sample clocks; see
+  `docs/core-upgrade-plan.md`, step 4.
 - **A REP and its instruction** are one unit upstream, but the REP still skipped the per-block
   limit, so with one instruction per block the next instruction joined it: the cycle profile
   charged it to the REP (`g1dspcheck`).

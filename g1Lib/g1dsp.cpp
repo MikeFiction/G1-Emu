@@ -90,7 +90,7 @@ namespace g1
 		config.maxInstructionsPerBlock = 32;
 		// G1_JITBLOCK=n: at most n instructions per JIT block (diagnostics: 1 compiles each one alone).
 		if(const char* jb = std::getenv("G1_JITBLOCK"))
-			config.maxInstructionsPerBlock = static_cast<uint32_t>(std::max(1, std::atoi(jb)));
+			config.maxInstructionsPerBlock = static_cast<uint32_t>(std::max(0, std::atoi(jb)));	// 0: no limit
 		// No cache of single-instruction blocks. The JIT keeps a destroyed one-op block by its opcode
 		// and reuses it at that address, without looking at whether the address has become a loop
 		// end since. The OS moves the main loop's end (LA) with every patch, so a NOP compiled as
@@ -100,6 +100,12 @@ namespace g1
 		// G1_SINGLEOP_CACHE=1 turns it back on, only to compare.
 		config.cacheSingleOpBlocks = std::getenv("G1_SINGLEOP_CACHE") != nullptr;
 		config.maxDoIterations = 1;
+		// Experiments with the JIT's limits (docs/core-upgrade-plan.md, step 4): G1_JIT_LINK=1 links
+		// blocks, G1_DO_ITERS=n (a power of two, 0 = unbounded) runs n loop iterations per block.
+		if(const char* v = std::getenv("G1_JIT_LINK"))
+			config.linkJitBlocks = std::atoi(v) != 0;
+		if(const char* v = std::getenv("G1_DO_ITERS"))
+			config.maxDoIterations = static_cast<uint32_t>(std::max(0, std::atoi(v)));
 		// The OS writes module code into program memory on every patch load, over code compiled for
 		// the previous patch. Marking each such address volatile for ever made everything around it
 		// run one instruction per block, slower with each load (#6). Destroying the written block is
@@ -639,6 +645,13 @@ namespace g1
 				{
 					return std::max<uint32_t>(1, (_cycles + g_essiTickCycles / 2) / g_essiTickCycles) - 1;
 				};
+				// What the ESSIs transmit is never used: the links and the outputs are read from the
+				// DSP's memory (tapLink, tapBlock). Serving the transmitters once per sample instead of
+				// once per word keeps them running at the sample rate, in case the OS looks at their
+				// flags, and makes the emulator ~30 % faster (G1_ESSI_TX_PER_WORD=1: every word).
+				static const bool txPerWord = std::getenv("G1_ESSI_TX_PER_WORD") != nullptr;
+				if(!txPerWord)
+					tx = g_cyclesPerFrame;
 				if(m_hasUpstream)
 					m_periph.getEssiClock().setEsaiDivider(essi, divider(tx), divider(rx));
 				else
