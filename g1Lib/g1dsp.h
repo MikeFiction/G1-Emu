@@ -133,6 +133,7 @@ namespace g1
 		void onLaChanged();
 		void tapLink(uint64_t _block);
 		void readLink(uint32_t _essi, dsp56k::Audio::RxFrame& _frame);
+		void writeLinkRing(uint64_t _sample);
 
 		mc68k::Hdi08& m_hdiUc;
 		const uint32_t m_index;
@@ -188,6 +189,7 @@ namespace g1
 		AudioCallback m_audioCallback;
 		Dsp* m_next = nullptr;
 		bool m_hasUpstream = false;
+		bool m_rxPerWord = false;	// G1_ESSI_RX_PER_WORD: the link through the ESSI receivers and their DMA, word by word
 		struct LinkBlock { uint64_t index; std::array<dsp56k::TWord, 18> words; };
 		std::vector<LinkBlock> m_linkOut;	// this DSP's blocks, pending flushAudio
 		std::deque<LinkBlock> m_linkIn;		// blocks from the previous DSP

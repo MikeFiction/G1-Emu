@@ -349,6 +349,14 @@ first note-off. `g1patchtest` shows it with `G1_SEQ=+60,+64,-64,-60 G1_CHORD=1`.
   asks for a frame, the emulator looks at which ring word its DMA will write next (DDR) and hands
   it that channel from the block 8 blocks ago (a fixed ~83 µs delay per DSP, so it never runs ahead
   of the threads). If that block is missing (the previous DSP is stopped reloading), silence.
+- **Since 2026-10-14 the receivers are not run at all** (`Dsp::writeLinkRing`): at each IRQD the
+  whole block from 9 samples ago (the 8 of the delay plus the one the DMA spends receiving it) is
+  written into both rings at once, base+i for word i, while the receive DMA points at its ring. The
+  receive side has no interrupt (`RIE=0`, `DIE=0` on DMA2/3) and the OS reads only the ring, so
+  this is what the DMA left there anyway, minus the moments where a busy DSP read a ring half
+  rewritten with the next block: BellsMorph loses its last crackle (energy above 20 kHz −44 →
+  −67 dB). A quarter of a DSP thread's time went into those words; ~18 % faster.
+  `G1_ESSI_RX_PER_WORD=1` brings back the receivers and their DMA, word by word.
 - The ESSIs run at the rate derived from their CRA, set from `drainAudio` on the core's ESSI clock
   (a 96-cycle tick and a divider per direction; see "On upstream's core" below); the receivers of
   DSPs with an upstream DSP are clocked at 96 cycles per word. A receiver takes each word from the
@@ -468,6 +476,9 @@ and keeps 23 small patches. What changed, and what the move turned up:
 - **The transmitters are served once per sample**, not once per word (`drainAudio`): what they
   send is never used, since the links and the outputs are read from the DSP's memory. ~30 % of
   the emulator's time, with byte-identical output. `G1_ESSI_TX_PER_WORD=1` brings back every word.
+- **Neither are the link receivers** (see "How it is emulated" above): their divider is all ones,
+  which a core patch takes as "never serve" (a huge divider would overflow the signed tick counter
+  after ~41 minutes).
 - **The JIT's limits stay** (unlinked blocks of 32, one loop iteration per block): longer or linked
   blocks serve the peripherals too late for the G1 and lose sample clocks; see
   `docs/core-upgrade-plan.md`, step 4.
