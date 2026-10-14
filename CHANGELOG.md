@@ -7,7 +7,7 @@ Older entries cite their commit by hand.
 
 ## 2026-10-14
 
-- [Docs] **README: a new picture of the panel (Javier's, added by Claude).** `docs/g1gui.png` now
+- [Docs] **README: a new picture of the panel (Javier's, added by Claude).** `docs/g1-emu-panel.png` (renamed from `g1gui.png`, so no cache shows the old one) now
   shows a patch loaded (Big Phasing Pad), with every knob's name and value on its display, instead
   of empty displays; losslessly optimised (896 → 729 KB).
 
