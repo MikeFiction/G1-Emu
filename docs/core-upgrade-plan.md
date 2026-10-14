@@ -55,7 +55,7 @@ fork has**: the ESSI "fine link" mode and its per-port periods, HDI08 host-comma
 cycle deadlines in the peripherals, an inline peripheral check and a callback when an interrupt is
 serviced (all from one fork commit, `00c48833`, 1,600 lines; the fork left upstream on
 2026-08-29). Javier chose to follow upstream rather than carry that commit, so G1-Emu now uses
-upstream's own means (`NOTES.md`, "On upstream's core") and keeps **23 patches** (were 45),
+upstream's own means (`NOTES.md`, "On upstream's core") and keeps **23 patches** (were 45; 24 with step 5's),
 `overlaycheck.py` reports all 23 apply to `da2ff232`. Findings on the way, each fixed and
 measured: upstream's ESSI clock fell behind in busy patches (one slot per call, and starved while
 interrupts kept coming); link words were picked by the DSP's cycle count instead of the slot's
@@ -77,6 +77,15 @@ leaves the block every iteration anyway); dropping our LA check is identical and
 (+0-5 %). The time is in the ESSI clock: what the ESSIs **transmit** is never used (links and
 outputs are read from memory), and serving the transmitters once per sample instead of once per
 word makes it **~30 % faster with every golden WAV byte-identical**. That is the change kept.
+
+**Step 5, peripheral cost (branch `rx-bypass`):** profiled with `perf` on BellsMorph, the JIT's
+code is a quarter of a DSP thread's useful time and the link's **receive** side another quarter
+(`readLink`, ESSI RX, and DMA2/3 moving each word into the ring); the clock itself is served about
+as often as its 96-cycle tick requires, and the HI08 and timers never set the pace. The receivers
+now are never served: `Dsp::writeLinkRing` writes the block into the ring once per sample, at the
+IRQD. ~18 % faster (same binary, `G1_ESSI_RX_PER_WORD=1` as the before). Six golden WAVs
+byte-identical; BellsMorph, Grainalizzer, WavetablePad and WindowLicker keep level and pitch with
+less noise above 20 kHz. This adds one patch (24): a divider of all ones means "never serve".
 
 
 ## Plan

@@ -56,6 +56,8 @@ namespace g1
 		// Each ESSI's receive DMA writes into a 9-word ring: X:$6C0 (ESSI0) and X:$6C9 (ESSI1).
 		// Word i of the block always goes to base+i.
 		constexpr dsp56k::TWord g_linkBase[2] = {0x6c0, 0x6c9};
+		// The divider that the core's ESSI clock takes as "never serve" (cmake/Dsp56300.cmake).
+		constexpr uint32_t g_rxNeverServed = 0xffffffff;
 
 		// Word period derived from a CRA (DSP56303UM, fig. 7-3), as in the core.
 		uint32_t essiWordCycles(const dsp56k::TWord _cra)
@@ -191,6 +193,7 @@ namespace g1
 		// G1_INTERP=mask: those DSPs (bit n = DSP n) run on the core's interpreter instead of the
 		// JIT. Much slower; useful to tell whether a fault is the JIT's.
 		m_noLaFix = std::getenv("G1_NO_LA_FIX") != nullptr;
+		m_rxPerWord = std::getenv("G1_ESSI_RX_PER_WORD") != nullptr;
 		m_idleSkip = std::getenv("G1_NO_IDLE_SKIP") == nullptr;	// only to compare against the bug
 		if(const char* tr = std::getenv("G1_DSPTRACE"))
 		{
@@ -300,6 +303,8 @@ namespace g1
 				// without a burst of interrupts. In multiples of 864 cycles: the four DSPs share the
 				// grid, like on the hardware (they stay in lock-step), so the block number is common.
 				m_nextIrqd = (before - m_nextIrqd > g_cyclesPerFrame * 4) ? (before / g_cyclesPerFrame + 1) * g_cyclesPerFrame : m_nextIrqd + g_cyclesPerFrame;
+				if(m_hasUpstream && !m_rxPerWord)
+					writeLinkRing(before / g_cyclesPerFrame);
 				if(irqdEnabled())
 				{
 					if(m_inputProvider)
@@ -537,6 +542,33 @@ namespace g1
 		}
 	}
 
+	// The link from the DSP upstream, without the ESSI receivers. Their DMA writes each block's word i to
+	// base+i, and does it during the sample after the one the block was due in: so at the sample clock of
+	// sample n the ring holds block n - g_linkLatency - 1, whole. Here that block is written at once,
+	// before the sample routine starts, instead of word by word through the ESSI and the DMA (a quarter of
+	// a DSP thread's time). Nothing is written while the receive DMA does not point at the ring, as the
+	// DMA would not have written there either.
+	void Dsp::writeLinkRing(const uint64_t _sample)
+	{
+		const uint64_t block = _sample > g_linkLatency ? _sample - g_linkLatency - 1 : 0;
+		while(m_linkIn.size() > 1 && m_linkIn[1].index <= block)
+			m_linkIn.pop_front();
+		const LinkBlock* src = (!m_linkIn.empty() && m_linkIn.front().index == block) ? &m_linkIn.front() : nullptr;
+		auto& dma = m_periph.getDMA();
+		auto& mem = m_dsp.memory();
+		for(uint32_t e = 0; e < 2; ++e)
+		{
+			const auto ddr = dma.getDDR(2 + e);
+			if(ddr < g_linkBase[e] || ddr >= g_linkBase[e] + 9)
+				continue;
+			// Late, as in readLink: the block wanted is newer than any handed on yet (issue #65).
+			if(!src && block > 0 && (m_linkIn.empty() || m_linkIn.back().index < block))
+				m_linkMisses.fetch_add(1, std::memory_order_relaxed);
+			for(dsp56k::TWord i = 0; i < 9; ++i)
+				mem.set(dsp56k::MemArea_X, g_linkBase[e] + i, src ? src->words[e * 9 + i] : 0);
+		}
+	}
+
 	// The OS extends the main loop without rewriting the DO: when it loads a patch with
 	// control-rate modules (envelopes, clocks, master oscillators...) it puts their code at the
 	// end of the loop (from $174) and changes the LA register with a host command (vector $7C:
@@ -652,8 +684,11 @@ namespace g1
 				static const bool txPerWord = std::getenv("G1_ESSI_TX_PER_WORD") != nullptr;
 				if(!txPerWord)
 					tx = g_cyclesPerFrame;
+				// The same goes for what they receive from the DSP upstream: writeLinkRing puts each
+				// block straight into the receive ring once per sample, so the receivers are never
+				// served (their DMA has no interrupt and the OS reads only the ring).
 				if(m_hasUpstream)
-					m_periph.getEssiClock().setEsaiDivider(essi, divider(tx), divider(rx));
+					m_periph.getEssiClock().setEsaiDivider(essi, divider(tx), m_rxPerWord ? divider(rx) : g_rxNeverServed);
 				else
 				{
 					// DSP 0's codec receiver supplies two words per 96 kHz sample, one every 432

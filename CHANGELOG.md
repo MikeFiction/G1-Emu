@@ -7,6 +7,28 @@ Older entries cite their commit by hand.
 
 ## 2026-10-14
 
+- [Perf] **~18 % faster: the link receivers are no longer run, the ring is written once per sample
+  (Claude, asked by Javier).** Profiled with `perf` on BellsMorph: a quarter of each DSP thread's
+  useful time went into receiving the link from the DSP before it, word by word through the ESSI
+  receiver and DMA2/3 into the 9-word rings at `X:$6C0`/`X:$6C9`, as much as the JIT's code
+  itself. That side raises no interrupt and the OS reads only the ring, so `Dsp::writeLinkRing`
+  now writes the block from 9 samples ago into both rings at the IRQD, and the receivers' divider
+  is all ones, which a new core patch takes as "never serve" (`cmake/Dsp56300.cmake`, 24 patches;
+  `G1_ESSI_RX_PER_WORD=1` brings back the old way). Checked, same binary both ways: bench 0 overruns,
+  WavetableSynth 4.34× → 5.06×, WavetablePad 4.18× → 4.89×, SimpleOSC 4.25× → 4.98×, Grainalizzer
+  3.93× → 4.87×, DungeonDub 3.93× → 4.75×, WindowLicker 3.90× → 4.51×, FM303 4.04× → 4.61×,
+  4VoiceChoir 4.10× → 4.92×, progger 4.17× → 4.88×, BellsMorph 4.46× → 5.13×; golden WAVs: with
+  the switch all ten byte-identical, without it six (4VoiceChoir, DungeonDub, FM303, SimpleOSC,
+  WavetableSynth, progger), and BellsMorph, Grainalizzer, WavetablePad and WindowLicker keep level
+  and pitch with less energy above 20 kHz (BellsMorph −43.7 → −66.6 dB, spectral flatness 0.108 →
+  0.012; Grainalizzer −37.1 → −43.6 dB): a busy DSP no longer reads a ring half rewritten with
+  the next block; threaded and serial identical; `ctest -L g1` 12/12; module battery identical line
+  by line both ways, AudioIn 440 Hz at −62 dBFS; 18 uploads then WavetableSynth identical both
+  ways; `overlaycheck` 24 apply; `g1vst3check --settings` and `--buffer-change` pass;
+  `upload-e2e.sh` answers all 6 packets on most runs both ways and fewer on some (old way 6 of 8
+  runs complete, new 4 of 7), a flakiness of the real-time test that this change does not touch
+  (the upload goes through the HI08). `jitdiff` not run: the JIT is unchanged.
+
 - [Perf] **~30 % faster: the ESSIs' transmitters are served once per sample (Claude, asked by
   Javier).** What the ESSIs transmit is never used: the links between DSPs and the outputs are read
   from the DSPs' memory. Serving the transmitters once per sample instead of once per word keeps

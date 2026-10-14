@@ -96,6 +96,20 @@ g1_dsp_replace(esaiclock.cpp
 	uint32_t EsxiClock::execOne() noexcept
 	{]=])
 
+# A divider of all ones means a direction that is never served. G1-Emu writes what the links between
+# its DSPs carry straight into the receive ring once per sample (Dsp::writeLinkRing), so their ESSI
+# receivers stay enabled, as the OS left them, but are never run. A huge divider alone would not do:
+# the tick counter is a signed 32-bit int and would overflow after ~41 minutes at 9 ticks per sample.
+g1_dsp_replace(esaiclock.cpp
+	[=[		auto advanceClock = [](Clock& _c)
+		{
+]=]
+	[=[		auto advanceClock = [](Clock& _c)
+		{
+			if(_c.divider == std::numeric_limits<uint32_t>::max())
+				return false;
+]=])
+
 # DMA per request in block mode without clearing DE (DTM=100). The G1's DSP 0 brings in the
 # left audio input this way: DMA3 moves ESSI1 RX to X:$6C5 (a 1-word block) and its interrupt
 # (vector $1E) copies ESSI0 RX to X:$6C4. The core takes block mode by request only when it
