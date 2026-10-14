@@ -30,7 +30,8 @@ Older entries cite their commit by hand.
   residual crackle `main` still has; 18 uploads in a row, then WavetableSynth, sound as one upload
   does; korg.pch as main, no hang; `upload-e2e.sh` 6 of 6 packets answered; `g1vst3check` default
   and `--slots` fail here exactly as main's build does (empty program 1 in this machine's banks, no
-  virtual PC Ports), `--settings` and `--buffer-change` pass. CI not run yet.
+  virtual PC Ports), `--settings` and `--buffer-change` pass. CI green on all five jobs (PR #72),
+  arm64 included; Javier played BellsMorph on it in g1gui: not a click.
 
 - [Docs] **A plan to move to upstream's DSP56300 core (Claude, asked by Javier).**
   `docs/core-upgrade-plan.md`: what upstream has fixed since our fork (CMPM, GT/LE, `x:aa`
