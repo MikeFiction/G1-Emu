@@ -127,6 +127,7 @@ namespace g1
 		bool skipIdle(uint64_t _target);
 		bool idleLoopInPlace() const;
 		void drainAudio();
+		void codecTick();
 		bool irqdEnabled();
 		void tapBlock();
 		void onLaChanged();
@@ -193,6 +194,7 @@ namespace g1
 		LinkPeak m_linkPeak{};
 		std::atomic<uint64_t> m_linkMisses{0};
 		std::array<dsp56k::TWord, 2> m_craSeen{};
+		uint32_t m_codecTicks = 0;	// DSP 0: ESSI ticks into the current sample (codecTick)
 		BlockCallback m_blockCallback;
 		InputProvider m_inputProvider;
 		std::array<int32_t, 2> m_input{};

@@ -6,12 +6,14 @@ This is the developer build guide. People using a release should follow the pack
 Use Visual Studio 2022 Build Tools with the C++ x64/x86 tools and a Windows SDK,
 CMake 3.22 or newer, Git, and JUCE 8.0.12. WSL is not required. The commands below
 run from the G1-Emu repository in PowerShell and keep dependencies and outputs in
-ignored build directories. They use the same Gearmulator tag as CI.
+ignored build directories. They use the same dsp56300 commit and Gearmulator tag as CI.
 
 ```powershell
+git clone --recurse-submodules https://github.com/dsp56300/dsp56300.git build-windows-deps/dsp56300
+git -C build-windows-deps/dsp56300 checkout --recurse-submodules da2ff232d965c9c3da587820baae38e2b29a5879
 git clone --branch mdmm-v0.1.0-alpha.13 --depth 1 --recurse-submodules --shallow-submodules https://github.com/joelanders/gearmulator-md-mm.git build-windows-deps/gearmulator-md-mm
 # Reuse ../Nomad2026/JUCE if it already contains JUCE 8.0.12.
-cmake -S . -B build-windows -G "Visual Studio 17 2022" -A x64 -DGEARMULATOR_DIR="$PWD/build-windows-deps/gearmulator-md-mm" -DG1_JUCE_DIR="$PWD/../Nomad2026/JUCE" -DG1_BACKEND=juce
+cmake -S . -B build-windows -G "Visual Studio 17 2022" -A x64 -DGEARMULATOR_DIR="$PWD/build-windows-deps/gearmulator-md-mm" -DG1_DSP56300_DIR="$PWD/build-windows-deps/dsp56300" -DG1_JUCE_DIR="$PWD/../Nomad2026/JUCE" -DG1_BACKEND=juce
 cmake --build build-windows --config Release --parallel 4
 ctest --test-dir build-windows -C Release -L g1 --output-on-failure
 ```

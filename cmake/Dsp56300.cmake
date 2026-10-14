@@ -1,5 +1,5 @@
-# Core fixes needed by the G1, applied only to the build copy. The Gearmulator clone
-# remains the source and is never modified.
+# Core fixes needed by the G1, applied only to the build copy. The upstream clone
+# (G1_DSP56300_DIR) remains the source and is never modified.
 get_target_property(g1_dsp_source dsp56kEmu SOURCE_DIR)
 set(g1_dsp_overlay "${CMAKE_BINARY_DIR}/g1-dsp/dsp56kEmu")
 set(g1_dsp_prepare "${CMAKE_BINARY_DIR}/g1-dsp/prepare")
@@ -21,94 +21,91 @@ function(g1_dsp_replace name before after)
 	file(WRITE "${path}" "${contents}")
 endfunction()
 
-g1_dsp_replace(jitops.h
-	"void op_Movem_aa(TWord op)\t\t\t\t{ errNotImplemented(op); }"
-	"void op_Movem_aa(TWord op);")
-g1_dsp_replace(jitops.h
-	"void op_DoForever(TWord op)\t\t\t{ errNotImplemented(op); }"
-	"void op_DoForever(TWord op);")
-g1_dsp_replace(opcodeanalysis.h
-	"case Movem_ea:\n\t\t\t{\n\t\t\t\tconst auto write = getFieldValue<Movem_ea, Field_W>(op);"
-	"case Movem_aa:\n\t\t\treturn !getFieldValue<Movem_aa, Field_W>(op);\n\t\tcase Movem_ea:\n\t\t\t{\n\t\t\t\tconst auto write = getFieldValue<Movem_ea, Field_W>(op);")
-
-# DO FOREVER keeps LC. At the loop end, FV prevents decrementing LC or leaving.
-g1_dsp_replace(jitblock.cpp
-	"\t\t\tm_asm.cmp(lc, asmjit::Imm(1));\n\t\t\tm_asm.jle(enddo);\n\t\t\tm_asm.dec(lc);"
-	"\t\t\tconst auto repeatForever = m_asm.newLabel();\n\t\t\tm_asm.bitTest(sr, SRB_FV);\n\t\t\tm_asm.jnz(repeatForever);\n\t\t\tm_asm.cmp(lc, asmjit::Imm(1));\n\t\t\tm_asm.jle(enddo);\n\t\t\tm_asm.dec(lc);\n\t\t\tm_asm.bind(repeatForever);")
-
-# One iteration per block (what the G1 uses) made the mask of that test zero. AArch64 cannot
-# encode an immediate of zero for TST: asmjit refused the instruction, the rest of the block
-# was never emitted and the DSP ran into it, which is the illegal instruction on Apple
+# The G1 runs one DO iteration per block. That made the mask of the iteration test zero, and
+# AArch64 cannot encode an immediate of zero for TST: asmjit refused the instruction, the rest of
+# the block was never emitted and the DSP ran into it, which is the illegal instruction on Apple
 # Silicon. The test is always true with that mask, so the jump is unconditional.
 g1_dsp_replace(jitblock.cpp
 	"\t\t\tif(m_config.maxDoIterations)\n\t\t\t{\n\t\t\t\tassert(asmjit::Support::isPowerOf2(m_config.maxDoIterations));\n\t\t\t\tm_asm.test_(_regLC, asmjit::Imm(m_config.maxDoIterations-1));\n\t\t\t\tm_asm.jz(skip);\n\t\t\t}"
 	"\t\t\tif(m_config.maxDoIterations > 1)\n\t\t\t{\n\t\t\t\tassert(asmjit::Support::isPowerOf2(m_config.maxDoIterations));\n\t\t\t\tm_asm.test_(_regLC, asmjit::Imm(m_config.maxDoIterations-1));\n\t\t\t\tm_asm.jz(skip);\n\t\t\t}\n\t\t\telse if(m_config.maxDoIterations)\n\t\t\t{\n\t\t\t\tm_asm.jmp(skip);\n\t\t\t}")
 
-# Nested DO and ENDDO also save/restore FV, not only LF. One form for both architectures: every
-# immediate here encodes as an AArch64 logical immediate, checked by cross-assembling the
-# sequences with asmjit's arm64 backend on an x86 host (see NOTES.md, "The DSP JIT on ARM").
-g1_dsp_replace(jitops.cpp
-	"m_asm.or_(m_dspRegs.getSR(JitDspRegs::ReadWrite), asmjit::Imm(SR_LF));"
-	"m_asm.and_(m_dspRegs.getSR(JitDspRegs::ReadWrite), asmjit::Imm(~SR_FV));\n\t\t\tm_asm.or_(m_dspRegs.getSR(JitDspRegs::ReadWrite), asmjit::Imm(SR_LF));")
-g1_dsp_replace(jitops.cpp
-	"m_asm.and_(r32(r), asmjit::Imm(SR_LF));"
-	"m_asm.and_(r32(r), asmjit::Imm(SR_LF | SR_FV));")
-g1_dsp_replace(jitops.cpp
-	"m_asm.and_(r32(m_dspRegs.getSR(JitDspRegs::ReadWrite)), asmjit::Imm(~SR_LF));"
-	"m_asm.and_(r32(m_dspRegs.getSR(JitDspRegs::ReadWrite)), asmjit::Imm(~(SR_LF | SR_FV)));")
+# A REP and the instruction it repeats are analysed as one unit now, but the REP still skipped the
+# per-block instruction limit, a leftover of when its instruction came as the next one: the
+# instruction after the pair joined the block too. With one instruction per block (G1_JITBLOCK=1,
+# which cycle profiling needs) that block held three, and the profile charged the third to the REP.
+g1_dsp_replace(jitblock.cpp
+	"if(!isRep && !isFastInterrupt && _config.maxInstructionsPerBlock > 0 && numInstructions >= _config.maxInstructionsPerBlock)"
+	"if(!isFastInterrupt && _config.maxInstructionsPerBlock > 0 && numInstructions >= _config.maxInstructionsPerBlock)")
 
-# DMA with dual counters on source and destination at once (DAM = 011 011 in the G1's DMA0:
-# copies X:$6C0 -> Y:output buffer on every block). Gearmulator does not implement it and in
-# Release it reported the block done without copying: audio never passed from one DSP to the next.
-# Both sides share DCOH/DCOL and each adds its DOR at the end of every line.
-g1_dsp_replace(dma.cpp
-	[=[		assert(false && "DMA transfer mode not supported yet");]=]
-	[=[		if(agmS <= AddressGenMode::DualCounterDOR3 && agmD <= AddressGenMode::DualCounterDOR3)
-		{
-			const auto isLineTransfer = getTransferMode() == TransferMode::LineTriggerRequestClearDE;
-			const auto dorS = m_dma.getDOR(static_cast<TWord>(agmS));
-			const auto dorD = m_dma.getDOR(static_cast<TWord>(agmD));
+# The ESSI clock converts its delay in cycles into instructions by the measured ratio, rounded to
+# serve early, never late. It rounded the cycles per instruction up to a whole number: the G1's DSPs
+# run ~2.1 cycles per instruction, taken as 3, so each wait ended at two thirds of the way and the
+# clock was asked again, three or four times per tick of 48 cycles, a third of the emulator's time.
+# The reciprocal is kept in fixed point anyway: computed from the counts themselves, rounded down,
+# it is just as early and within one instruction of the tick.
+g1_dsp_replace(esaiclock.cpp
+	[=[			const auto cyclesPerInstruction = std::max(static_cast<uint64_t>(1), (deltaCycles + deltaInstructions - 1) / deltaInstructions);
+			m_instructionsPerCycle = static_cast<uint32_t>((1u << g_ratioShift) / cyclesPerInstruction);]=]
+	[=[			m_instructionsPerCycle = static_cast<uint32_t>(std::min<uint64_t>(1u << g_ratioShift, (deltaInstructions << g_ratioShift) / std::max<uint64_t>(deltaCycles, 1)));]=])
 
-			do
-			{
-				memWrite(areaD, m_ddr, memRead(areaS, m_dsr));
+# A move to or from X:aa / Y:aa (short absolute address) takes one cycle. Upstream charges one for
+# the read and two for the write, from a garbled row of the manual's Table A-1; the table here makes
+# both one (the read is one either way, so nothing counts short). The G1's sample and control code
+# is full of them (its variables live at X:$0-$3F): with two, a patch the OS had filled to its
+# budget went past 864 cycles per sample and lost sample clocks, ~6,000 in 3 s on DSP 0 with
+# BellsMorph.pch and noise 40 dB louder above 4 kHz. The OS was written for the real chip.
+g1_dsp_replace(opcodecycles.h
+	"OpcodeCycles{Movex_aa,			2, 0, 0, 0},"
+	"OpcodeCycles{Movex_aa,			1, 0, 0, 0},")
+g1_dsp_replace(opcodecycles.h
+	"OpcodeCycles{Movey_aa,			2, 0, 0, 0},"
+	"OpcodeCycles{Movey_aa,			1, 0, 0, 0},")
 
-				m_dsr = (m_dcol == 0 ? m_dsr + dorS : m_dsr + 1) & 0xffffff;
+# When the slot being served is due, by the clock's own count: the DSP serves its peripherals when
+# its instruction count says so, a few dozen cycles off either way. G1-Emu hands each link word
+# the block that is being received at that moment, and near a block's edge the DSP's cycle count
+# gave the next or the previous one: a sample out of place now and then, noise as loud as the
+# signal's highs in patches that keep the DSPs busy (BellsMorph, WavetableSynth).
+g1_dsp_replace(esaiclock.h
+	[=[		void setTickCallback(TickCallback _callback) { m_tickCallback = std::move(_callback); }]=]
+	[=[		void setTickCallback(TickCallback _callback) { m_tickCallback = std::move(_callback); }
 
-				if(dualModeIncrement(m_ddr, dorD))
-					return true;
-			}
-			while(!isRequestTrigger() || (isLineTransfer && m_dcol != m_dcolInit));
+		// G1-Emu: while a slot is served, when it was due (in the clock source's units)
+		uint64_t getSlotClock() const { return m_lastClock; }]=])
 
-			return false;
-		}
+# The clock serves one slot per call, so that the DSP can take each slot's request before the
+# next. It is called between JIT blocks, and once a patch fills the G1's DSPs their blocks last
+# longer than a slot (96 cycles) on average: the clock fell behind for good, ~28 % slower than the
+# DSP with BellsMorph, and the links carried words from the wrong sample. Up to 8 slots per call
+# now, while it is behind; the G1 moves its link words by DMA, which takes them as they come.
+g1_dsp_replace(esaiclock.h
+	[=[		uint32_t exec() noexcept;]=]
+	[=[		uint32_t exec() noexcept;
+		uint32_t execOne() noexcept;	// G1-Emu: one slot, see exec()]=])
+g1_dsp_replace(esaiclock.cpp
+	[=[	uint32_t EsxiClock::exec() noexcept
+	{]=]
+	[=[	uint32_t EsxiClock::exec() noexcept
+	{
+		uint32_t delay = 0;
+		for(uint32_t i = 0; i < 8 && !delay; ++i)
+			delay = execOne();
+		return delay;
+	}
 
-		assert(false && "DMA transfer mode not supported yet");]=])
-
-# Block transfers (triggered by DE) happen immediately. Delayed, DMA0 copied the input to the
-# output buffer after the voices had added their sample, and overwrote it.
-# On the real DSP they run in parallel and finish much earlier (about 36 cycles).
-g1_dsp_replace(dma.cpp
-	"constexpr bool g_delayedDmaTransfer = true;"
-	"constexpr bool g_delayedDmaTransfer = false;")
+	uint32_t EsxiClock::execOne() noexcept
+	{]=])
 
 # DMA per request in block mode without clearing DE (DTM=100). The G1's DSP 0 brings in the
 # left audio input this way: DMA3 moves ESSI1 RX to X:$6C5 (a 1-word block) and its interrupt
-# (vector $1E) copies ESSI0 RX to X:$6C4. Gearmulator silently ignored it (it only accepted
-# word or line). One request moves the whole block; with DE set, it stays armed.
+# (vector $1E) copies ESSI0 RX to X:$6C4. The core takes block mode by request only when it
+# clears DE. One request moves the whole block; with DE set, it stays armed.
 g1_dsp_replace(dma.cpp
-	"const auto isSupportedTransferMode = tm == TransferMode::WordTriggerRequest || tm == TransferMode::WordTriggerRequestClearDE || tm == TransferMode::LineTriggerRequestClearDE;"
-	"const auto isSupportedTransferMode = tm == TransferMode::WordTriggerRequest || tm == TransferMode::WordTriggerRequestClearDE || tm == TransferMode::LineTriggerRequestClearDE || tm == TransferMode::BlockTriggerRequest || tm == TransferMode::BlockTriggerRequestClearDE;")
+	"|| tm == TransferMode::BlockTriggerRequestClearDE;"
+	"|| tm == TransferMode::BlockTriggerRequestClearDE || tm == TransferMode::BlockTriggerRequest;")
 g1_dsp_replace(dma.cpp
-	"		if(!bittest(m_dcr, De))\n			return;\n\n		if(execTransfer())\n			finishTransfer();"
-	"		if(!bittest(m_dcr, De))\n			return;\n\n		const auto btm = getTransferMode();\n		if(btm == TransferMode::BlockTriggerRequest || btm == TransferMode::BlockTriggerRequestClearDE)\n		{\n			while(!execTransfer()) {}\n			finishTransfer();\n			return;\n		}\n\n		if(execTransfer())\n			finishTransfer();")
-
-# DMA from a fixed address to a fixed address (DAM 100 100): a peripheral register to a memory
-# cell. The G1's DSP 0 uses it for the audio inputs (ESSI1 RX -> X:$6C5). It had no branch:
-# it fell into the final assert and, in Release, reported the block done without copying.
-g1_dsp_replace(dma.cpp
-	"		assert(false && \"DMA transfer mode not supported yet\");\n		return true;\n	}"
-	"		if(agmS == AddressGenMode::SingleCounterAnoUpdate && agmD == AddressGenMode::SingleCounterAnoUpdate)\n		{\n			memWrite(areaD, m_ddr, memRead(areaS, m_dsr));\n			if(isRequestTrigger() && m_dco)\n			{\n				--m_dco;\n				return false;\n			}\n			m_dco = m_dcomInit;\n			return true;\n		}\n\n		assert(false && \"DMA transfer mode not supported yet\");\n		return true;\n	}")
+	"		if(getTransferMode() == TransferMode::BlockTriggerRequestClearDE)\n		{\n			while(!execTransfer())"
+	"		if(getTransferMode() == TransferMode::BlockTriggerRequestClearDE || getTransferMode() == TransferMode::BlockTriggerRequest)\n		{\n			while(!execTransfer())")
 
 # External interrupts (the HI08's host commands) reach the pending queue only in execPeripherals,
 # which runs only when no internal interrupt can be serviced. A DSP whose sample routine fills the
@@ -121,298 +118,44 @@ g1_dsp_replace(dsp.cpp
 	{]=]
 	[=[	void DSP::execInterrupts()
 	{
+		m_execPeripheralsFunc(this);	// G1-Emu: peripherals keep their time while interrupts keep coming
 		processExternalInterrupts();	// G1-Emu: host commands must not wait for an idle DSP
 ]=])
 
 # A DMA channel's interrupt is a status bit on the chip: a second end of transfer while the first
-# is still waiting is the same request. The core queued every one, in order, and serviced none of
+# is still waiting is the same request. The core queues every one, in order, and serviced none of
 # them while a long interrupt (the sample routine) ran. DSP 0 ends a transfer of its audio input
 # (DMA3, vector $1E) twice per sample, so with a patch the OS had filled to its budget the queue
 # reached six of them, the next IRQD waited behind them, and the sample clock after it found it
 # still pending and was lost: ~60 a second with BellsMorph.pch, a crackle. Its handler copies a
-# register, so servicing it once loses nothing. A DMA interrupt is now queued only if it is not
-# queued already.
-g1_dsp_replace(dsp.h
-	[=[		bool			hasPendingInterrupts			() const
-		{]=]
-	[=[		// G1-Emu: how many times each vector (below Vba_End, 0x100) is in m_pendingInterrupts
-		uint8_t			m_queuedVectors[0x100] = {};
-		bool			isInterruptQueued				(const TWord _vba) const { return _vba < 0x100 && m_queuedVectors[_vba]; }
-
-		bool			hasPendingInterrupts			() const
-		{]=])
-g1_dsp_replace(dsp.cpp
-	[=[			m_processingMode = FastInterrupt;
-			m_pendingInterrupts.pop_front();
-		}
-
-		execInterrupt(vba);]=]
-	[=[			m_processingMode = FastInterrupt;
-			m_pendingInterrupts.pop_front();
-			if(vba < 0x100)
-				--m_queuedVectors[vba];
-		}
-
-		execInterrupt(vba);]=])
-g1_dsp_replace(dsp.cpp
-	[=[	bool DSP::injectInterrupt(uint32_t _interruptVectorAddress)
-	{
-		m_pendingInterrupts.push_back({_interruptVectorAddress});
-]=]
-	[=[	bool DSP::injectInterrupt(uint32_t _interruptVectorAddress)
-	{
-		m_pendingInterrupts.push_back({_interruptVectorAddress});
-		if(_interruptVectorAddress < 0x100)
-			++m_queuedVectors[_interruptVectorAddress];
-]=])
+# register, so servicing it once loses nothing. A DMA interrupt is queued only if it is not
+# pending already (the core merges them only while they are masked).
 g1_dsp_replace(dma.cpp
 	[=[		if(bitvalue(m_dcr, Die))
 			m_peripherals.getDSP().injectInterrupt(Vba_DMAchannel0 + (m_index<<1));]=]
-	[=[		if(bitvalue(m_dcr, Die) && !m_peripherals.getDSP().isInterruptQueued(Vba_DMAchannel0 + (m_index<<1)))
+	[=[		if(bitvalue(m_dcr, Die) && !m_peripherals.getDSP().hasPendingInterrupt(Vba_DMAchannel0 + (m_index<<1)))
 			m_peripherals.getDSP().injectInterrupt(Vba_DMAchannel0 + (m_index<<1));]=])
 
-# CMPM compares magnitudes, and alu_cmp takes the absolute value of its operand in place. When the
-# operand is an accumulator, decode_JJJ_read_56 hands over the JIT's cached register for it, not a
-# copy, so the rest of the block saw |a| instead of a, and if a was already dirty (`sub x1,b a1,a`
-# just before) |a| was even written back. It is what silenced every sawtooth (OscA/OscB wave 2,
-# OscSlvC): the saw branch does `cmpm a,b` then `tgt a,b`. Blocks of one instruction hid it. A copy.
-g1_dsp_replace(jitops_alu.cpp
-	[=[		const auto r = decode_JJJ_read_56(JJJ, !D);
-		alu_cmp(D, r64(r.get()), true);]=]
-	[=[		const auto r = decode_JJJ_read_56(JJJ, !D);
-		const RegGP v(m_block);
-		m_asm.mov(v, r64(r.get()));	// alu_cmp takes the absolute value in place: never on a cached register
-		alu_cmp(D, v, true);]=])
-
-# GT and LE on x86-64 tested the parity of Z, N and V: right in six of the eight cases, wrong when
-# Z = 1 and N != V, where GT came out true and LE false. The AArch64 version computes
-# (N ^ V) | Z and is right. Same here, in a scratch register.
-g1_dsp_replace(jitops_decode_x64.cpp
-	[=[				// (SRB_Z + (SRB_N != SRB_V)) == 0
-				ccrMaskTest(static_cast<CCRMask>(CCR_Z | CCR_N | CCR_V));
-				return asmjit::x86::CondCode::kParityEven;]=]
-	[=[				// (SRB_Z + (SRB_N != SRB_V)) == 0
-				constexpr auto mask = static_cast<CCRMask>(CCR_Z | CCR_N | CCR_V);
-				m_ccrRead |= mask;
-				updateDirtyCCR(mask);
-				const RegGP t(m_block);
-				const RegGP z(m_block);
-				const auto sr = m_dspRegs.getSR(JitDspRegs::Read).r32();
-				m_asm.mov(t.get().r32(), sr);
-				m_asm.shr(t.get().r32(), asmjit::Imm(CCRB_N - CCRB_V));	// N down to V's bit
-				m_asm.xor_(t.get().r32(), sr);							// that bit is N ^ V
-				m_asm.and_(t.get().r32(), asmjit::Imm(CCR_V));
-				m_asm.mov(z.get().r32(), sr);
-				m_asm.and_(z.get().r32(), asmjit::Imm(CCR_Z));
-				m_asm.or_(t.get().r32(), z.get().r32());				// ZF: (N ^ V) | Z == 0
-				return asmjit::x86::CondCode::kZero;]=])
-g1_dsp_replace(jitops_decode_x64.cpp
-	[=[				// (SRB_Z + (SRB_N != SRB_V)) == 1
-				ccrMaskTest(static_cast<CCRMask>(CCR_Z | CCR_N | CCR_V));
-				return asmjit::x86::CondCode::kParityOdd;]=]
-	[=[				// (SRB_Z + (SRB_N != SRB_V)) == 1
-				constexpr auto mask = static_cast<CCRMask>(CCR_Z | CCR_N | CCR_V);
-				m_ccrRead |= mask;
-				updateDirtyCCR(mask);
-				const RegGP t(m_block);
-				const RegGP z(m_block);
-				const auto sr = m_dspRegs.getSR(JitDspRegs::Read).r32();
-				m_asm.mov(t.get().r32(), sr);
-				m_asm.shr(t.get().r32(), asmjit::Imm(CCRB_N - CCRB_V));
-				m_asm.xor_(t.get().r32(), sr);
-				m_asm.and_(t.get().r32(), asmjit::Imm(CCR_V));
-				m_asm.mov(z.get().r32(), sr);
-				m_asm.and_(z.get().r32(), asmjit::Imm(CCR_Z));
-				m_asm.or_(t.get().r32(), z.get().r32());
-				return asmjit::x86::CondCode::kNotZero;]=])
-
-# LE on AArch64 added (N ^ V) and Z and tested for exactly 1: with Z = 1 and N != V the sum is 2
-# and LE came out false. g1dspcheck's GT/LE test caught it on the arm64 runners. Not zero, as GT.
-g1_dsp_replace(jitops_decode_aarch64.cpp
-	[=[				m_asm.add(dst, dst, r.get());
-				m_asm.cmp(dst, asmjit::Imm(1));
-				return asmjit::arm::CondCode::kZero;]=]
-	[=[				m_asm.adds(dst, dst, r.get());	// (N ^ V) + Z is 0, 1 or 2: LE is "not 0"
-				return asmjit::arm::CondCode::kNotZero;]=])
-
-# A move to or from X:aa / Y:aa (short absolute address) takes one cycle, like any other X or Y move
-# without a long absolute or pre-update address; the core's table charged two. The G1's sample and
-# control code is full of them (its variables live at X:$0-$3F), so with the extra cycle a patch the
-# OS had filled to its budget went past 864 cycles per sample: the next sample clock found the last
-# one still pending and was lost, and the output turned into noise (#4, WavetableSynth.pch, 11 voices:
-# ~6,000 lost sample clocks per DSP in 3 s, none with this fix on DSPs 1 and 2).
-g1_dsp_replace(opcodecycles.h
-	"OpcodeCycles{Movex_aa,			2, 0, 0, 0},"
-	"OpcodeCycles{Movex_aa,			1, 0, 0, 0},")
-g1_dsp_replace(opcodecycles.h
-	"OpcodeCycles{Movey_aa,			2, 0, 0, 0},"
-	"OpcodeCycles{Movey_aa,			1, 0, 0, 0},")
-
-# The first G1 DSP receives the codec input on ESSI0/1, but transmits the two DSP-link streams
-# at the normal 96-cycle word period. The core's fine schedule originally had one period for both
-# directions, so slowing the input receivers also slowed those transmitters. Keep the core's
-# default period for TX and add a separate RX period used by the G1 integration below.
-g1_dsp_replace(esaiclock.h
-	"void setEsaiFinePeriod(Esxi* _esai, uint32_t _finePeriod);"
-	"void setEsaiFinePeriod(Esxi* _esai, uint32_t _finePeriod);\n\t\tvoid setEsaiFineRxPeriod(Esxi* _esai, uint32_t _finePeriod);")
-g1_dsp_replace(esaiclock.h
-	"\t\t\tuint32_t finePeriod = 0;\n\t\t\tuint64_t fineLastClock = 0;"
-	"\t\t\tuint32_t finePeriod = 0;\n\t\t\tuint32_t fineRxPeriod = 0;\n\t\t\tuint64_t fineLastClock = 0;\n\t\t\tuint64_t fineRxLastClock = 0;\n\t\t\tbool fineRxExplicit = false;")
-
-# An ESSI on the fine schedule (the links between DSPs) that sat idle owed the core every frame of
-# that time. The catch-up loop counts from fineLastClock, which only moves when the port is served or
-# its CRA is rewritten, so when a DSP with nothing to do (TX and RX off for seconds) woke up, it emitted
-# them all at once: millions of frames, in one call, into a ring of 32768. The ring filled, the write
-# callback waits for room, and the only thread that can make room is the one waiting: a deadlock, seen
-# uploading nmedit's korg.pch (a 434-million-cycle gap on DSP 0). A real port does not queue the frames
-# of the time it was off, so an anchor more than 64 periods behind is put back at 64.
-#
-# Fine-clock the two ESSI directions independently. DSP 0's codec receiver is a 432-cycle
-# word clock (two words per 864-cycle 96 kHz sample), while its transmitter still sends the
-# DSP-to-DSP link at 96 cycles per word. Keep both anchors: CRA writes must preserve the
-# explicit codec RX period and re-anchor the TX phase to avoid an initial catch-up burst.
-g1_dsp_replace(esaiclock.cpp
-	[=[		if(m_hasFineEsais)
-		{
-			for (auto& e : m_esais)
-			{
-				if (!e.finePeriod)
-					continue;
-				while (static_cast<uint64_t>(ic - e.fineLastClock) >= e.finePeriod)
-				{
-					e.fineLastClock += e.finePeriod;
-					if(e.esai->hasEnabledTransmitters())
-					{
-						e.esai->execTX();
-					}
-					if(e.esai->hasEnabledReceivers())
-					{
-						e.esai->execRX();
-					}
-				}
-				const auto rem = static_cast<uint32_t>(e.finePeriod - (ic - e.fineLastClock));
-				if (rem < fineDelay)
-					fineDelay = rem;
-			}
-		}]=]
-	[=[		if(m_hasFineEsais)
-		{
-			for (auto& e : m_esais)
-			{
-				if (!e.finePeriod && !e.fineRxPeriod)
-					continue;
-				if(e.finePeriod)
-				{
-					const uint64_t maxCatchUp = static_cast<uint64_t>(e.finePeriod) * 64u;
-					if (static_cast<uint64_t>(ic - e.fineLastClock) > maxCatchUp)
-						e.fineLastClock = ic > maxCatchUp ? ic - maxCatchUp : 0;
-					while (static_cast<uint64_t>(ic - e.fineLastClock) >= e.finePeriod)
-					{
-						e.fineLastClock += e.finePeriod;
-						if(e.esai->hasEnabledTransmitters())
-							e.esai->execTX();
-					}
-				}
-				if(e.fineRxPeriod)
-				{
-					const uint64_t maxCatchUp = static_cast<uint64_t>(e.fineRxPeriod) * 64u;
-					if (static_cast<uint64_t>(ic - e.fineRxLastClock) > maxCatchUp)
-						e.fineRxLastClock = ic > maxCatchUp ? ic - maxCatchUp : 0;
-					while (static_cast<uint64_t>(ic - e.fineRxLastClock) >= e.fineRxPeriod)
-					{
-						e.fineRxLastClock += e.fineRxPeriod;
-						if(e.esai->hasEnabledReceivers())
-							e.esai->execRX();
-					}
-				}
-				const auto txRem = e.finePeriod ? static_cast<uint32_t>(e.finePeriod - (ic - e.fineLastClock)) : UINT32_MAX;
-				const auto rxRem = e.fineRxPeriod ? static_cast<uint32_t>(e.fineRxPeriod - (ic - e.fineRxLastClock)) : UINT32_MAX;
-				const auto rem = txRem < rxRem ? txRem : rxRem;
-				if (rem < fineDelay)
-					fineDelay = rem;
-			}
-		}]=])
-
-g1_dsp_replace(esaiclock.cpp
-	[=[		for (auto& e : m_esais)
-		{
-			if(e.finePeriod)		// serviced on the fine schedule above; not on the base tick
-				continue;
-
-			if(e.esai->hasEnabledTransmitters() && advanceClock(e.tx))
-				processTx[txCount++] = e.esai;
-
-			if (e.esai->hasEnabledReceivers() && advanceClock(e.rx))
-				processRx[rxCount++] = e.esai;
-		}]=]
-	[=[		for (auto& e : m_esais)
-		{
-			if(!e.finePeriod && e.esai->hasEnabledTransmitters() && advanceClock(e.tx))
-				processTx[txCount++] = e.esai;
-
-			if(!e.fineRxPeriod && e.esai->hasEnabledReceivers() && advanceClock(e.rx))
-				processRx[rxCount++] = e.esai;
-		}]=])
-
-g1_dsp_replace(esaiclock.cpp
-	[=[				entry.finePeriod = _finePeriod;
-				entry.fineLastClock = now;]=]
-	[=[				entry.finePeriod = _finePeriod;
-				entry.fineLastClock = now;
-				if(!entry.fineRxExplicit)
-				{
-					entry.fineRxPeriod = _finePeriod;
-					entry.fineRxLastClock = now;
-				}]=])
-g1_dsp_replace(esaiclock.cpp
-	[=[			m_esais.back().finePeriod = _finePeriod;
-			m_esais.back().fineLastClock = now;]=]
-	[=[			m_esais.back().finePeriod = _finePeriod;
-			m_esais.back().fineRxPeriod = _finePeriod;
-			m_esais.back().fineLastClock = now;
-			m_esais.back().fineRxLastClock = now;]=])
-g1_dsp_replace(esaiclock.cpp
-	[=[			if(entry.finePeriod)
-			{
-				m_hasFineEsais = true;]=]
-	[=[			if(entry.finePeriod || entry.fineRxPeriod)
-			{
-				m_hasFineEsais = true;]=])
-g1_dsp_replace(esaiclock.cpp
-	[=[	bool EsxiClock::shiftEsaiFineAnchor(const Esxi* _esai, const int64_t _cycles)]=]
-	[=[	void EsxiClock::setEsaiFineRxPeriod(Esxi* _esai, const uint32_t _finePeriod)
+# Who is told when an interrupt is serviced: G1-Emu knows from it that the sample clock (IRQD) was
+# taken, counts vectors for its diagnostics and attributes cycles to them when profiling.
+g1_dsp_replace(dsp.h
+	[=[		bool			injectInterruptImmediate		(uint32_t _interruptVectorAddress);]=]
+	[=[		bool			injectInterruptImmediate		(uint32_t _interruptVectorAddress);
+		void			setInterruptServicedCallback	(std::function<void(TWord)> _cb) { m_interruptServicedCallback = std::move(_cb); }
+		std::function<void(TWord)>		m_interruptServicedCallback;]=])
+g1_dsp_replace(dsp.cpp
+	[=[	void DSP::execInterrupt(const TWord vba)
 	{
-		uint64_t now = m_dspInstructionCounter ? *m_dspInstructionCounter : 0;
-		for(auto& entry : m_esais)
-		{
-			if(entry.esai == _esai)
-			{
-				entry.fineRxPeriod = _finePeriod;
-				entry.fineRxLastClock = now;
-				entry.fineRxExplicit = true;
-				break;
-			}
-		}
-		m_hasFineEsais = false;
-		for(const auto& entry : m_esais)
-			if(entry.finePeriod || entry.fineRxPeriod)
-			{ m_hasFineEsais = true; break; }
-	}
-
-	bool EsxiClock::shiftEsaiFineAnchor(const Esxi* _esai, const int64_t _cycles)]=])
-
-# G1-Emu skips whole iterations of the OS's idle loop (g1dsp.cpp, skipIdle) and must stop before
-# the next point where a peripheral is due, which can be a cycle deadline as well as an instruction one.
-g1_dsp_replace(peripherals.h
-	[=[		const uint64_t* getTargetClockPtr() const]=]
-	[=[		bool hasCycleDeadline() const { return m_hasCycleDeadline; }
-		uint64_t getTargetCycle() const { return m_targetCycle; }
-
-		const uint64_t* getTargetClockPtr() const]=])
+		pcCurrentInstruction = vba;]=]
+	[=[	void DSP::execInterrupt(const TWord vba)
+	{
+		if(m_interruptServicedCallback)
+			m_interruptServicedCallback(vba);	// G1-Emu
+		pcCurrentInstruction = vba;]=])
 
 # Cycle profiling dispatches separately, after the peripheral/interrupt checkpoint. The
 # ordinary exec path has no profiling hook or test. Interrupt vectors are observed through
-# the existing serviced callback, so their cycles are not charged to the interrupted PC.
+# the serviced callback above, so their cycles are not charged to the interrupted PC.
 g1_dsp_replace(dsp.h
 	[=[		ASMJIT_FORCE_INLINE void execInterpreter() noexcept]=]
 	[=[		template<typename Before, typename After>
@@ -421,38 +164,11 @@ g1_dsp_replace(dsp.h
 			m_interruptFunc(this);
 			const auto pc = getPC().toWord();
 			_before(pc);
-			if(g_jitPcGuard && pc >= m_jitEntriesSize)
-				onInvalidPC(pc);
-			else
-				m_jit.getTrampoline().execOne(&reg, pc, m_jitEntries[pc]);
+			m_jit.getTrampoline().execOne(&reg, pc, m_jitEntries[pc]);
 			_after();
 		}
 
 		ASMJIT_FORCE_INLINE void execInterpreter() noexcept]=])
-
-# When DSP code wrote to program memory that had a compiled block, the core destroyed that block
-# and also marked the address "volatile" for ever: from then on it compiled a block that stops
-# there, so everything around it ran one instruction per block. The G1's OS writes module code
-# into program memory on every patch load and every module or cable added from the editor, over
-# code compiled for the previous patch. The marks piled up and never went away, so the emulator
-# slowed down with each load until it was restarted: after 30 uploads DSP 0 ran the same
-# instructions in 3.3 times as many blocks, 25 % slower overall, and a heavy patch (fast
-# audio-rate modulation, WavetableSynth.pch) no longer fit in real time and crackled (#6).
-# Destroying the written block is enough to be correct: a block ends right after its
-# program-memory write, so it never runs code it has just changed, and G1-Emu does not link blocks,
-# so the next entry recompiles. G1_VOLATILE_P=1 brings back the core's marks, only to compare.
-g1_dsp_replace(jit.cpp
-	[=[				m_volatileP.insert(pMemWriteAddr);
-				break;]=]
-	[=[				static const bool keepVolatileP = std::getenv("G1_VOLATILE_P") != nullptr;
-				if(keepVolatileP)
-					m_volatileP.insert(pMemWriteAddr);
-				break;]=])
-g1_dsp_replace(jit.cpp
-	[=[#include "jit.h"]=]
-	[=[#include "jit.h"
-
-#include <cstdlib>]=])
 
 # Issue #17: a block the JIT cannot generate (asmjit out of memory, or code generation failing).
 # create() left the "create" stub in place and executed it, which called create() again with no
@@ -482,12 +198,12 @@ g1_dsp_replace(jitblockchain.cpp
 #include <cstdlib>]=])
 g1_dsp_replace(jitblockchain.cpp
 	[=[		emit(_pc);
-		if(_execute)
-			exec(_pc);]=]
+
+		if(m_generatingBlocks.empty()]=]
 	[=[		if(!emit(_pc))
 			return;	// the stub left in place would only call create() again
-		if(_execute)
-			exec(_pc);]=])
+
+		if(m_generatingBlocks.empty()]=])
 g1_dsp_replace(jitblockchain.cpp
 	[=[		auto* emitter = m_jit.acquireEmitter(_pc);
 
@@ -510,14 +226,6 @@ g1_dsp_replace(jitblockchain.cpp
 
 //		m_logger->addFlags]=])
 g1_dsp_replace(jitblockchain.cpp
-	[=[			LOG("JIT emitter init failed: " << initError << " - " << errString
-				<< "PC " << HEX(_pc));
-			m_jit.releaseEmitter(emitter);]=]
-	[=[			LOG("JIT emitter init failed: " << initError << " - " << errString
-				<< "PC " << HEX(_pc));
-			m_jit.setFailure(errString);
-			m_jit.releaseEmitter(emitter);]=])
-g1_dsp_replace(jitblockchain.cpp
 	[=[			LOG("FATAL: code generation failed for PC " << HEX(_pc));
 			m_jit.releaseBlockRuntimeData(b);]=]
 	[=[			LOG("FATAL: code generation failed for PC " << HEX(_pc));
@@ -525,10 +233,10 @@ g1_dsp_replace(jitblockchain.cpp
 			m_jit.releaseBlockRuntimeData(b);]=])
 g1_dsp_replace(jitblockchain.cpp
 	[=[			LOG("JIT failed: " << err << " - " << errString << "PC " << HEX(_pc));
-			m_jit.releaseBlockRuntimeData(b);]=]
+			m_jit.releaseEmitter(emitter);]=]
 	[=[			LOG("JIT failed: " << err << " - " << errString << "PC " << HEX(_pc));
 			m_jit.setFailure(errString);
-			m_jit.releaseBlockRuntimeData(b);]=])
+			m_jit.releaseEmitter(emitter);]=])
 g1_dsp_replace(jitblockchain.cpp
 	[=[		create(_pc, false);
 
@@ -557,4 +265,3 @@ endforeach()
 set_property(TARGET dsp56kEmu PROPERTY SOURCES "${g1_dsp_build_sources}")
 target_include_directories(dsp56kEmu BEFORE PUBLIC "${CMAKE_BINARY_DIR}/g1-dsp")
 target_include_directories(dsp56kEmu PRIVATE "${g1_dsp_source}")
-target_sources(dsp56kEmu PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../g1Lib/dsp56300.cpp")

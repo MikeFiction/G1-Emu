@@ -29,11 +29,17 @@ namespace g1
 		constexpr uint32_t g_dspClock = 82944000;
 		constexpr uint32_t g_cyclesPerFrame = g_dspClock / g_samplerate;	// 864
 
-		// The ESSIs run on the clock derived from their CRA (the core's "fine link" mode):
-		// 2*(PM+1)*24 cycles per word, 96 on the links between DSPs (PM=1: 9 words per sample,
-		// exactly what DMA4 sends each block) and 144 on DSP 3 towards the codec (PM=2). The base
-		// clock is only an upper bound: it has to be slower than both.
+		// The ESSIs run on the clock derived from their CRA: 2*(PM+1)*24 cycles per word, 96 on the
+		// links between DSPs (PM=1: 9 words per sample, exactly what DMA4 sends each block) and 144
+		// on DSP 3 towards the codec (PM=2), whose receiver takes the link's 96 all the same. The
+		// core's ESSI clock ticks at one rate and serves each direction of a port every (divider + 1)
+		// ticks, so the tick is the link's word: 96 cycles, 9 per sample. The codec's words into DSP 0
+		// come every 432 cycles, two per sample, which is 4.5 ticks: see codecTick().
 		constexpr uint32_t g_essiBaseCyclesPerWord = g_cyclesPerFrame / 2;
+		constexpr uint32_t g_essiTickCycles = 96;
+		constexpr uint32_t g_ticksPerSample = g_cyclesPerFrame / g_essiTickCycles;	// 9
+		constexpr uint32_t g_codecRxTicks = 4;
+		static_assert(g_codecRxTicks * 2 + 1 == g_ticksPerSample, "two codec words per sample, 4 and 5 ticks apart");
 
 		// In asynchronous mode the receiver uses the transmitter's clock (external SC0), not its
 		// own CRA. Every DSP transmitting down the chain has PM=1: 96 cycles per word. DSP 3 has
@@ -94,6 +100,12 @@ namespace g1
 		// G1_SINGLEOP_CACHE=1 turns it back on, only to compare.
 		config.cacheSingleOpBlocks = std::getenv("G1_SINGLEOP_CACHE") != nullptr;
 		config.maxDoIterations = 1;
+		// The OS writes module code into program memory on every patch load, over code compiled for
+		// the previous patch. Marking each such address volatile for ever made everything around it
+		// run one instruction per block, slower with each load (#6). Destroying the written block is
+		// enough: a block ends right after its program-memory write, and blocks are not linked.
+		// G1_VOLATILE_P=1 brings the marks back, only to compare.
+		config.trackVolatilePMemory = std::getenv("G1_VOLATILE_P") != nullptr;
 		m_dsp.getJit().setConfig(config);
 
 		// Program memory full of RTS: a jump into garbage does not compile odd things.
@@ -106,11 +118,7 @@ namespace g1
 		auto& clock = m_periph.getEssiClock();
 		clock.setClockSource(dsp56k::EsxiClock::ClockSource::Cycles);
 		clock.setSamplerate(g_samplerate * 2);
-		clock.setCyclesPerSample(g_essiBaseCyclesPerWord);
-
-		// Must be enabled before the program writes CRA.
-		for(auto* essi : {&m_periph.getEssi0(), &m_periph.getEssi1()})
-			essi->setFineLinkMode(true);
+		clock.setCyclesPerSample(g_essiTickCycles);
 
 		// Link by position: when the receiver asks for a frame, the emulator looks at which ring
 		// word its DMA will write next and gives it that channel from the previous DSP's block. So
@@ -146,10 +154,6 @@ namespace g1
 		m_periph.getEssi1().writeEmptyAudioIn(64);
 
 		hdi08().setRXRateLimit(0);
-		// No arbitration: the G1's host commands are fast interrupts (a single movep in the vector,
-		// no JSR/RTI). Gearmulator's arbitration waits for the RTI on the stack to consider the
-		// command done, and with these it stayed "busy" forever.
-		hdi08().setHostCommandArbitration(false);
 		m_dsp.setInterruptServicedCallback([this](const dsp56k::TWord _vba)
 		{
 			++m_servicedVectors[_vba];
@@ -324,7 +328,7 @@ namespace g1
 			else if(m_interpreter)
 				m_dsp.execInterpreter();
 			else
-				m_dsp.execInlinePeripheralCheck();	// the core's exec(), with the no-op checkpoint tested inline
+				m_dsp.exec();
 			if(!m_interpreter && m_dsp.getJit().hasFailed() && !onJitFailure())
 			{
 				runDead(_cycles);
@@ -379,11 +383,6 @@ namespace g1
 				k = std::min(k, m_nextIrqd > cyc ? (m_nextIrqd - cyc) / dCyc : 0);
 				const uint64_t due = m_periph.getTargetClock();
 				k = std::min(k, due > ins ? (due - ins) / dIns : 0);
-				if(m_periph.hasCycleDeadline())
-				{
-					const uint64_t dueCycle = m_periph.getTargetCycle();
-					k = std::min(k, dueCycle > cyc ? (dueCycle - cyc) / dCyc : 0);
-				}
 				// runUntil calls drainAudio after the block that crosses a multiple of 1024 cycles, and
 				// drainAudio is where a new CRA anchors an ESSI's fine clock: a skip must not cross one.
 				k = std::min(k, ((cyc | 0x3ff) - cyc) / dCyc);
@@ -514,7 +513,9 @@ namespace g1
 		// in which it will be received.
 		for(uint32_t s = 0; s < 2; ++s)
 		{
-			const auto want = (m_dsp.getCycles() + s * g_linkCyclesPerWord) / g_cyclesPerFrame;
+			// When the slot is due, not when the DSP got round to it: near a block's edge that
+			// difference picks the wrong block.
+			const auto want = (m_periph.getEssiClock().getSlotClock() + s * g_linkCyclesPerWord) / g_cyclesPerFrame;
 			const auto block = want > g_linkLatency ? want - g_linkLatency : 0;
 			// Blocks no longer needed are dropped. If the one needed is missing (the previous DSP
 			// is stopped reloading, without IRQD), silence: repeating an old one would buzz.
@@ -602,6 +603,20 @@ namespace g1
 			transferToHost();
 	}
 
+	// Called by DSP 0's ESSI clock after every tick. Its codec receivers take a word every 4.5 ticks,
+	// which a divider cannot say: they run every 4 ticks, and once per sample (9 ticks) their counter
+	// is set one tick back, so the next word waits 5. Two words per 864 cycles, spaced 5 and 4. The
+	// transmitters have divider 0, so their counter is 0 after every tick and setting it changes nothing.
+	void Dsp::codecTick()
+	{
+		if(++m_codecTicks < g_ticksPerSample)
+			return;
+		m_codecTicks = 0;
+		auto& clock = m_periph.getEssiClock();
+		for(auto* essi : {&m_periph.getEssi0(), &m_periph.getEssi1()})
+			clock.setEsaiCounter(essi, 0, -1);
+	}
+
 	// Collects what left the ESSIs (for flushAudio) and measures the peaks.
 	void Dsp::drainAudio()
 	{
@@ -612,17 +627,27 @@ namespace g1
 			if(cra != m_craSeen[e])
 			{
 				m_craSeen[e] = cra;
+				uint32_t tx = essiWordCycles(cra), rx = tx;
 				if(m_hasUpstream)
 				{
-					if(essiWordCycles(cra) != g_linkCyclesPerWord && essiWordCycles(cra) < g_essiBaseCyclesPerWord)
-						m_periph.getEssiClock().setEsaiFinePeriod(essi, g_linkCyclesPerWord);
+					// The receiver takes the upstream DSP's link clock, whatever its own CRA says
+					// (g_linkCyclesPerWord); DSP 3's codec transmitter goes with it.
+					if(tx < g_essiBaseCyclesPerWord)
+						tx = rx = g_linkCyclesPerWord;
 				}
+				const auto divider = [](const uint32_t _cycles)
+				{
+					return std::max<uint32_t>(1, (_cycles + g_essiTickCycles / 2) / g_essiTickCycles) - 1;
+				};
+				if(m_hasUpstream)
+					m_periph.getEssiClock().setEsaiDivider(essi, divider(tx), divider(rx));
 				else
 				{
-					// DSP 0's codec receiver supplies two words per 96 kHz sample: its real
-					// frame is 432 DSP cycles per word. This is RX-only; the same ESSI still
+					// DSP 0's codec receiver supplies two words per 96 kHz sample, one every 432
+					// cycles: 4 ticks, and a fifth every other word (codecTick). The same ESSI still
 					// transmits the 96-cycle DSP link to DSP 1.
-					m_periph.getEssiClock().setEsaiFineRxPeriod(essi, g_essiBaseCyclesPerWord);
+					m_periph.getEssiClock().setEsaiDivider(essi, divider(tx), g_codecRxTicks - 1);
+					m_periph.getEssiClock().setTickCallback([this] { codecTick(); });
 				}
 			}
 			auto& out = essi->getAudioOutputs();
@@ -722,7 +747,7 @@ namespace g1
 			runUntil(m_dsp.getCycles() + 16);
 		if(m_dsp.hasPendingExternalInterrupts())
 			return;	// the DSP does not service them (stopped): better to lose the command than hang
-		hdi08().writeHostCommand(_vector);
+		hdi08().injectHostCommand(_vector);
 		++m_hostCommands;
 		transferToHost();
 	}

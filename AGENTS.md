@@ -9,7 +9,8 @@ about each one and the traps around it.
 Hard rules:
 - **Everything in this repo is in English**: code, comments, messages, docs, changelog, commits.
 - ROMs never go into Git nor into a release (`Roms/` is ignored).
-- Do not modify `~/src/gearmulator-md-mm` (third-party clone, GPLv3): it is linked from here.
+- Do not modify `~/src/gearmulator-md-mm` nor `~/src/dsp56300-upstream` (third-party clones,
+  GPLv3): they are linked from here. Core fixes go in `cmake/Dsp56300.cmake` / `cmake/Mc68k.cmake`.
 - **Every change that goes into the repo gets its line in `CHANGELOG.md`, in the same commit.**
   No exceptions. Newest first, with who did it, what changes and the real verification; mark
   "local change, not committed" if there is no commit yet.

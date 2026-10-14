@@ -47,6 +47,26 @@ cloned read-only at `~/src/dsp56300-upstream`:
 
 Full per-patch list: rerun the script (below).
 
+## What doing it turned up (2026-10-14, same day)
+
+Steps 1-3 are done on the branch `core-upstream`; the review above underestimated step 2.
+`overlaycheck.py` only looks at our patches' anchors, and G1-Emu also **called API that only the
+fork has**: the ESSI "fine link" mode and its per-port periods, HDI08 host-command arbitration,
+cycle deadlines in the peripherals, an inline peripheral check and a callback when an interrupt is
+serviced (all from one fork commit, `00c48833`, 1,600 lines; the fork left upstream on
+2026-08-29). Javier chose to follow upstream rather than carry that commit, so G1-Emu now uses
+upstream's own means (`NOTES.md`, "On upstream's core") and keeps **23 patches** (were 45),
+`overlaycheck.py` reports all 23 apply to `da2ff232`. Findings on the way, each fixed and
+measured: upstream's ESSI clock fell behind in busy patches (one slot per call, and starved while
+interrupts kept coming); link words were picked by the DSP's cycle count instead of the slot's
+due time (a residual crackle `main` still has); the clock's cycles-per-instruction ratio rounded
+to a whole number cost a third of the speed; upstream's 2-cycle `x:aa` write loses sample clocks
+on the G1; a REP skipped the block limit. Five of the 23 are candidates for upstream PRs
+(fixed-point ratio, several slots per call, peripherals in `execInterrupts`, `getSlotClock`, the
+REP limit).
+
+Gate results are in the CHANGELOG entry of the change. Step 4 (speed) not started.
+
 ## Plan
 
 1. **Branch** `core-upstream` in G1-Emu. Do not touch `~/src/gearmulator-md-mm`: Elektron-Emu

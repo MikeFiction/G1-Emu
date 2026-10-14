@@ -7,6 +7,31 @@ Older entries cite their commit by hand.
 
 ## 2026-10-14
 
+- [Core] **The DSP56300 core from upstream, branch `core-upstream` (Claude, asked by Javier).** The DSP core now builds from a clone of `dsp56300/dsp56300`
+  (`G1_DSP56300_DIR`, default `~/src/dsp56300-upstream`, pinned to `da2ff232` in CI); the 68k core
+  still comes from gearmulator-md-mm. G1-Emu had also used API only joelanders' fork has (ESSI
+  "fine link" mode, host-command arbitration, cycle deadlines, a serviced-interrupt callback): it
+  now uses upstream's ESSI clock with a 96-cycle tick and per-direction dividers (DSP 0's codec
+  input, 4.5 ticks per word, through `Dsp::codecTick`), `injectHostCommand`, and
+  `trackVolatilePMemory`. `cmake/Dsp56300.cmake` goes from 45 patches to 23, all of which apply;
+  `g1Lib/dsp56300.cpp` is gone (MOVEM aa and DO FOREVER are upstream's). New patches for what the
+  move turned up: the ESSI clock serves up to 8 slots per call and runs while interrupts keep
+  coming (it fell millions of cycles behind in busy patches), its cycles-per-instruction ratio is
+  in fixed point (rounded to a whole number it cost a third of the speed), link words are taken by
+  the slot's due time (`getSlotClock`), a REP no longer skips the block limit; `x:aa` writes stay at
+  one cycle (upstream's two lose ~6,000 sample clocks in 3 s with BellsMorph). Details in `NOTES.md`
+  ("On upstream's core") and `docs/core-upgrade-plan.md`. Checked against a clean build of `main`:
+  `ctest` 12/12 (g1dspcheck's idle-port test rewritten for the new clock); `jitdiff` 12-14
+  disagreements per DSP against main's 33-41, none new, 0 in block mode; bench 0 overruns, faster
+  on all ten (+5 % to +40 %, BellsMorph 3.39× → 3.61×); module battery 62/19/11/17 as main, AudioIn
+  440 Hz at −62 dBFS; threaded and serial WAVs byte-identical; against main's golden WAVs FM303 and
+  SimpleOSC identical, the rest same level, partials and bands except that BellsMorph and
+  WavetableSynth lose spurious energy above 20 kHz (−21 → −67 dB and −42 → −75 dB of the total), a
+  residual crackle `main` still has; 18 uploads in a row, then WavetableSynth, sound as one upload
+  does; korg.pch as main, no hang; `upload-e2e.sh` 6 of 6 packets answered; `g1vst3check` default
+  and `--slots` fail here exactly as main's build does (empty program 1 in this machine's banks, no
+  virtual PC Ports), `--settings` and `--buffer-change` pass. CI not run yet.
+
 - [Docs] **A plan to move to upstream's DSP56300 core (Claude, asked by Javier).**
   `docs/core-upgrade-plan.md`: what upstream has fixed since our fork (CMPM, GT/LE, `x:aa`
   cycles, DMA by request, the moving loop end), which of our 45 core patches still apply (19),

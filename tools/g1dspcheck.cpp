@@ -204,11 +204,12 @@ namespace
 		require((m.dsp.regs().x.var & 0xffffff) == 0x550000, "a host command starves while other interrupts keep coming");
 	}
 
-	// An ESSI on the fine schedule (the links between DSPs) that sat idle owes nothing for that
-	// time. Without the overlay's cap the clock emitted every frame of the gap in one call: on a
-	// real patch (nmedit's korg.pch) DSP 0 woke up after 400 million cycles and pushed millions of
-	// frames into a ring of 32768, and the write callback waited for room forever. The callback
-	// here only counts, so a regression fails the test instead of hanging it.
+	// A link port between DSPs that sat idle owes nothing for that time. With the fork's fine
+	// schedule each port kept its own anchor, which did not move while the port was off: on a real
+	// patch (nmedit's korg.pch) DSP 0 woke up after 400 million cycles and pushed millions of frames
+	// into a ring of 32768, and the write callback waited for room forever. The core's clock now
+	// moves for every port at once; this checks a port that comes back after a long time off runs at
+	// its normal rate at once. The callback here only counts, so a regression fails, not hangs.
 	void idleLinkPort()
 	{
 		dsp56k::DefaultMemoryValidator validator;
@@ -220,38 +221,40 @@ namespace
 		auto& clock = periph.getEssiClock();
 		clock.setClockSource(dsp56k::EsxiClock::ClockSource::Cycles);
 		clock.setSamplerate(96000 * 2);
-		clock.setCyclesPerSample(432);
+		clock.setCyclesPerSample(96);	// g1dsp.cpp's tick
 
 		auto& essi = periph.getEssi0();
-		essi.setFineLinkMode(true);
+		clock.setEsaiDivider(&essi, 0);	// 96 cycles per word: the link between DSPs
 		uint64_t frames = 0;
 		essi.setWriteTxCallback([&frames](uint64_t&, const dsp56k::Audio::TxFrame&) { ++frames; });
 		essi.setReadRxCallback([](uint64_t&, dsp56k::Audio::RxFrame& _frame) { _frame.resize(2); });	// the default waits for input
-		essi.writeCRA(0x181801);	// 96 cycles per word: the link between DSPs
+		essi.writeCRA(0x181801);
 		essi.writeCRB(0x0328b0);	// transmitter on
 		require(essi.hasEnabledTransmitters() != 0, "the transmitter did not turn on");
 
-		// Running normally: a frame is two words, so one every 192 cycles: 50 in 100 word periods.
-		for(uint32_t i = 0; i < 100; ++i)
+		auto run = [&](const uint64_t _cycles)
 		{
-			dsp.fastForward(0, 96);
-			clock.exec();
-		}
+			for(uint64_t c = 0; c < _cycles; c += 96)
+			{
+				dsp.fastForward(0, 96);
+				clock.exec();
+			}
+		};
+
+		// Running normally: a frame is two words, so one every 192 cycles: 50 in 100 word periods.
+		run(9600);
 		require(frames >= 48 && frames <= 52, "a port running normally must emit one frame per two word periods");
 
-		// Idle for 400 million cycles (nothing served the clock), then it wakes up.
+		// Off for 4 million cycles while the clock goes on, then on again.
+		essi.writeCRB(0x0028b0);	// transmitter and receiver off
+		run(4000000);
 		frames = 0;
-		dsp.fastForward(0, 400000000);
-		clock.exec();
-		require(frames <= 64, "an idle port emitted the frames of its whole idle time at once");
+		essi.writeCRB(0x0328b0);
+		run(96);
+		require(frames <= 2, "a port that was off emitted the frames of its idle time at once");
 
-		// And it carries on at the normal rate afterwards.
 		frames = 0;
-		for(uint32_t i = 0; i < 100; ++i)
-		{
-			dsp.fastForward(0, 96);
-			clock.exec();
-		}
+		run(9600);
 		require(frames >= 48 && frames <= 52, "the port did not go back to its normal rate");
 	}
 
