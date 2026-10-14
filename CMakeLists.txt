@@ -8,6 +8,12 @@ set(GEARMULATOR_DIR "$ENV{HOME}/src/gearmulator-md-mm" CACHE PATH "Clone of joel
 if(NOT EXISTS "${GEARMULATOR_DIR}/source/mc68k")
 	message(FATAL_ERROR "mc68k not found in GEARMULATOR_DIR=${GEARMULATOR_DIR}")
 endif()
+# The DSP56300 core alone comes from upstream (dsp56300/dsp56300), which has moved on from the
+# fork's copy (docs/core-upgrade-plan.md). The 68k core and the MIDI bridge stay on the fork.
+set(G1_DSP56300_DIR "$ENV{HOME}/src/dsp56300-upstream" CACHE PATH "Clone of dsp56300/dsp56300")
+if(NOT EXISTS "${G1_DSP56300_DIR}/source/dsp56kEmu")
+	message(FATAL_ERROR "dsp56kEmu not found in G1_DSP56300_DIR=${G1_DSP56300_DIR}")
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -29,7 +35,7 @@ endif()
 include(${GEARMULATOR_DIR}/base.cmake)
 include(CTest)
 
-# From Gearmulator's tree only the cores are needed (68k, DSP, hardwareLib).
+# From Gearmulator's tree only the 68k core and hardwareLib's MIDI are needed.
 foreach(synth OSIRUS OSTIRUS VAVRA XENIA NODALRED2X JE8086 ELEKTRON)
 	set(${CMAKE_PROJECT_NAME}_SYNTH_${synth} OFF CACHE BOOL "" FORCE)
 endforeach()
@@ -40,7 +46,7 @@ set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 # Only the cores and the MIDI bridge the G1 needs are included.
 set(ASMJIT_NO_INSTALL TRUE)
 set(BUILD_SHARED_LIBS OFF)
-add_subdirectory(${GEARMULATOR_DIR}/source/dsp56300/source gearmulator/dsp56300 EXCLUDE_FROM_ALL)
+add_subdirectory(${G1_DSP56300_DIR}/source dsp56300 EXCLUDE_FROM_ALL)
 add_subdirectory(${GEARMULATOR_DIR}/source/mc68k gearmulator/mc68k EXCLUDE_FROM_ALL)
 add_library(g1Midi STATIC
 	${GEARMULATOR_DIR}/source/hardwareLib/sciMidi.cpp

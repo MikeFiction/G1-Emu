@@ -60,12 +60,21 @@ jobs:
         with:
           path: G1-Emu
 
-      - name: Gearmulator (the DSP and 68k cores)
+      - name: Gearmulator (the 68k core)
         uses: actions/checkout@v4
         with:
           repository: joelanders/gearmulator-md-mm
           ref: mdmm-v0.1.0-alpha.13
           path: gearmulator-md-mm
+          submodules: recursive
+
+      # The DSP56300 core comes from upstream (docs/core-upgrade-plan.md). Pinned.
+      - name: DSP56300 core (upstream)
+        uses: actions/checkout@v4
+        with:
+          repository: dsp56300/dsp56300
+          ref: da2ff232d965c9c3da587820baae38e2b29a5879
+          path: dsp56300
           submodules: recursive
 
       - name: JUCE
@@ -96,6 +105,7 @@ jobs:
         run: >
           cmake -B build -S G1-Emu -DCMAKE_BUILD_TYPE=Release
           -DGEARMULATOR_DIR=${{ github.workspace }}/gearmulator-md-mm
+          -DG1_DSP56300_DIR=${{ github.workspace }}/dsp56300
           -DG1_JUCE_DIR=${{ github.workspace }}/JUCE
           -DG1_CLAP_DIR=${{ github.workspace }}/clap-juce-extensions
           -DG1_BACKEND=${{ matrix.backend }}

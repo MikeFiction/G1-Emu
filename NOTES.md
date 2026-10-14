@@ -349,8 +349,10 @@ first note-off. `g1patchtest` shows it with `G1_SEQ=+60,+64,-64,-60 G1_CHORD=1`.
   asks for a frame, the emulator looks at which ring word its DMA will write next (DDR) and hands
   it that channel from the block 8 blocks ago (a fixed ~83 µs delay per DSP, so it never runs ahead
   of the threads). If that block is missing (the previous DSP is stopped reloading), silence.
-- The ESSIs run at the rate derived from their CRA (Gearmulator fork's "fine link" mode); the
-  receivers of DSPs with an upstream DSP are clocked at 96 cycles per word.
+- The ESSIs run at the rate derived from their CRA, set from `drainAudio` on the core's ESSI clock
+  (a 96-cycle tick and a divider per direction; see "On upstream's core" below); the receivers of
+  DSPs with an upstream DSP are clocked at 96 cycles per word. A receiver takes each word from the
+  block whose slot was due, by the clock's count, not by the DSP's cycle count.
 
 ## Outputs, inputs and level
 
@@ -421,7 +423,53 @@ first note-off. `g1patchtest` shows it with `G1_SEQ=+60,+64,-64,-60 G1_CHORD=1`.
 
 ## DSP core fixes (`cmake/Dsp56300.cmake`)
 
-Applied to a build copy; the Gearmulator clone is never modified.
+Applied to a build copy; the clones are never modified.
+
+### On upstream's core (branch `core-upstream`, 2026-10-14)
+
+The DSP56300 core now comes from upstream (`dsp56300/dsp56300`, `G1_DSP56300_DIR`), not from
+joelanders' fork inside gearmulator-md-mm, which still gives the 68k core. The fork had left
+upstream on 2026-08-29, and G1-Emu used API only the fork has (one commit of 1,600 lines: the
+ESSI "fine link" mode, host commands with arbitration, cycle deadlines for the peripherals, a
+callback when an interrupt is serviced). On upstream, G1-Emu uses upstream's own means instead,
+and keeps 23 small patches. What changed, and what the move turned up:
+
+- **The ESSI clock.** Upstream's clock ticks at one rate and serves each direction of a port every
+  (divider + 1) ticks. The tick is the link's word, 96 cycles (`g1dsp.cpp`, `g_essiTickCycles`).
+  DSP 0's codec receivers take a word every 432 cycles, 4.5 ticks: they run every 4 ticks and once
+  per sample their counter is set one tick back (`Dsp::codecTick`, through the clock's public tick
+  callback), so two words per sample, 5 and 4 ticks apart. AudioIn still measures 440 Hz at
+  −62 dBFS. A 48-cycle tick, which divides 432 exactly, cost 20 % of the speed.
+- **It fell behind in busy patches, and the links went wrong.** Upstream serves one slot per call,
+  so that the DSP can take each request before the next one, and calls the clock between JIT
+  blocks. Once a patch fills the DSPs (BellsMorph), the blocks last longer than 96 cycles on
+  average and the clock ran at ~72 % of the DSP: millions of cycles behind after a few seconds.
+  It now serves up to 8 slots per call while it is behind. It also starved while interrupts kept
+  coming: the core runs the peripherals only when no unmasked interrupt is pending, so the
+  overlay's call in `execInterrupts` now runs them too, as it already collected host commands.
+- **Which block a link word belongs to** is chosen by when its slot was due
+  (`EsxiClock::getSlotClock`, added by the overlay), not by the DSP's cycle count when it got round
+  to it, which is a few dozen cycles off. Near a block's edge the cycle count picked the next or
+  previous block: a sample out of place now and then. That was in `main` too, under the fork: its
+  heavy patches carried energy above 20 kHz (BellsMorph −21 dB, WavetableSynth −42 dB of the
+  total) that the branch does not (−67 and −75 dB), with the same partials and level.
+- **The clock's cycles-to-instructions ratio** was rounded up to a whole number (2.1 cycles per
+  instruction taken as 3): every wait ended two thirds of the way and the clock was asked again.
+  Now in fixed point.
+- **`x:aa` / `y:aa` moves:** upstream charges 1 cycle for the read and 2 for the write; we keep 1
+  for both. With 2, BellsMorph loses ~6,000 sample clocks in 3 s on DSP 0.
+- **DMA:** upstream completes a DE-triggered block two cycles per word after it moves the data
+  (the data moves at once, which is what mattered to the G1); dual counters on both sides and fixed
+  to fixed are upstream's now; block per request without clearing DE (DTM=100) is still ours.
+- **Upstream now covers:** short `MOVEM`, `DO FOREVER` and FV in nested loops (decided when the
+  block is compiled), CMPM, GT/LE on both architectures, the volatile-P marks (`JitConfig::
+  trackVolatilePMemory`, off for the G1), and the idle link port that deadlocked on `korg.pch` (its
+  clock moves for every port at once, so a port that was off owes nothing).
+- **A REP and its instruction** are one unit upstream, but the REP still skipped the per-block
+  limit, so with one instruction per block the next instruction joined it: the cycle profile
+  charged it to the REP (`g1dspcheck`).
+
+The fork-era items below are kept for the history; the ones upstream covers are no longer patched.
 
 - JIT: short `MOVEM`, `DO FOREVER` (FV flag), nested DO/ENDDO saving FV. One form for both
   architectures. `g1dspcheck` exercises finite, forever and nested forms with JIT block sizes 1

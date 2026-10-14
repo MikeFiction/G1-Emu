@@ -137,10 +137,14 @@ that does not sound, or sounds strange, see
 
 Linux (tested on Arch/CachyOS with PipeWire). You need:
 
+- A clone of [dsp56300](https://github.com/dsp56300/dsp56300), the DSP56300 core, with its
+  submodule (`git clone --recurse-submodules`), in `~/src/dsp56300-upstream` (or
+  `-DG1_DSP56300_DIR=...`). CI pins the commit it tests (`.github/workflows/build.yml`).
 - A clone of [gearmulator-md-mm](https://github.com/joelanders/gearmulator-md-mm) in
-  `~/src/gearmulator-md-mm` (or `-DGEARMULATOR_DIR=...`). The version tested in CI is
-  **`mdmm-v0.1.0-alpha.13`**. The clone is not modified: the core fixes the G1 needs are applied to
-  a copy at build time (`cmake/Dsp56300.cmake`).
+  `~/src/gearmulator-md-mm` (or `-DGEARMULATOR_DIR=...`), for the 68k core. The version tested in
+  CI is **`mdmm-v0.1.0-alpha.13`**.
+- Neither clone is modified: the core fixes the G1 needs are applied to a copy at build time
+  (`cmake/Dsp56300.cmake`, `cmake/Mc68k.cmake`).
 - ALSA, and JACK (pipewire-jack) for the four outputs and the inputs.
 - JUCE for the window and the test bench: by default the one inside Animatek NME next to this repo
   (`../Nomad2026/JUCE`), or `-DG1_JUCE_DIR=...`. Without JUCE only the console version is built.

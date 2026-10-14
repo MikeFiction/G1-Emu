@@ -492,11 +492,11 @@ int main(int argc, char** argv)
 						std::printf(" [E%u s%u tx%u %06x]", e, sl, l, m[e][sl][l]);
 		std::printf("  slots E0=%u E1=%u  HOTX queued=%zu  CPU accepts=%d  HSR=%06x HCR=%06x PC=$%06x\n", d.lastSlotCount(0), d.lastSlotCount(1),
 			d.hdi08().txData().size(), mc.getHostPort(i).canReceiveData() ? 1 : 0, d.hdi08().readStatusRegister(), d.hdi08().readControlRegister(), d.dsp().getPC().toWord());
-		std::printf("        SR=%06x OMR=%06x pending=%d  HC $7a masked=%d  HC $64=%d  IRQD=%d  IPRC=%06x IPRP=%06x  HCbusy=%d HCpend=%d\n",
+		std::printf("        SR=%06x OMR=%06x pending=%d  HC $7a masked=%d  HC $64=%d  IRQD=%d  IPRC=%06x IPRP=%06x  HCqueued=%d\n",
 			d.dsp().getSR().toWord(), d.dsp().regs().omr.var, d.dsp().hasPendingInterrupts() ? 1 : 0,
 			d.dsp().isInterruptMasked(0x7a) ? 1 : 0, d.dsp().isInterruptMasked(0x64) ? 1 : 0, d.dsp().isInterruptMasked(0x16) ? 1 : 0,
 			d.periph().read(0xffffff, dsp56k::Instruction::Invalid), d.periph().read(0xfffffe, dsp56k::Instruction::Invalid),
-			d.hdi08().hostCommandBusy() ? 1 : 0, d.hdi08().hostCommandPending() ? 1 : 0);
+			d.dsp().hasPendingExternalInterrupts() ? 1 : 0);
 		{
 			auto rd = [&](dsp56k::TWord a) { return d.periph().read(a, dsp56k::Instruction::Invalid); };
 			std::printf("        P:17=%06x X:FFF3=%06x TX0=%06x TX1=%06x  ESSI0 CRA=%06x CRB=%06x TSMA=%06x TSMB=%06x SSISR=%06x | ESSI1 CRA=%06x CRB=%06x TSMA=%06x | Y:6C0..6C3=%06x %06x %06x %06x  Y:6E0..6E3=%06x %06x %06x %06x\n",
