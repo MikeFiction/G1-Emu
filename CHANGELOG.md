@@ -5,6 +5,23 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-14
+
+- [Fix] **Crackles in patches that fill the DSPs, such as BellsMorph (Claude, reported on YouTube
+  by Sergio Frías, asked by Javier).** `BellsMorph.pch` (factory presets 1.10, eight voices with
+  two Delays each) crackled, less without its Delays. DSP 0 lost ~60 sample clocks a second: its
+  audio input's DMA ends twice per sample (vector `$1E`), the core queued every one of those
+  interrupts and serviced none during the sample routine, so up to six piled up and the next IRQD
+  waited behind them until the sample clock after it found it still pending. On the chip a DMA
+  interrupt is a status bit: the core now queues one only if it is not queued already
+  (`cmake/Dsp56300.cmake`; `NOTES.md`). Checked: BellsMorph 251 lost sample clocks in 4 s → 0 on
+  every DSP; the bench has 0 everywhere and now includes BellsMorph (`tools/bench/patches.txt`);
+  the 13 tests pass; the module battery gives the same 62/19/11/17 and AudioIn still 440 Hz at
+  −62 dBFS. Golden WAVs re-recorded: SimpleOSC, FM303 and progger are byte-identical; WavetablePad
+  is cleaner (spectral flatness 0.046 → 0.024) and WavetableSynth slightly (0.300 → 0.278), with the
+  same pitch and level; the rest keep pitch, level and envelope (Grainalizzer's grains fall
+  differently).
+
 ## 2026-10-13
 
 - [Docs] **Release notes for v0.1.0-alpha.20 (Claude, asked by Javier).** `docs/release-notes.md`:

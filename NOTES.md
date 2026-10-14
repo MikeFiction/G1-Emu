@@ -249,6 +249,19 @@ first note-off. `g1patchtest` shows it with `G1_SEQ=+60,+64,-64,-60 G1_CHORD=1`.
   (`cmake/Dsp56300.cmake`, `DSP::execInterrupts`), and `runUntil` injects an IRQD only when the last
   one has been serviced, as a pin would (`m_irqdPending`, cleared in the serviced callback and in
   `armBoot`). The latch alone was tried and did not get the ACK; the core fix alone was not tried.
+- **DMA interrupts piled up the same way, and cost samples** (2026-10-14, `BellsMorph.pch` from the
+  1.10 factory presets, reported on YouTube as crackles that go away without its two Delays). DSP 0
+  ends a DMA3 transfer of its audio input twice per sample (vector `$1E`, a one-`movep` fast
+  interrupt). The core queues every interrupt in order and services none while a long interrupt
+  runs, so with the sample routine taking ~850 of the 864 cycles the queue held up to six `$1E`,
+  and the next IRQD waited behind them: with the DSP idle at `$16C`, interrupts unmasked, the IRQD
+  had been pending 835–870 cycles when the next sample clock found it and was lost (~60 a second).
+  It looked like the emulator charging too many cycles, and counting one input word per sample
+  instead of two hid it, but the OS programs two (CRA `$181801`: DC = 1). On the chip a DMA
+  channel's interrupt is a status bit, so a second request while one waits is the same request:
+  the core now queues a DMA interrupt only if it is not queued already (`cmake/Dsp56300.cmake`,
+  `DSP::isInterruptQueued`). BellsMorph: 251 lost samples in 4 s → 0. Found by logging, at each
+  lost sample clock, the PC, SR, processing mode and the queue (length and head).
 - **PIDs:** each upload gets a patch ID from the OS (ACK `$36`). `g1boot ... replay` rewrites the
   PID of Parameter (cc `$13`), PatchModification (cc `$17`, except `$41`) and PatchPacket (cc
   `$1C–$1F` without the command bit) messages with the one the OS gave, and redoes the checksum

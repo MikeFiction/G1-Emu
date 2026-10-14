@@ -124,6 +124,53 @@ g1_dsp_replace(dsp.cpp
 		processExternalInterrupts();	// G1-Emu: host commands must not wait for an idle DSP
 ]=])
 
+# A DMA channel's interrupt is a status bit on the chip: a second end of transfer while the first
+# is still waiting is the same request. The core queued every one, in order, and serviced none of
+# them while a long interrupt (the sample routine) ran. DSP 0 ends a transfer of its audio input
+# (DMA3, vector $1E) twice per sample, so with a patch the OS had filled to its budget the queue
+# reached six of them, the next IRQD waited behind them, and the sample clock after it found it
+# still pending and was lost: ~60 a second with BellsMorph.pch, a crackle. Its handler copies a
+# register, so servicing it once loses nothing. A DMA interrupt is now queued only if it is not
+# queued already.
+g1_dsp_replace(dsp.h
+	[=[		bool			hasPendingInterrupts			() const
+		{]=]
+	[=[		// G1-Emu: how many times each vector (below Vba_End, 0x100) is in m_pendingInterrupts
+		uint8_t			m_queuedVectors[0x100] = {};
+		bool			isInterruptQueued				(const TWord _vba) const { return _vba < 0x100 && m_queuedVectors[_vba]; }
+
+		bool			hasPendingInterrupts			() const
+		{]=])
+g1_dsp_replace(dsp.cpp
+	[=[			m_processingMode = FastInterrupt;
+			m_pendingInterrupts.pop_front();
+		}
+
+		execInterrupt(vba);]=]
+	[=[			m_processingMode = FastInterrupt;
+			m_pendingInterrupts.pop_front();
+			if(vba < 0x100)
+				--m_queuedVectors[vba];
+		}
+
+		execInterrupt(vba);]=])
+g1_dsp_replace(dsp.cpp
+	[=[	bool DSP::injectInterrupt(uint32_t _interruptVectorAddress)
+	{
+		m_pendingInterrupts.push_back({_interruptVectorAddress});
+]=]
+	[=[	bool DSP::injectInterrupt(uint32_t _interruptVectorAddress)
+	{
+		m_pendingInterrupts.push_back({_interruptVectorAddress});
+		if(_interruptVectorAddress < 0x100)
+			++m_queuedVectors[_interruptVectorAddress];
+]=])
+g1_dsp_replace(dma.cpp
+	[=[		if(bitvalue(m_dcr, Die))
+			m_peripherals.getDSP().injectInterrupt(Vba_DMAchannel0 + (m_index<<1));]=]
+	[=[		if(bitvalue(m_dcr, Die) && !m_peripherals.getDSP().isInterruptQueued(Vba_DMAchannel0 + (m_index<<1)))
+			m_peripherals.getDSP().injectInterrupt(Vba_DMAchannel0 + (m_index<<1));]=])
+
 # CMPM compares magnitudes, and alu_cmp takes the absolute value of its operand in place. When the
 # operand is an accumulator, decode_JJJ_read_56 hands over the JIT's cached register for it, not a
 # copy, so the rest of the block saw |a| instead of a, and if a was already dirty (`sub x1,b a1,a`

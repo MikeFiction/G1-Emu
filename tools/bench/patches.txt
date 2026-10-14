@@ -8,3 +8,4 @@ WindowLicker|/mnt/ARCHIVOS/Librerias/NordModular/011_patches/Adonyl/WindowLicker
 FM303|/mnt/ARCHIVOS/Librerias/NordModular/011_patches/Adonyl/FM303.pch|60|
 4VoiceChoir|/mnt/ARCHIVOS/Librerias/NordModular/011_patches/Allder_Andy/4VoiceChoir.pch|60|
 progger|/mnt/SPEED/CODE/Nomad2026/nmedit/jMod/src/patches/progger.pch|60|G1_CLOCKSRC=1
+BellsMorph|/mnt/ARCHIVOS/Librerias/NordModular/011_patches/Factory_Presets/Factory_Presets_Version_1.10/BellsMorph.pch|60|
