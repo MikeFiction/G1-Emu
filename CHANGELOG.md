@@ -7,6 +7,10 @@ Older entries cite their commit by hand.
 
 ## 2026-10-14
 
+- [Docs] **README: a new picture of the panel (Javier's, added by Claude).** `docs/g1gui.png` now
+  shows a patch loaded (Big Phasing Pad), with every knob's name and value on its display, instead
+  of empty displays; losslessly optimised (896 → 729 KB).
+
 - [Docs] **Release notes for v0.1.0-alpha.21 (Claude, asked by Javier).** `docs/release-notes.md`:
   the move to upstream's DSP56300 core and the two speed changes (about 50 % faster, BellsMorph 3.4×
   → 5.1× real time), and the crackles in busy patches gone (lost sample clocks from piled-up DMA

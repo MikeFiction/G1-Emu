@@ -1,6 +1,6 @@
 # G1-Emu
 
-![G1-Emu: the panel of the emulated Nord Modular G1](docs/g1gui.png)
+![G1-Emu: the panel of the emulated Nord Modular G1, with a patch loaded](docs/g1gui.png)
 
 **An emulator of the Nord Modular G1** (rack, OS 3.03) built on the
 [Gearmulator](https://github.com/dsp56300/gearmulator) core: the hardware's original operating
