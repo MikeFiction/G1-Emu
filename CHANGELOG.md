@@ -7,6 +7,11 @@ Older entries cite their commit by hand.
 
 ## 2026-10-14
 
+- [Docs] **Release notes for v0.1.0-alpha.21 (Claude, asked by Javier).** `docs/release-notes.md`:
+  the move to upstream's DSP56300 core and the two speed changes (about 50 % faster, BellsMorph 3.4×
+  → 5.1× real time), and the crackles in busy patches gone (lost sample clocks from piled-up DMA
+  interrupts, the ESSI clock falling behind, a link ring read half rewritten).
+
 - [Perf] **~18 % faster: the link receivers are no longer run, the ring is written once per sample
   (Claude, asked by Javier).** Profiled with `perf` on BellsMorph: a quarter of each DSP thread's
   useful time went into receiving the link from the DSP before it, word by word through the ESSI
