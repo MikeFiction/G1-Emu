@@ -130,12 +130,14 @@ def patch_for(mods, test):
 OUT_RE = re.compile(r"output (\d): (silence|peak\s+(-?[\d.]+) dBFS .*?, ~([\d.]+) Hz, mean ([-+][\d.]+), drift ([\d.]+))")
 
 
-def run_one(binary, rom, path, seconds, note, input_hz):
+def run_one(binary, rom, path, seconds, note, input_hz, xml):
     cmd = [binary, rom, path, "--seconds", str(seconds), "--note", str(note)]
     if input_hz:
         cmd += ["--input-sine", str(input_hz)]
+    # g1patchtest reads the patch with the same descriptions the battery wrote it from.
+    env = dict(os.environ, G1_MODULES_XML=os.path.abspath(xml))
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
     except subprocess.TimeoutExpired:
         return {"error": "timeout"}
     out = r.stdout + r.stderr
@@ -215,7 +217,7 @@ def main():
     results = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.jobs) as pool:
         futures = {pool.submit(run_one, args.binary, args.rom, p, args.seconds, args.note,
-                               args.input_sine): m for m, p in jobs}
+                               args.input_sine, args.xml): m for m, p in jobs}
         for fut in concurrent.futures.as_completed(futures):
             m = futures[fut]
             results[m.type] = (m, fut.result())

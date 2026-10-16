@@ -7,6 +7,11 @@ Older entries cite their commit by hand.
 
 ## 2026-10-16
 
+- [Tools] **`g1patchtest` can read another module descriptions file**: `G1_MODULES_XML=file`
+  instead of NME's `modules.xml`, and the battery passes it its own `--xml`, so a patch is read
+  with the same descriptions it was written from. Checked with a copy of NME's file plus one more
+  type: the Mixer (3) measures as before (−52.3 dBFS) and the extra type's patch is built and
+  uploaded. (Claude)
 - [Tools] **`g1boot` writes the CPU's RAM** (`$100000`–`$1FFFFF`, raw) at the end of the run to
   `G1_RAMDUMP=file`, to read the tables the OS builds at boot. Checked: a 60 M-instruction boot
   writes 1 MB with the type table and the parameter names where `g1knobs.h` expects them. (Claude)

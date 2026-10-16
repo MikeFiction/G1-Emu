@@ -180,11 +180,15 @@ int main(int argc, char** argv)
 		i += 2;
 	}
 
-	// The patch, with NME's module descriptions.
+	// The patch, with NME's module descriptions (G1_MODULES_XML=file: another descriptions file,
+	// e.g. one describing module types an experimental OS adds).
 	ModuleDescriptions descs;
-	if(!descs.loadFromFile(juce::File(NME_DATA_DIR).getChildFile("modules.xml")))
+	const auto descsFile = std::getenv("G1_MODULES_XML")
+		? juce::File(juce::File::getCurrentWorkingDirectory().getChildFile(std::getenv("G1_MODULES_XML")))
+		: juce::File(NME_DATA_DIR).getChildFile("modules.xml");
+	if(!descs.loadFromFile(descsFile))
 	{
-		std::fprintf(stderr, "cannot load %s/modules.xml\n", NME_DATA_DIR);
+		std::fprintf(stderr, "cannot load %s\n", descsFile.getFullPathName().toRawUTF8());
 		return 1;
 	}
 	PchFileIO io(descs);
