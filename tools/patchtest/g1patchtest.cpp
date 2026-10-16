@@ -20,6 +20,7 @@
 #include "g1Lib/g1knobs.h"
 
 #include "model/ModuleDescriptions.h"
+#include "protocol/NewModuleMessage.h"
 #include "model/Patch.h"
 #include "model/PatchSerializer.h"
 #include "model/PchFileIO.h"
@@ -64,11 +65,32 @@ namespace
 	constexpr uint64_t g_ms = g1::g_ucClock / 1000;
 	constexpr int32_t g_silence = 0x155;	// DSP 3's X:$5F: what comes out with no signal
 
+	// G1_WATCH_PC=addr (hex): each time the 68k reaches that address, its registers and the top of
+	// its stack (the routine's arguments, when it is a routine's first instruction), the first 8 times.
+	void watchPc(g1::Microcontroller& _mc)
+	{
+		static const uint32_t at = std::getenv("G1_WATCH_PC") ? static_cast<uint32_t>(std::strtoul(std::getenv("G1_WATCH_PC"), nullptr, 16)) : 0;
+		static int hits = 0;
+		if(!at || _mc.getPC() != at || hits >= 8)
+			return;
+		++hits;
+		std::printf("  [watch $%06x] #%d D0=%08x D1=%08x D2=%08x A0=%06x A1=%06x A2=%06x SP=%06x stack:", at, hits,
+			_mc.getDReg(0), _mc.getDReg(1), _mc.getDReg(2), _mc.getAReg(0), _mc.getAReg(1), _mc.getAReg(2), _mc.getAReg(7));
+		for(uint32_t i = 0; i < 24; i += 2)
+			std::printf(" %04x", _mc.read16(_mc.getAReg(7) + i));
+		std::printf("\n");
+	}
+
 	void run(g1::Microcontroller& _mc, const uint64_t _ucCycles)
 	{
 		const auto end = _mc.ucCycles() + _ucCycles;
+		const bool watching = std::getenv("G1_WATCH_PC") != nullptr;
 		while(_mc.ucCycles() < end)
+		{
 			_mc.exec();
+			if(watching)
+				watchPc(_mc);
+		}
 		_mc.syncDsps();	// what the DSPs produced up to here is delivered before it is measured
 	}
 
@@ -137,7 +159,7 @@ int main(int argc, char** argv)
 {
 	if(argc < 3)
 	{
-		std::fprintf(stderr, "usage: g1patchtest ROM patch.pch [--note N|-1] [--note-at S] [--note-off-at S] [--events +S,-S,...] [--param-at S:section:module:param:value] [--seconds S] [--wav file.wav] [--input-sine Hz] [--input-raw file.f32] [--dump-packets dir] [--bench]\n");
+		std::fprintf(stderr, "usage: g1patchtest ROM patch.pch [--note N|-1] [--note-at S] [--note-off-at S] [--events +S,-S,...] [--param-at S:section:module:param:value] [--add-module-at S:type:index:x:y] [--seconds S] [--wav file.wav] [--input-sine Hz] [--input-raw file.f32] [--dump-packets dir] [--bench]\n");
 		std::fprintf(stderr, "cycle diagnostic: G1_JITBLOCK=1 G1_CYCPROF=0..3 (after the note, with disassembly)\n");
 		return 2;
 	}
@@ -150,6 +172,10 @@ int main(int argc, char** argv)
 	// message NME sends when a knob is turned (cc $13, sc $40)
 	struct ParamAt { double at; int section, module, param, value; };
 	std::vector<ParamAt> paramsAt;
+	// --add-module-at S:type:index:x:y (repeatable): a module added to the poly section S seconds
+	// in, with its default parameters, the message NME sends when one is dropped on the canvas
+	struct AddAt { double at; int type, index, x, y; };
+	std::vector<AddAt> addsAt;
 	std::string wavPath;
 	double inputHz = 0;
 	std::vector<float> inputRaw;	// --input-raw: fed from the first captured sample
@@ -181,6 +207,12 @@ int main(int argc, char** argv)
 			ParamAt pa{};
 			if(std::sscanf(argv[i + 1], "%lf:%d:%d:%d:%d", &pa.at, &pa.section, &pa.module, &pa.param, &pa.value) == 5)
 				paramsAt.push_back(pa);
+		}
+		else if(!std::strcmp(argv[i], "--add-module-at"))
+		{
+			AddAt aa{};
+			if(std::sscanf(argv[i + 1], "%lf:%d:%d:%d:%d", &aa.at, &aa.type, &aa.index, &aa.x, &aa.y) == 5)
+				addsAt.push_back(aa);
 		}
 		else if(!std::strcmp(argv[i], "--events"))
 		{
@@ -970,7 +1002,7 @@ int main(int argc, char** argv)
 			t += tickMs;
 		}
 	}
-	else if(noteLater || !paramsAt.empty())
+	else if(noteLater || !paramsAt.empty() || !addsAt.empty())
 	{
 		// Each event at its time, in whole milliseconds like the rest of the bench: the note's
 		// presses and releases (when it plays later) and the parameter changes.
@@ -981,6 +1013,8 @@ int main(int argc, char** argv)
 				timeline.push_back({events[k].first, 0, k});
 		for(size_t k = 0; k < paramsAt.size(); ++k)
 			timeline.push_back({paramsAt[k].at, 1, k});
+		for(size_t k = 0; k < addsAt.size(); ++k)
+			timeline.push_back({addsAt[k].at, 2, k});
 		std::stable_sort(timeline.begin(), timeline.end(), [](const Ev& _a, const Ev& _b) { return _a.at < _b.at; });
 		uint64_t nowMs = 0;
 		for(const auto& ev : timeline)
@@ -991,6 +1025,22 @@ int main(int argc, char** argv)
 			nowMs = std::max(nowMs, atMs);
 			if(ev.kind == 0)
 				mc.getPcPort().receive(withChecksum({0xf0, 0x33, 0x5c, 0x06, static_cast<uint8_t>(pid), 0x56, static_cast<uint8_t>(events[ev.i].second ? 0 : 1), static_cast<uint8_t>(note)}));
+			else if(ev.kind == 2)
+			{
+				const auto& aa = addsAt[ev.i];
+				std::vector<int> defaults;
+				std::string name = "Added";
+				if(const auto* d = descs.getModuleByIndex(aa.type))
+				{
+					name = d->name.toStdString();
+					for(const auto& p : d->parameters)
+						if(p.paramClass == "parameter")
+							defaults.push_back(p.defaultValue);
+				}
+				const NewModuleMessageProto msg(pid, aa.type, 1, aa.index, aa.x, aa.y, name, defaults);
+				mc.getPcPort().receive(msg.toSysEx(0));
+				std::printf("added module %d (type %d, %zu parameters) at %.2f s\n", aa.index, aa.type, defaults.size(), aa.at);
+			}
 			else
 			{
 				const auto& pa = paramsAt[ev.i];
@@ -1249,6 +1299,18 @@ int main(int argc, char** argv)
 		}
 		std::printf("\n");
 	}
+
+	// G1_RAMDUMP=file: the CPU's RAM ($100000-$1FFFFF) at the end, raw, like g1boot's.
+	if(const char* rd = std::getenv("G1_RAMDUMP"))
+		if(FILE* f = std::fopen(rd, "wb"))
+		{
+			for(uint32_t a = 0x100000; a < 0x200000; ++a)
+			{
+				const uint8_t b = mc.read8(a);
+				std::fwrite(&b, 1, 1, f);
+			}
+			std::fclose(f);
+		}
 
 	// G1_DUMP=dir: P, X and Y memory of each DSP at the end (to disassemble with dspdis).
 	if(const char* dir = std::getenv("G1_DUMP"))

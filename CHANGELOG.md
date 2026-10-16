@@ -7,6 +7,12 @@ Older entries cite their commit by hand.
 
 ## 2026-10-16
 
+- [Tools] **`g1patchtest` for live edits and for looking inside**: `--add-module-at S:type:index:x:y`
+  adds a module to the poly section S seconds in, with NME's own `NewModuleMessageProto` (now built
+  into the tool, with `ParameterEncoder` and `SysExMessage`); `G1_WATCH_PC=addr` prints the 68k's
+  registers and stack each time it reaches an address; `G1_RAMDUMP=file` writes the CPU's RAM at the
+  end, like `g1boot`'s. Checked: a FilterE added to a playing patch of Clavia's modules leaves it
+  sounding. (Claude)
 - [Tools] **`g1patchtest --param-at S:section:module:param:value`** (repeatable) sends a parameter
   change S seconds in, the message NME sends when a knob is turned (cc `$13`, sc `$40`), mixed in
   time with the note's events. Checked: a Mixer (3)'s level turned down live lowers its output.

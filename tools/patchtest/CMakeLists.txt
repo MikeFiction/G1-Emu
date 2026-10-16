@@ -22,7 +22,10 @@ target_sources(g1patchtest PRIVATE
 	${NME_DIR}/source/midi/UploadPacketizer.cpp
 	${NME_DIR}/source/midi/SysExCodec.cpp
 	${NME_DIR}/source/midi/NmMessages.cpp
-	${NME_DIR}/source/protocol/KnobAssignmentMessage.cpp)
+	${NME_DIR}/source/protocol/KnobAssignmentMessage.cpp
+	${NME_DIR}/source/protocol/NewModuleMessage.cpp
+	${NME_DIR}/source/protocol/ParameterEncoder.cpp
+	${NME_DIR}/source/protocol/SysExMessage.cpp)
 target_include_directories(g1patchtest PRIVATE ${NME_DIR}/source)
 target_compile_definitions(g1patchtest PRIVATE
 	NME_DATA_DIR="${NME_DIR}/data"
