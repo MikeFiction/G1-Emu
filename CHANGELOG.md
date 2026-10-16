@@ -7,6 +7,9 @@ Older entries cite their commit by hand.
 
 ## 2026-10-16
 
+- [Tools] **`g1patchtest` can log the PC Port**: `G1_PCPORT_LOG=file` appends everything the G1
+  sends (module lights, meters, replies) that the tool otherwise reads or drops. Checked: the Lights
+  messages of a patch with one module LED show it going on and off. (Claude)
 - [Tools] **`g1boot` can boot with a given flash**: `G1_FLASH=file` (patch storage, settings) with
   the ROM's OS put over its own up to `$70000`, as the standalone does (`Engine::useOwnOs`), so a
   boot on an already formatted flash can be studied headless (a hang seen in `g1run` only showed up

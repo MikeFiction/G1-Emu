@@ -44,6 +44,21 @@
 #include <string>
 #include <vector>
 
+// Everything the G1 sends on the PC Port is collected here before the tool reads or drops it;
+// G1_PCPORT_LOG=file also appends it to that file, raw (the module lights, meters and replies a
+// test never looks at).
+static void takeTx(g1::Microcontroller& _mc, std::vector<uint8_t>& _out)
+{
+	_mc.getPcPort().takeTx(_out);
+	static FILE* log = std::getenv("G1_PCPORT_LOG") ? std::fopen(std::getenv("G1_PCPORT_LOG"), "wb") : nullptr;
+	if(log && !_out.empty())
+	{
+		std::fwrite(_out.data(), 1, _out.size(), log);
+		std::fflush(log);
+	}
+}
+
+
 namespace
 {
 	constexpr uint64_t g_ms = g1::g_ucClock / 1000;
@@ -79,11 +94,11 @@ namespace
 		for(uint32_t t = 0; t < _timeoutMs; ++t)
 		{
 			run(_mc, g_ms);
-			_mc.getPcPort().takeTx(out);
+			takeTx(_mc, out);
 			if(!out.empty() && out.back() == 0xf7)
 			{
 				run(_mc, 5 * g_ms);	// in case something else follows
-				_mc.getPcPort().takeTx(out);
+				takeTx(_mc, out);
 				return out;
 			}
 		}
@@ -260,7 +275,7 @@ int main(int argc, char** argv)
 	// G1_BOOTMS: longer for a first boot of an OS that formats its patch storage (INIT FLASH).
 	run(mc, static_cast<uint64_t>(std::getenv("G1_BOOTMS") ? std::atoi(std::getenv("G1_BOOTMS")) : (osImage ? 6000 : 1500)) * g_ms);
 	std::vector<uint8_t> boot;
-	mc.getPcPort().takeTx(boot);
+	takeTx(mc, boot);
 	const auto hello = transact(mc, {0xf0, 0x33, 0x00, 0x06, 0x00, 0x03, 0x03, 0xf7}, 1000);
 	std::printf("IAm -> %s\n", hex(hello).c_str());
 	auto showLcd = [&](const char* _when)
@@ -318,7 +333,7 @@ int main(int argc, char** argv)
 			mc.getPcPort().receive(SysEx::encode(0x1f, 0, m.encode(0), true));
 			run(mc, 1000 * g_ms);
 			std::vector<uint8_t> drop;
-			mc.getPcPort().takeTx(drop);
+			takeTx(mc, drop);
 			std::printf("clock source set to %d\n", st.midiClockSource);
 		}
 	}
@@ -358,7 +373,7 @@ int main(int argc, char** argv)
 		{
 			run(mc, g_ms);
 			std::vector<uint8_t> more;
-			mc.getPcPort().takeTx(more);
+			takeTx(mc, more);
 			reply.insert(reply.end(), more.begin(), more.end());
 		}
 		const auto ms = (mc.ucCycles() - before) / g_ms;
@@ -394,7 +409,7 @@ int main(int argc, char** argv)
 			std::printf("before: \"%s\" in %zu packets; pid=%d\n", p->getName().toRawUTF8(), pp.size(), bp);
 			run(mc, gapMs * g_ms);
 			std::vector<uint8_t> drop;
-			mc.getPcPort().takeTx(drop);
+			takeTx(mc, drop);
 		}
 	}
 	int pid = upload(packets);
@@ -520,7 +535,7 @@ int main(int argc, char** argv)
 				{
 					run(mc, g_ms);
 					std::vector<uint8_t> more;
-					mc.getPcPort().takeTx(more);
+					takeTx(mc, more);
 					pending.insert(pending.end(), more.begin(), more.end());
 					size_t k = 0;
 					for(;;)
@@ -551,7 +566,7 @@ int main(int argc, char** argv)
 					std::printf("  FETCH: no complete reply to %s\n", hex(m, 8).c_str());
 				run(mc, 20 * g_ms);
 				std::vector<uint8_t> drop;
-				mc.getPcPort().takeTx(drop);
+				takeTx(mc, drop);
 			}
 			return fetched;
 		};
@@ -729,7 +744,7 @@ int main(int argc, char** argv)
 	auto pcPortSince = [&]
 	{
 		std::vector<uint8_t> out;
-		mc.getPcPort().takeTx(out);
+		takeTx(mc, out);
 		return out;
 	};
 	if(const char* pp = std::getenv("G1_PREPRESS"))
@@ -886,7 +901,7 @@ int main(int argc, char** argv)
 			while(mc.ucCycles() < target && mc.ucCycles() < limit)
 				mc.exec();
 			std::vector<uint8_t> drop;
-			mc.getPcPort().takeTx(drop);
+			takeTx(mc, drop);
 			if(mc.ucCycles() >= target)
 			{
 				mc.setIdle(true);
@@ -991,7 +1006,7 @@ int main(int argc, char** argv)
 		return 1;
 	}
 	std::vector<uint8_t> rest;
-	mc.getPcPort().takeTx(rest);
+	takeTx(mc, rest);
 	// $7F is the plain ACK the OS sends for each packet (NME treats it as one), so it is not
 	// worth reporting; what matters is whether the patch ended up loaded and sounding.
 	if(std::getenv("G1_VERBOSE") && !rest.empty())
@@ -1109,11 +1124,11 @@ int main(int argc, char** argv)
 		for(const uint8_t code : {0x31, 0x37, 0x2d, 0x32, 0x28, 0x2e, 0x33, 0x29, 0x2f, 0x34, 0x2a, 0x1a, 0x35, 0x2b, 0x1b, 0x36, 0x2c, 0x1c, 0x30, 0x18})
 		{
 			std::vector<uint8_t> drain;
-			mc.getPcPort().takeTx(drain);
+			takeTx(mc, drain);
 			mc.setAdc(code, 200);
 			run(mc, 250 * g_ms);
 			std::vector<uint8_t> outMsgs;
-			mc.getPcPort().takeTx(outMsgs);
+			takeTx(mc, outMsgs);
 			std::printf("ADC $%02x ->", code);
 			for(size_t k = 0; k + 9 < outMsgs.size(); ++k)
 				if(outMsgs[k] == 0xf0 && (outMsgs[k + 2] >> 2) == 0x13 && outMsgs[k + 5] == 0x40)
