@@ -454,6 +454,19 @@ int main(int argc, char** argv)
 	}
 	std::printf("\n  DSP count ($1ab91c) = %u\n", mc.read8(0x1ab91c));
 
+	// G1_RAMDUMP=file: the CPU's RAM ($100000-$1FFFFF) as it is at the end, raw, to read the
+	// tables the OS builds at boot (per-type module data, parameter names).
+	if(const char* rd = std::getenv("G1_RAMDUMP"))
+		if(FILE* f = std::fopen(rd, "wb"))
+		{
+			for(uint32_t a = 0x100000; a < 0x200000; ++a)
+			{
+				const uint8_t b = mc.read8(a);
+				std::fwrite(&b, 1, 1, f);
+			}
+			std::fclose(f);
+		}
+
 	// Dump of each DSP's program memory (to disassemble with dspdis)
 	for(uint32_t i = 0; i < g1::g_dspCount; ++i)
 	{

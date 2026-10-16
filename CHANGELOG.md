@@ -5,6 +5,12 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-16
+
+- [Tools] **`g1boot` writes the CPU's RAM** (`$100000`–`$1FFFFF`, raw) at the end of the run to
+  `G1_RAMDUMP=file`, to read the tables the OS builds at boot. Checked: a 60 M-instruction boot
+  writes 1 MB with the type table and the parameter names where `g1knobs.h` expects them. (Claude)
+
 ## 2026-10-14
 
 - [Docs] **README: a new picture of the panel (Javier's, added by Claude).** `docs/g1-emu-panel.png` (renamed from `g1gui.png`, so no cache shows the old one) now
