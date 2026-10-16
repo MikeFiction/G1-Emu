@@ -74,6 +74,27 @@ int main(int argc, char** argv)
 
 	const uint64_t steps = (argc > 2 ? std::stoull(argv[2]) : 20) * 1000000ull;
 	mc.installRomOsInFlash();
+	// G1_FLASH=file: boot with that flash (patch storage, settings) instead of an empty one, with
+	// the ROM's OS put over its own, as the standalone does (Engine::useOwnOs).
+	if(const char* fl = std::getenv("G1_FLASH"))
+	{
+		std::ifstream ff(fl, std::ios::binary);
+		std::vector<uint8_t> image((std::istreambuf_iterator<char>(ff)), std::istreambuf_iterator<char>());
+		auto& flash = mc.getFlash().data();
+		if(image.size() != flash.size())
+		{
+			std::fprintf(stderr, "G1_FLASH: %s is not a %zu-byte flash\n", fl, flash.size());
+			return 1;
+		}
+		const auto factory = flash;
+		flash = image;
+		std::copy_n(factory.begin() + 8, 4, flash.begin() + 8);
+		const size_t len = (static_cast<size_t>(factory[8]) << 24 | static_cast<size_t>(factory[9]) << 16
+			| static_cast<size_t>(factory[10]) << 8 | factory[11]) + 4;
+		// like the loader and Engine::OsBytes: the flash holds the OS only up to $70000, where the
+		// patch banks start
+		std::copy_n(factory.begin() + 0x20, std::min<size_t>(len, 0x70000 - 0x20), flash.begin() + 0x20);
+	}
 	for(uint32_t d = 0; d < g1::g_dspCount; ++d)
 		for(auto pcw : {0xcau, 0xccu, 0xd2u, 0x175u, 0x200u, 0x9eu, 0xc4u})
 			mc.getDsp(d).pcWatch()[pcw] = 0;

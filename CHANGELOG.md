@@ -7,6 +7,11 @@ Older entries cite their commit by hand.
 
 ## 2026-10-16
 
+- [Tools] **`g1boot` can boot with a given flash**: `G1_FLASH=file` (patch storage, settings) with
+  the ROM's OS put over its own up to `$70000`, as the standalone does (`Engine::useOwnOs`), so a
+  boot on an already formatted flash can be studied headless (a hang seen in `g1run` only showed up
+  on such a flash; a fresh one hid it). Checked: with that flash, the OS that hung there boots once
+  fixed and answers NME's greeting. (Claude)
 - [Tools] **`g1patchtest` can read another module descriptions file**: `G1_MODULES_XML=file`
   instead of NME's `modules.xml`, and the battery passes it its own `--xml`, so a patch is read
   with the same descriptions it was written from. Checked with a copy of NME's file plus one more
