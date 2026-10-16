@@ -137,7 +137,7 @@ int main(int argc, char** argv)
 {
 	if(argc < 3)
 	{
-		std::fprintf(stderr, "usage: g1patchtest ROM patch.pch [--note N|-1] [--note-at S] [--note-off-at S] [--events +S,-S,...] [--seconds S] [--wav file.wav] [--input-sine Hz] [--input-raw file.f32] [--dump-packets dir] [--bench]\n");
+		std::fprintf(stderr, "usage: g1patchtest ROM patch.pch [--note N|-1] [--note-at S] [--note-off-at S] [--events +S,-S,...] [--param-at S:section:module:param:value] [--seconds S] [--wav file.wav] [--input-sine Hz] [--input-raw file.f32] [--dump-packets dir] [--bench]\n");
 		std::fprintf(stderr, "cycle diagnostic: G1_JITBLOCK=1 G1_CYCPROF=0..3 (after the note, with disassembly)\n");
 		return 2;
 	}
@@ -146,6 +146,10 @@ int main(int argc, char** argv)
 	double noteAt = -1.0;	// --note-at S: play the note S seconds into the measurement
 	double noteOffAt = -1.0;	// --note-off-at S: release it S seconds in (needs --note-at)
 	std::vector<std::pair<double, bool>> events;	// --events: (seconds, press) in time order
+	// --param-at S:section:module:param:value (repeatable): a parameter change at S seconds, the
+	// message NME sends when a knob is turned (cc $13, sc $40)
+	struct ParamAt { double at; int section, module, param, value; };
+	std::vector<ParamAt> paramsAt;
 	std::string wavPath;
 	double inputHz = 0;
 	std::vector<float> inputRaw;	// --input-raw: fed from the first captured sample
@@ -172,6 +176,12 @@ int main(int argc, char** argv)
 		else if(!std::strcmp(argv[i], "--seconds")) seconds = std::atof(argv[i + 1]);
 		else if(!std::strcmp(argv[i], "--note-at")) noteAt = std::atof(argv[i + 1]);
 		else if(!std::strcmp(argv[i], "--note-off-at")) noteOffAt = std::atof(argv[i + 1]);
+		else if(!std::strcmp(argv[i], "--param-at"))
+		{
+			ParamAt pa{};
+			if(std::sscanf(argv[i + 1], "%lf:%d:%d:%d:%d", &pa.at, &pa.section, &pa.module, &pa.param, &pa.value) == 5)
+				paramsAt.push_back(pa);
+		}
 		else if(!std::strcmp(argv[i], "--events"))
 		{
 			for(const char* c = argv[i + 1]; *c; )
@@ -960,17 +970,32 @@ int main(int argc, char** argv)
 			t += tickMs;
 		}
 	}
-	else if(noteLater)
+	else if(noteLater || !paramsAt.empty())
 	{
-		// Each event at its time, in whole milliseconds like the rest of the bench.
+		// Each event at its time, in whole milliseconds like the rest of the bench: the note's
+		// presses and releases (when it plays later) and the parameter changes.
+		struct Ev { double at; int kind; size_t i; };	// kind 0 note event, 1 parameter
+		std::vector<Ev> timeline;
+		if(noteLater)
+			for(size_t k = 0; k < events.size(); ++k)
+				timeline.push_back({events[k].first, 0, k});
+		for(size_t k = 0; k < paramsAt.size(); ++k)
+			timeline.push_back({paramsAt[k].at, 1, k});
+		std::stable_sort(timeline.begin(), timeline.end(), [](const Ev& _a, const Ev& _b) { return _a.at < _b.at; });
 		uint64_t nowMs = 0;
-		for(const auto& [at, press] : events)
+		for(const auto& ev : timeline)
 		{
-			const auto atMs = static_cast<uint64_t>(std::min(at, seconds) * 1000);
+			const auto atMs = static_cast<uint64_t>(std::min(ev.at, seconds) * 1000);
 			if(atMs > nowMs)
 				run(mc, (atMs - nowMs) * g_ms);
 			nowMs = std::max(nowMs, atMs);
-			mc.getPcPort().receive(withChecksum({0xf0, 0x33, 0x5c, 0x06, static_cast<uint8_t>(pid), 0x56, static_cast<uint8_t>(press ? 0 : 1), static_cast<uint8_t>(note)}));
+			if(ev.kind == 0)
+				mc.getPcPort().receive(withChecksum({0xf0, 0x33, 0x5c, 0x06, static_cast<uint8_t>(pid), 0x56, static_cast<uint8_t>(events[ev.i].second ? 0 : 1), static_cast<uint8_t>(note)}));
+			else
+			{
+				const auto& pa = paramsAt[ev.i];
+				mc.getPcPort().receive(withChecksum({0xf0, 0x33, 0x4c, 0x06, static_cast<uint8_t>(pid), 0x40, static_cast<uint8_t>(pa.section), static_cast<uint8_t>(pa.module), static_cast<uint8_t>(pa.param), static_cast<uint8_t>(pa.value)}));
+			}
 		}
 		const auto endMs = static_cast<uint64_t>(seconds * 1000);
 		if(endMs > nowMs)

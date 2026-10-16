@@ -7,6 +7,10 @@ Older entries cite their commit by hand.
 
 ## 2026-10-16
 
+- [Tools] **`g1patchtest --param-at S:section:module:param:value`** (repeatable) sends a parameter
+  change S seconds in, the message NME sends when a knob is turned (cc `$13`, sc `$40`), mixed in
+  time with the note's events. Checked: a Mixer (3)'s level turned down live lowers its output.
+  (Claude)
 - [Tools] **`g1patchtest` can log the PC Port**: `G1_PCPORT_LOG=file` appends everything the G1
   sends (module lights, meters, replies) that the tool otherwise reads or drops. Checked: the Lights
   messages of a patch with one module LED show it going on and off. (Claude)
