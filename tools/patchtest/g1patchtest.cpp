@@ -380,6 +380,14 @@ int main(int argc, char** argv)
 		}
 	}
 
+	// G1_ABORT_AFTER=N: the main upload stops after N packets, without the last flag, and the OS is
+	// asked for its synth settings before and after a closing packet (an empty one with the last
+	// flag, NME's closeTransferFrame). G1_CLOSE=good (default), bad (its checksum off by one) or
+	// none. Tells whether the OS checks the closing packet's checksum before leaving bulk receive.
+	size_t abortAfter = 0;
+	if(const char* aa = std::getenv("G1_ABORT_AFTER"))
+		abortAfter = static_cast<size_t>(std::atoi(aa));
+
 	// Upload, like NME: a packet, its reply, the next one.
 	auto upload = [&](const std::vector<UploadPacketizer::Packet>& packets) -> int
 	{
@@ -390,6 +398,8 @@ int main(int argc, char** argv)
 	const uint32_t ackMs = std::getenv("G1_ACKMS") ? static_cast<uint32_t>(std::atoi(std::getenv("G1_ACKMS"))) : 300;
 	for(size_t i = 0; i < packets.size(); ++i)
 	{
+		if(abortAfter > 0 && i == abortAfter)
+			break;	// G1_ABORT_AFTER: an upload cut short, the last flag never sent
 		const auto msg = UploadPacketizer::frame(packets[i], i == 0, i + 1 == packets.size(), 0);
 		// --dump-packets: the exact SysEx NME would send, one file per packet, to replay it over
 		// a real MIDI port against g1run (docs/upload-timeouts.md).
@@ -455,6 +465,32 @@ int main(int argc, char** argv)
 		}
 	}
 	int pid = upload(packets);
+	if(abortAfter > 0)
+	{
+		const auto settingsRequest = withChecksum({0xf0, 0x33, 0x5c, 0x06, 0x44, 0x02, 0x06, 0x08, 0x04});
+		auto answers = [&]()
+		{
+			const auto reply = transact(mc, settingsRequest, 1000);
+			for(size_t k = 0; k + 2 < reply.size(); ++k)
+				if(reply[k] == 0xf0 && reply[k + 1] == 0x33 && (reply[k + 2] >> 2) >= 0x1c)
+					return true;
+			return false;
+		};
+		std::printf("upload cut after %zu of %zu packets\n", abortAfter, packets.size());
+		std::printf("  settings request before closing: %s\n", answers() ? "answered" : "NO ANSWER");
+		const std::string close = std::getenv("G1_CLOSE") ? std::getenv("G1_CLOSE") : "good";
+		if(close != "none")
+		{
+			auto msg = UploadPacketizer::closeTransferFrame(0);
+			if(close == "bad")
+				msg[msg.size() - 2] = static_cast<uint8_t>((msg[msg.size() - 2] + 1) & 0x7f);
+			const auto reply = transact(mc, msg, 1000);
+			std::printf("  closing packet (%s checksum): %s -> %s\n", close.c_str(), hex(msg, 16).c_str(), hex(reply, 16).c_str());
+		}
+		std::printf("  settings request after: %s\n", answers() ? "answered" : "NO ANSWER");
+		std::printf("  and once more: %s\n", answers() ? "answered" : "NO ANSWER");
+		return 0;
+	}
 	// G1_PCHIST=ms: where the CPU spends the next ms of emulated time, most visited PCs first
 	// (to see which loop the OS sits in after an upload it did not answer).
 	if(const char* ph = std::getenv("G1_PCHIST"))

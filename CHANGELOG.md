@@ -5,6 +5,17 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-17
+
+- [Tools] **`g1patchtest` can cut an upload short and close it**: `G1_ABORT_AFTER=N` stops the
+  upload after N packets without the last flag, asks the OS for its synth settings, sends NME's
+  closing packet (empty, last flag; `G1_CLOSE=good`, `bad` with its checksum off by one, or `none`)
+  and asks again, twice. Answers a question by email: does the OS check the closing packet's
+  checksum? Checked with OS 3.03 and a 16-packet patch cut after 2: stuck, it answers nothing; a
+  closing packet releases it **with a good or a bad checksum** (it is not answered itself). Sent
+  when no upload is open, it is refused (`$7E` code 3, or code 4 with a bad checksum) and the next
+  request goes unanswered once, then it answers again: an "unstick" command should retry. (Claude)
+
 ## 2026-10-16
 
 - [Tools] **`g1patchtest` for live edits and for looking inside**: `--add-module-at S:type:index:x:y`
