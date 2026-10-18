@@ -57,7 +57,9 @@ int main(int argc, char** argv)
 		std::fprintf(stderr, "the ROM must be 512 KB (it is %zu)\n", rom.size());
 		return 1;
 	}
-	g1::Microcontroller mc(rom);
+	// G1_MODEL=expanded: the 8 DSPs of the expansion board.
+	const char* model = std::getenv("G1_MODEL");
+	g1::Microcontroller mc(rom, model && std::string(model) == "expanded" ? g1::g_expandedDsps : g1::g_regularDsps);
 
 	// g1boot ROM dis FROM TO: disassembles (hex addresses)
 	if(argc > 4 && std::string(argv[2]) == "dis")
@@ -95,23 +97,23 @@ int main(int argc, char** argv)
 		// patch banks start
 		std::copy_n(factory.begin() + 0x20, std::min<size_t>(len, 0x70000 - 0x20), flash.begin() + 0x20);
 	}
-	for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+	for(uint32_t d = 0; d < mc.dspCount(); ++d)
 		for(auto pcw : {0xcau, 0xccu, 0xd2u, 0x175u, 0x200u, 0x9eu, 0xc4u})
 			mc.getDsp(d).pcWatch()[pcw] = 0;
 
 	// History of what leaves each DSP's ESSI0 (distinct values, min, max)
 	struct Tap { int32_t mn = 0x7fffffff, mx = -0x7fffffff; std::map<int32_t, uint64_t> values; uint64_t n = 0; };
-	std::array<std::array<Tap, 2>, g1::g_dspCount> taps;
+	std::array<std::array<Tap, 2>, g1::g_maxDsps> taps;
 	// G1_TAP=file: slot 0 samples of each DSP's ESSI0, raw (int32 per DSP and frame).
 	FILE* tapFile = std::getenv("G1_TAP") ? std::fopen(std::getenv("G1_TAP"), "wb") : nullptr;
-	std::array<int32_t, g1::g_dspCount> tapFrame{};
-	for(uint32_t d = 0; d < g1::g_dspCount; ++d)
-		mc.getDsp(d).setAudioCallback([&taps, &tapFrame, tapFile, d](const uint32_t _essi, const int32_t _l, const int32_t)
+	std::array<int32_t, g1::g_maxDsps> tapFrame{};
+	for(uint32_t d = 0; d < mc.dspCount(); ++d)
+		mc.getDsp(d).setAudioCallback([&taps, &tapFrame, tapFile, d, count = mc.dspCount()](const uint32_t _essi, const int32_t _l, const int32_t)
 		{
 			if(tapFile && _essi == 0)
 			{
 				tapFrame[d] = _l;
-				if(d == g1::g_dspCount - 1) std::fwrite(tapFrame.data(), sizeof(int32_t), tapFrame.size(), tapFile);
+				if(d == count - 1) std::fwrite(tapFrame.data(), sizeof(int32_t), count, tapFile);
 			}
 			auto& t = taps[d][_essi];
 			t.mn = std::min(t.mn, _l); t.mx = std::max(t.mx, _l); ++t.n;
@@ -121,7 +123,7 @@ int main(int argc, char** argv)
 	// (outputs 1-4), raw. It is what g1run sends to the sound card.
 	FILE* blockFile = std::getenv("G1_BLOCKS") ? std::fopen(std::getenv("G1_BLOCKS"), "wb") : nullptr;
 	if(blockFile)
-		mc.getDsp(g1::g_dspCount - 1).setBlockCallback([blockFile](const int32_t _a, const int32_t _b, const int32_t _c, const int32_t _d)
+		mc.outputDsp().setBlockCallback([blockFile](const int32_t _a, const int32_t _b, const int32_t _c, const int32_t _d)
 		{
 			const int32_t f[4] = {_a, _b, _c, _d};
 			std::fwrite(f, sizeof(int32_t), 4, blockFile);
@@ -222,7 +224,7 @@ int main(int argc, char** argv)
 		{
 			mc.getSci().write({0x90, 60, 100});	// held note on MIDI IN, channel 1
 			std::printf("  >> note 60 on via MIDI IN\n");
-			for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+			for(uint32_t d = 0; d < mc.dspCount(); ++d)
 				for(auto& t : taps[d]) t = {};
 		}
 		if(!replayMsgs.empty() && replayNext < replayMsgs.size() && i >= steps / 10 && (i % 500000) == 0)
@@ -303,7 +305,7 @@ int main(int argc, char** argv)
 			lastReport = report;
 			mc.syncDsps();
 			std::printf("  %3u%%  PC=$%06x  cycles=%llu  DSP:", report * 10, mc.getPC(), static_cast<unsigned long long>(cycles));
-			for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+			for(uint32_t d = 0; d < mc.dspCount(); ++d)
 				std::printf(" %u:%s/%06x", d, mc.getDsp(d).booted() ? "on" : "boot", mc.getDsp(d).dsp().getPC().toWord());
 			std::printf("\n");
 			std::fflush(stdout);
@@ -339,8 +341,8 @@ int main(int argc, char** argv)
 	}
 	// Is each DSP computing something? Internal X/Y memory before and after 200,000 instructions.
 	{
-		std::array<std::vector<uint32_t>, g1::g_dspCount> before;
-		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		std::array<std::vector<uint32_t>, g1::g_maxDsps> before;
+		for(uint32_t d = 0; d < mc.dspCount(); ++d)
 			for(dsp56k::TWord a = 0; a < 0x800; ++a)
 			{
 				before[d].push_back(mc.getDsp(d).dsp().memory().get(dsp56k::MemArea_X, a));
@@ -348,7 +350,7 @@ int main(int argc, char** argv)
 			}
 		for(int k = 0; k < 200000; ++k) mc.exec();
 		mc.syncDsps();
-		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		for(uint32_t d = 0; d < mc.dspCount(); ++d)
 		{
 			std::printf("DSP%u changes in internal X/Y:", d);
 			uint32_t n = 0;
@@ -489,7 +491,7 @@ int main(int argc, char** argv)
 		}
 
 	// Dump of each DSP's program memory (to disassemble with dspdis)
-	for(uint32_t i = 0; i < g1::g_dspCount; ++i)
+	for(uint32_t i = 0; i < mc.dspCount(); ++i)
 	{
 		const auto path = "/tmp/g1_dsp" + std::to_string(i) + "_p.hex";
 		if(FILE* f = std::fopen(path.c_str(), "w"))
@@ -502,7 +504,7 @@ int main(int argc, char** argv)
 	}
 
 	std::printf("\nESSI output (slot 0, TX0) per DSP:\n");
-	for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+	for(uint32_t d = 0; d < mc.dspCount(); ++d)
 		for(uint32_t e = 0; e < 2; ++e)
 		{
 			auto& t = taps[d][e];
@@ -513,7 +515,7 @@ int main(int argc, char** argv)
 		}
 
 	std::printf("\nDSP (HI08 words/HC/replies, audio peaks):\n");
-	for(uint32_t i = 0; i < g1::g_dspCount; ++i)
+	for(uint32_t i = 0; i < mc.dspCount(); ++i)
 	{
 		auto& d = mc.getDsp(i);
 		std::printf("  DSP%u  irqd=%llu x:1=%06x  %llu/%llu/%llu ", i, static_cast<unsigned long long>(d.irqdCount()), d.dsp().memory().get(dsp56k::MemArea_X, 1), static_cast<unsigned long long>(d.hostWords()),
@@ -563,7 +565,7 @@ int main(int argc, char** argv)
 			std::printf("  c%u:DCR=%06x DSR=%06x DDR=%06x DCO=%06x", c, d.periph().getDMA().getDCR(c), d.periph().getDMA().getDSR(c), d.periph().getDMA().getDDR(c), d.periph().getDMA().getDCO(c));
 		std::printf("\n        non-zero internal X/Y: %u / %u   PC=$%06x SR=%06x  X:5F=%06x Y:5F=%06x (on DSP 3: offset and volume)\n", nzX, nzY, d.dsp().getPC().toWord(), d.dsp().getSR().toWord(), mem.get(dsp56k::MemArea_X, 0x5f), mem.get(dsp56k::MemArea_Y, 0x5f));
 	}
-	for(uint32_t i = 0; i < g1::g_dspCount; ++i)
+	for(uint32_t i = 0; i < mc.dspCount(); ++i)
 	{
 		auto& d = mc.getDsp(i);
 		std::printf("  DSP%u  booted=%d times=%u stalls=%llu frames=%llu  PC=$%06x  cycles=%llu  HCR=%06x HSR=%06x\n", i, d.booted(), d.bootCount(),

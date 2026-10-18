@@ -35,17 +35,17 @@ namespace
 
 namespace g1
 {
-	Microcontroller::Microcontroller(const std::vector<uint8_t>& _rom) : m_mem(g_memSize, 0), m_sci(getQSM(), static_cast<float>(g_sciRate))
+	Microcontroller::Microcontroller(const std::vector<uint8_t>& _rom, const uint32_t _dspCount) : m_mem(g_memSize, 0), m_dspCount(_dspCount > g_regularDsps ? g_expandedDsps : g_regularDsps), m_sci(getQSM(), static_cast<float>(g_sciRate))
 	{
 		std::copy_n(_rom.begin(), std::min<size_t>(_rom.size(), g_romSize), m_mem.begin());
-		for(uint32_t i = 0; i < g_dspCount; ++i)
+		for(uint32_t i = 0; i < m_dspCount; ++i)
 			m_dsps[i] = std::make_unique<Dsp>(m_hostPorts[i], i);
-		// Audio chain through the ESSIs: DSP0 -> DSP1 -> DSP2 -> DSP3 -> codec. Each DSP copies what
-		// it receives into its output buffer (DMA0) and adds its voices; DSP 3 applies the volume.
-		for(uint32_t i = 0; i + 1 < g_dspCount; ++i)
+		// Audio chain through the ESSIs: DSP0 -> DSP1 -> ... -> the last -> codec. Each DSP copies what
+		// it receives into its output buffer (DMA0) and adds its voices; the last applies the volume.
+		for(uint32_t i = 0; i + 1 < m_dspCount; ++i)
 			m_dsps[i]->setNext(m_dsps[i + 1].get());
 
-		// The OS reads the master volume from the ADC and sets DSP 3's gain (Y:$5F) with it.
+		// The OS reads the master volume from the ADC and sets the last DSP's gain (Y:$5F) with it.
 		// At zero, nothing comes out. The other knobs stay at zero.
 		m_adc[g_adcVolume] = 0xff;
 
@@ -56,8 +56,14 @@ namespace g1
 		if(const char* t = std::getenv("G1_THREADS"))
 			m_threaded = std::atoi(t) != 0;
 		m_benchEnabled = std::getenv("G1_BENCH") != nullptr;
+		// Four DSP threads (G1_DSP_THREADS changes it): one per DSP on a Regular, two DSPs each on an
+		// Expanded, thread w running DSPs w and w + 4. Eight threads ran no faster and, in real time,
+		// spun on twice the cores and dropped out (8 cores here, the CPU's thread making nine).
+		m_workerCount = std::min(m_dspCount, g_regularDsps);
+		if(const char* t = std::getenv("G1_DSP_THREADS"))
+			m_workerCount = std::clamp<uint32_t>(static_cast<uint32_t>(std::atoi(t)), 1, m_dspCount);
 		if(m_threaded)
-			for(uint32_t i = 0; i < g_dspCount; ++i)
+			for(uint32_t i = 0; i < m_workerCount; ++i)
 				m_workers.emplace_back([this, i] { workerLoop(i); });
 	}
 
@@ -73,13 +79,14 @@ namespace g1
 			t.join();
 	}
 
-	void Microcontroller::workerLoop(const uint32_t _dsp)
+	void Microcontroller::workerLoop(const uint32_t _worker)
 	{
-		auto& job = m_jobs[_dsp];
-		uint64_t seen = 0;
+		std::array<uint64_t, g_maxDsps> seenBy{};
 		keepThreadAtFullSpeed();
-		while(true)
+		for(uint32_t dsp = _worker; ; dsp = dsp + m_workerCount < m_dspCount ? dsp + m_workerCount : _worker)
 		{
+			auto& job = m_jobs[dsp];
+			auto& seen = seenBy[dsp];
 			std::chrono::steady_clock::time_point waitStart;
 			if(m_benchEnabled)
 				waitStart = std::chrono::steady_clock::now();
@@ -101,16 +108,16 @@ namespace g1
 				--m_sleepers;
 			}
 			if(m_benchEnabled)
-				m_threadWaitingNs[_dsp].fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - waitStart).count()), std::memory_order_relaxed);
+				m_threadWaitingNs[dsp].fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - waitStart).count()), std::memory_order_relaxed);
 			if(m_quitWorkers)
 				return;
 			seen = job.generation.load(std::memory_order_acquire);
 			std::chrono::steady_clock::time_point busyStart;
 			if(m_benchEnabled)
 				busyStart = std::chrono::steady_clock::now();
-			m_dsps[_dsp]->catchUp(job.target, false);
+			m_dsps[dsp]->catchUp(job.target, false);
 			if(m_benchEnabled)
-				m_threadBusyNs[_dsp].fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - busyStart).count()), std::memory_order_relaxed);
+				m_threadBusyNs[dsp].fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - busyStart).count()), std::memory_order_relaxed);
 			job.busy.store(false, std::memory_order_release);
 		}
 	}
@@ -235,7 +242,7 @@ namespace g1
 		const auto target = m_ucCycles * g_dspCyclesPerUcNum / g_dspCyclesPerUcDen;
 		if(!m_threaded)
 		{
-			for(uint32_t i = 0; i < g_dspCount; ++i)
+			for(uint32_t i = 0; i < m_dspCount; ++i)
 			{
 				std::chrono::steady_clock::time_point busyStart;
 				if(m_benchEnabled)
@@ -245,15 +252,15 @@ namespace g1
 					m_threadBusyNs[i].fetch_add(static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - busyStart).count()), std::memory_order_relaxed);
 			}
 			// With all DSPs stopped, the audio goes from each one to the next.
-			for(auto& dsp : m_dsps)
-				dsp->flushAudio();
+			for(uint32_t i = 0; i < m_dspCount; ++i)
+				m_dsps[i]->flushAudio();
 			return;
 		}
 		// Pipelined: the DSPs catch up to this point on their threads while the CPU runs on towards
 		// the next one, and the next sync first waits for this one. What the DSPs hand over (audio,
 		// words for the CPU) is handed over on this thread, at the join.
 		joinDsps();
-		for(uint32_t i = 0; i < g_dspCount; ++i)
+		for(uint32_t i = 0; i < m_dspCount; ++i)
 			launchDsp(i, target);
 	}
 
@@ -261,8 +268,8 @@ namespace g1
 	{
 		// The CPU is about to touch this DSP's host port: that DSP, and only that one, must be at
 		// this exact instant. The others keep running; their audio is handed on at the next sync.
-		if(_dsp >= g_dspCount)
-			return;	// a port of the expansion board, which the OS probes: no DSP behind it
+		if(_dsp >= m_dspCount)
+			return;	// a port of the expansion board, which the OS probes: no DSP behind it on a Regular
 		m_hostPortBarriers.fetch_add(1, std::memory_order_relaxed);
 		const auto target = m_ucCycles * g_dspCyclesPerUcNum / g_dspCyclesPerUcDen;
 		if(m_threaded)
@@ -316,13 +323,13 @@ namespace g1
 	{
 		if(!m_threaded)
 			return;
-		for(uint32_t i = 0; i < g_dspCount; ++i)
+		for(uint32_t i = 0; i < m_dspCount; ++i)
 			waitDsp(i);
-		for(auto& dsp : m_dsps)
-			dsp->deliverToHost();
+		for(uint32_t i = 0; i < m_dspCount; ++i)
+			m_dsps[i]->deliverToHost();
 		// With all DSPs stopped, the audio goes from each one to the next.
-		for(auto& dsp : m_dsps)
-			dsp->flushAudio();
+		for(uint32_t i = 0; i < m_dspCount; ++i)
+			m_dsps[i]->flushAudio();
 	}
 
 	Microcontroller::BenchStats Microcontroller::benchStats() const
@@ -335,10 +342,10 @@ namespace g1
 		out.cpuWaitingNs = m_cpuWaitingNs.load(std::memory_order_relaxed);
 		uint64_t onCpuThread = out.cpuWaitingNs;
 		if(!m_threaded)
-			for(uint32_t i = 0; i < g_dspCount; ++i)
+			for(uint32_t i = 0; i < m_dspCount; ++i)
 				onCpuThread += m_threadBusyNs[i].load(std::memory_order_relaxed);
 		out.cpuBusyNs = elapsed > onCpuThread ? elapsed - onCpuThread : 0;
-		for(uint32_t i = 0; i < g_dspCount; ++i)
+		for(uint32_t i = 0; i < m_dspCount; ++i)
 		{
 			out.threadBusyNs[i] = m_threadBusyNs[i].load(std::memory_order_relaxed);
 			out.threadWaitingNs[i] = m_threadWaitingNs[i].load(std::memory_order_relaxed);
@@ -356,7 +363,7 @@ namespace g1
 		m_cpuWaitingNs.store(0, std::memory_order_relaxed);
 		m_periodicBarriers.store(0, std::memory_order_relaxed);
 		m_hostPortBarriers.store(0, std::memory_order_relaxed);
-		for(uint32_t i = 0; i < g_dspCount; ++i)
+		for(uint32_t i = 0; i < m_dspCount; ++i)
 		{
 			m_threadBusyNs[i].store(0, std::memory_order_relaxed);
 			m_threadWaitingNs[i].store(0, std::memory_order_relaxed);

@@ -34,6 +34,7 @@ namespace g1app
 		std::string rawMidiCard = "G1";		// the raw MIDI card to take over (empty: none)
 		std::string rom;					// the ROM to use; empty: look for one (romfinder.h)
 		std::string os;						// an OS image to run instead of the ROM's factory OS (empty: none)
+		bool expanded = false;				// the model: Expanded (8 DSPs, the expansion board) or Regular (4)
 		bool showDisclaimer = false;		// the notice at startup; the window can turn it back on
 		bool extrasOpen = false;			// the window's extras drawer (Random...) was left open
 		bool knobDisplays = false;			// a display above each knob with what it is assigned to
@@ -66,6 +67,10 @@ namespace g1app
 		// none or it cannot be read; _note says which was used, or why not, for the log.
 		std::vector<uint8_t> loadOs(std::string& _note) const;
 		bool save(const std::string& _path) const;
+
+		// The DSPs of the model chosen (`model`, or G1_MODEL=regular|expanded, which wins): 4 or 8.
+		uint32_t dspCount() const;
+		static const char* modelName(uint32_t _dspCount) { return _dspCount > g1::g_regularDsps ? "Expanded" : "Regular"; }
 	};
 
 	// What a running G1 reports, for the status bar and the Report issue button.
@@ -75,8 +80,9 @@ namespace g1app
 		double speed = 0;			// % of real time
 		double load = 0;			// % of the time the emulator thread is busy
 		double cpuCores = 0;		// cores used by the process (the DSP threads spin while waiting)
-		bool dspOn[g1::g_dspCount] = {};
-		bool dspFailed[g1::g_dspCount] = {};	// stopped because the JIT could not generate its code (#17)
+		uint32_t dspCount = g1::g_regularDsps;	// the model's
+		bool dspOn[g1::g_maxDsps] = {};
+		bool dspFailed[g1::g_maxDsps] = {};	// stopped because the JIT could not generate its code (#17)
 		std::string dspProblem;		// why, for the status bar and a report (empty: none)
 		uint64_t pcIn = 0, pcOut = 0, midiIn = 0, midiOut = 0;
 		float peak = 0;				// peak of outputs 1/2 (0-1) since the last query

@@ -2,6 +2,8 @@
 //
 //   g1runnertest [--realtime] [--seconds N] [--program N]
 //
+// G1_MODEL=expanded runs it on an Expanded (8 DSPs): the outputs then come from DSP 7.
+//
 // Boots a G1 from the ROM (found like the standalone finds it) with a copy of the standalone's
 // flash when there is one, and plays note 60 on channel 1 from a fake host:
 //
@@ -17,6 +19,7 @@
 
 #include "runner.h"
 
+#include "hostconfig.h"
 #include "romfinder.h"
 
 #include "g1Lib/g1thread.h"
@@ -67,7 +70,7 @@ namespace
 
 	std::unique_ptr<g1app::Engine> makeEngine(const Setup& _s)
 	{
-		auto e = std::make_unique<g1app::Engine>(_s.rom, _s.os);
+		auto e = std::make_unique<g1app::Engine>(_s.rom, _s.os, g1app::HostOptions().dspCount());
 		if(!_s.flash.empty())
 			e->loadFlash(_s.flash);
 		return e;

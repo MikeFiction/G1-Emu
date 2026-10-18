@@ -111,7 +111,7 @@ int main(int _argc, char** _argv)
 
 	auto& mc = engine.mc();
 	uint32_t failed = 0, recovered = 0;
-	for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+	for(uint32_t d = 0; d < mc.dspCount(); ++d)
 	{
 		const auto& dsp = mc.getDsp(d);
 		failed += dsp.jitFailed();
@@ -126,7 +126,7 @@ int main(int _argc, char** _argv)
 	if(mode == "recover")
 		ok = recovered >= 1 && failed == 0 && peakLast2s > 1e-3f;
 	else
-		ok = failed == g1::g_dspCount && peakLast2s == 0.0f;
+		ok = failed == mc.dspCount() && peakLast2s == 0.0f;
 	std::printf("%s\n", ok ? "passed" : "FAILED");
 	return ok ? 0 : 1;
 }

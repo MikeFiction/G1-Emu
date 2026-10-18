@@ -46,10 +46,9 @@ what it carries works.
     (`NOTES.md`, "Booting the DSPs"): DSPs 4-7 sit on HI08 ports `$200020`-`$20003F`; the loader
     sends its program to DSPs 3 and 7, and the OS goes to eight DSPs when DSP 7 raises HF2; the OS
     carries the programs for all of them. The first test: create DSPs 4-7, let DSP 7 answer, and
-    see whether the OS boots them. **Open:** how the links run with eight (one chain 0-7 to the
-    codec, or two chains mixed, and which DSP feeds the codec), from the OS's code; and the cost:
-    twice the DSPs, about twice the CPU when the voices are used. An afternoon to know whether it
-    boots; a couple of sessions for the links and the tests if it does.
+    see whether the OS boots them. **Done (2026-10-18):** it boots, one chain 0-7 with the codec on
+    DSP 7, twice the voices; picked in Settings (standalone and plugin, saved with the project).
+    The cost: about twice the CPU (2.7x real time offline against 4.7x here), on four threads.
   - **In Animatek NME:** the editor tells them apart when it connects (to be found: what the OS
     says about its DSPs, in the IAm reply or the synth settings) and shows which one each G1-Emu
     is, with an icon or similar.

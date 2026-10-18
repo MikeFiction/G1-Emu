@@ -220,6 +220,7 @@ namespace g1plugin
 			if(key == "extrasOpen")				m_extrasOpen = value != "0";
 			else if(key == "knobDisplays")		m_knobDisplays = value != "0";
 			else if(key == "knobFollowsPatch")	m_knobFollowsPatch = value != "0";
+			else if(key == "model")			m_expanded = value == "expanded";
 			else if(key == "randomExclude")		m_randomExclude = g1app::knobListFromString(value.toStdString());
 			else if(key == "panelScale")		m_panelScale = juce::jlimit(g1gui::PanelView::MinScale, g1gui::PanelView::MaxScale, value.getFloatValue());
 		}
@@ -234,6 +235,7 @@ namespace g1plugin
 		  << "extrasOpen = " << (m_extrasOpen ? 1 : 0) << "\n"
 		  << "knobDisplays = " << (m_knobDisplays ? 1 : 0) << "\n"
 		  << "knobFollowsPatch = " << (m_knobFollowsPatch ? 1 : 0) << "\n"
+		  << "model = " << (m_expanded ? "expanded" : "regular") << "\n"
 		  << "randomExclude = " << g1app::knobListToString(m_randomExclude) << "\n"
 		  << "panelScale = " << m_panelScale << "\n";
 	}
@@ -374,7 +376,11 @@ namespace g1plugin
 		m_keeper.reset();
 		if(m_rom.empty())
 			return;
-		auto engine = std::make_unique<g1app::Engine>(m_rom, m_os);
+		// The model is the project's: one saved before there was a choice ran on a Regular.
+		if(_state)
+			if(const auto xml = getXmlFromBinary(_state->getData(), static_cast<int>(_state->getSize())); xml && xml->hasTagName(g_stateTag))
+				m_expanded = xml->getStringAttribute("model") == "expanded";
+		auto engine = std::make_unique<g1app::Engine>(m_rom, m_os, m_expanded ? g1::g_expandedDsps : g1::g_regularDsps);
 		m_keeper = std::make_unique<g1app::SlotKeeper>();
 		m_synthSettings.reset();
 		m_pendingSettings.reset();
@@ -678,6 +684,7 @@ namespace g1plugin
 		xml.setAttribute("knobDisplays", m_knobDisplays);
 		xml.setAttribute("panelScale", static_cast<double>(m_panelScale));
 		xml.setAttribute("knobFollowsPatch", m_knobFollowsPatch);
+		xml.setAttribute("model", m_expanded ? "expanded" : "regular");
 		xml.setAttribute("midiCcSelectedSlots", m_selectedControllers);
 		xml.setAttribute("randomExclude", juce::String(g1app::knobListToString(m_randomExclude)));
 		xml.setAttribute("programs", juce::String(programsToString()));
@@ -691,6 +698,7 @@ namespace g1plugin
 		m_knobDisplays = _xml.getBoolAttribute("knobDisplays", m_knobDisplays);
 		m_panelScale = static_cast<float>(_xml.getDoubleAttribute("panelScale", m_panelScale));
 		m_knobFollowsPatch = _xml.getBoolAttribute("knobFollowsPatch", m_knobFollowsPatch);
+		m_expanded = _xml.getStringAttribute("model") == "expanded";
 		// A project from before this parameter existed has no attribute: the fixed 36 dB it ran
 		// with, not the new default, so its mix does not jump 12 dB.
 		m_gainParam->setValueNotifyingHost(m_gainParam->convertTo0to1(
@@ -825,6 +833,14 @@ namespace g1plugin
 			return;
 		}
 		_dest = snapshotState();
+	}
+
+	void Processor::setExpanded(const bool _on)
+	{
+		if(std::exchange(m_expanded, _on) == _on)
+			return;
+		savePreferences();
+		restart();	// the state now says the new model, and the new G1 is built from it
 	}
 
 	void Processor::restart()
@@ -1152,6 +1168,7 @@ namespace g1plugin
 	{
 		std::lock_guard<std::mutex> lock(m_lifecycle);
 		std::string d = "ROM: " + (m_romPath.empty() ? std::string("none") : m_romPath) + "\n";
+		d += std::string("Model: ") + (m_expanded ? "Expanded (8 DSPs)" : "Regular (4 DSPs)") + "\n";
 		if(m_runner)
 		{
 			char buf[160];

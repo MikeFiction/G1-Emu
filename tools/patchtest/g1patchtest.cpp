@@ -265,7 +265,9 @@ int main(int argc, char** argv)
 		std::fprintf(stderr, "the ROM must be 512 KB\n");
 		return 1;
 	}
-	g1::Microcontroller mc(rom);
+	// G1_MODEL=expanded: the 8 DSPs of the expansion board.
+	const char* model = std::getenv("G1_MODEL");
+	g1::Microcontroller mc(rom, model && std::string(model) == "expanded" ? g1::g_expandedDsps : g1::g_regularDsps);
 	mc.setBenchEnabled(bench);
 	// G1_OS=image: run that OS (Clavia's 3.03b update) instead of the ROM's factory one.
 	bool osImage = false;
@@ -282,7 +284,7 @@ int main(int argc, char** argv)
 	// Output: one sample per DSP 3 block (4 channels).
 	std::vector<std::array<int32_t, 4>> blocks;
 	bool capture = false;
-	mc.getDsp(g1::g_dspCount - 1).setBlockCallback([&](const int32_t _a, const int32_t _b, const int32_t _c, const int32_t _d)
+	mc.outputDsp().setBlockCallback([&](const int32_t _a, const int32_t _b, const int32_t _c, const int32_t _d)
 	{
 		if(capture)
 			blocks.push_back({_a, _b, _c, _d});
@@ -496,7 +498,7 @@ int main(int argc, char** argv)
 	if(const char* ph = std::getenv("G1_PCHIST"))
 	{
 		// ...and where each DSP's blocks start in the same time.
-		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		for(uint32_t d = 0; d < mc.dspCount(); ++d)
 			for(uint32_t a = 0; a < 0x1000; ++a)
 				mc.getDsp(d).pcWatch()[a] = 0;
 		std::map<uint32_t, uint64_t> hits;
@@ -515,7 +517,7 @@ int main(int argc, char** argv)
 		std::printf("PC histogram, %llu instructions:\n", static_cast<unsigned long long>(total));
 		for(size_t i = 0; i < top.size() && i < 16; ++i)
 			std::printf("  $%06x %5.1f%%\n", top[i].second, 100.0 * static_cast<double>(top[i].first) / static_cast<double>(total));
-		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		for(uint32_t d = 0; d < mc.dspCount(); ++d)
 		{
 			std::vector<std::pair<uint64_t, uint32_t>> dt;
 			uint64_t dn = 0;
@@ -755,7 +757,7 @@ int main(int argc, char** argv)
 			out.put(static_cast<char>(mc.read8(a)));
 	}
 
-	for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+	for(uint32_t d = 0; d < mc.dspCount(); ++d)
 		mc.getDsp(d).resetLinkPeak();
 	// G1_PCWATCH=174,194: how many times each DSP goes through those addresses during the note
 	// (only counted at the start of a JIT block: fine for loops and branches).
@@ -763,7 +765,7 @@ int main(int argc, char** argv)
 	if(const char* w = std::getenv("G1_PCWATCH"))
 		for(const auto& t : juce::StringArray::fromTokens(w, ",", ""))
 			watch.push_back(static_cast<uint32_t>(t.getHexValue32()));
-	for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+	for(uint32_t d = 0; d < mc.dspCount(); ++d)
 		for(const auto a : watch)
 			mc.getDsp(d).pcWatch()[a] = 0;
 	// The panel before the note. G1_HOLD=row.bit holds a button down (a modifier such as Shift)
@@ -917,7 +919,7 @@ int main(int argc, char** argv)
 		using clock = std::chrono::steady_clock;
 		g1app::AudioBridge bridge(1.0f);
 		bridge.setRate(48000);
-		mc.getDsp(g1::g_dspCount - 1).setBlockCallback([&](const int32_t _a, const int32_t _b, const int32_t _c, const int32_t _d)
+		mc.outputDsp().setBlockCallback([&](const int32_t _a, const int32_t _b, const int32_t _c, const int32_t _d)
 		{
 			bridge.push(_a, _b, _c, _d);
 		});
@@ -1001,7 +1003,7 @@ int main(int argc, char** argv)
 		quit = true;
 		card.join();
 		mc.syncDsps();
-		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		for(uint32_t d = 0; d < mc.dspCount(); ++d)
 			std::printf("RT DSP%u overruns=%llu\n", d, static_cast<unsigned long long>(mc.getDsp(d).irqdOverruns()));
 		return 0;
 	}
@@ -1010,9 +1012,9 @@ int main(int argc, char** argv)
 	// follows it (sequencers, arpeggios).
 	if(bench)
 		mc.resetBenchStats();
-	std::array<uint64_t, g1::g_dspCount> benchCycles{}, benchInstructions{};
+	std::array<uint64_t, g1::g_maxDsps> benchCycles{}, benchInstructions{};
 	if(bench)
-		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		for(uint32_t d = 0; d < mc.dspCount(); ++d)
 		{
 			benchCycles[d] = mc.getDsp(d).dsp().getCycles();
 			benchInstructions[d] = mc.getDsp(d).dsp().getInstructionCounter();
@@ -1098,9 +1100,9 @@ int main(int argc, char** argv)
 		std::printf("BENCH emulated_s=%.3f wall_s=%.6f realtime=%.3f periodic_barriers_s=%.1f host_port_barriers_s=%.1f\n",
 			seconds, wall, wall > 0 ? seconds / wall : 0.0, s.periodicBarriers * scale, s.hostPortBarriers * scale);
 		std::printf("BENCH thread=cpu busy_s=%.6f waiting_s=%.6f\n", s.cpuBusyNs / 1e9, s.cpuWaitingNs / 1e9);
-		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		for(uint32_t d = 0; d < mc.dspCount(); ++d)
 			std::printf("BENCH thread=dsp%u busy_s=%.6f waiting_s=%.6f\n", d, s.threadBusyNs[d] / 1e9, s.threadWaitingNs[d] / 1e9);
-		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		for(uint32_t d = 0; d < mc.dspCount(); ++d)
 		{
 			std::printf("BENCH dsp=%u blocks_s=%.1f overruns=%llu\n", d, s.blocks[d] * scale,
 				static_cast<unsigned long long>(mc.getDsp(d).irqdOverruns()));
@@ -1124,7 +1126,7 @@ int main(int argc, char** argv)
 		std::printf("the OS said after the note: %s\n", hex(rest, 40).c_str());
 
 	if(std::getenv("G1_VERBOSE"))
-		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		for(uint32_t d = 0; d < mc.dspCount(); ++d)
 		{
 			auto& p = mc.getDsp(d).periph();
 			for(uint32_t ch = 2; ch < 4; ++ch)
@@ -1147,7 +1149,7 @@ int main(int argc, char** argv)
 	for(const auto a : watch)
 	{
 		std::printf("PC $%04x:", a);
-		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		for(uint32_t d = 0; d < mc.dspCount(); ++d)
 			std::printf("  DSP%u %llu", d, static_cast<unsigned long long>(mc.getDsp(d).pcWatch()[a]));
 		std::printf("\n");
 	}
@@ -1323,7 +1325,7 @@ int main(int argc, char** argv)
 			c + 1, db(peak), db(peak) + 36, zeroCrossHz(x, 96000), mean, hi - lo);
 	}
 	std::printf("links (peak per channel, dBFS; '.' = zero):\n");
-	for(uint32_t d = 0; d + 1 < g1::g_dspCount; ++d)
+	for(uint32_t d = 0; d + 1 < mc.dspCount(); ++d)
 	{
 		std::printf("  DSP%u -> DSP%u:", d, d + 1);
 		const auto& p = mc.getDsp(d).linkPeak();
@@ -1350,7 +1352,7 @@ int main(int argc, char** argv)
 
 	// G1_DUMP=dir: P, X and Y memory of each DSP at the end (to disassemble with dspdis).
 	if(const char* dir = std::getenv("G1_DUMP"))
-		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		for(uint32_t d = 0; d < mc.dspCount(); ++d)
 			for(const auto& [area, name] : std::vector<std::pair<dsp56k::EMemArea, const char*>>{{dsp56k::MemArea_P, "p"}, {dsp56k::MemArea_X, "x"}, {dsp56k::MemArea_Y, "y"}})
 				if(FILE* fp = std::fopen((std::string(dir) + "/dsp" + std::to_string(d) + "_" + name + ".hex").c_str(), "w"))
 				{

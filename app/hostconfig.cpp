@@ -55,6 +55,7 @@ namespace g1app
 			else if(key == "rawMidiCard")	rawMidiCard = value;
 			else if(key == "rom")			rom = value;
 			else if(key == "os")			os = value;
+			else if(key == "model")			expanded = value == "expanded";
 			else if(key == "showDisclaimer") showDisclaimer = value != "0";
 			else if(key == "extrasOpen")	extrasOpen = value != "0";
 			else if(key == "knobDisplays")	knobDisplays = value != "0";
@@ -116,6 +117,14 @@ namespace g1app
 		return image;
 	}
 
+	uint32_t HostOptions::dspCount() const
+	{
+		bool e = expanded;
+		if(const char* v = std::getenv("G1_MODEL"))
+			e = std::string(v) == "expanded";
+		return e ? g1::g_expandedDsps : g1::g_regularDsps;
+	}
+
 	bool HostOptions::save(const std::string& _path) const
 	{
 		std::error_code ec;
@@ -131,6 +140,7 @@ namespace g1app
 		  << "rawMidiCard = " << rawMidiCard << "\n"
 		  << "rom = " << rom << "\n"
 		  << "os = " << os << "\n"
+		  << "model = " << (expanded ? "expanded" : "regular") << "\n"
 		  << "showDisclaimer = " << (showDisclaimer ? 1 : 0) << "\n"
 		  << "extrasOpen = " << (extrasOpen ? 1 : 0) << "\n"
 		  << "knobDisplays = " << (knobDisplays ? 1 : 0) << "\n"

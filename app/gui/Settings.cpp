@@ -48,7 +48,7 @@ namespace g1gui
 		constexpr int g_labelW = 110, g_rowH = 28, g_gap = 10, g_headingH = 22;
 		constexpr int g_colW = 430, g_colGap = 40, g_width = 2 * g_colW + g_colGap;
 		constexpr int g_rightX = g_colW + g_colGap;
-		constexpr int g_audioY = 108, g_belowY = 284, g_bottomY = 372, g_height = g_bottomY + g_rowH;
+		constexpr int g_audioY = 146, g_belowY = 322, g_bottomY = 424, g_height = g_bottomY + g_rowH;
 		// The manual MIDI pairing patch (Windows, until Windows MIDI Services can own ports;
 		// jucemidi.h) adds four device rows to the MIDI column, under a longer note.
 #if defined(_WIN32) && defined(G1_BACKEND_JUCE) && !defined(G1_WINDOWS_MIDI)
@@ -89,6 +89,7 @@ namespace g1gui
 		label(m_deviceLabel, "Audio device");
 		label(m_gainLabel, "Output level");
 		label(m_rawLabel, "Card ID");
+		label(m_modelLabel, "Model");
 
 		// The ROM is the user's and always will be: this says which one is running and lets them
 		// point at another. A change needs a restart, like any other ROM swap would on hardware.
@@ -108,6 +109,16 @@ namespace g1gui
 			folder.revealToUser();
 		};
 		addAndMakeVisible(m_romFolder);
+
+		// Regular or Expanded: the G1 with the expansion board has 8 DSPs instead of 4, and the same
+		// OS gives each patch about twice the voices. A new G1 is needed, so it takes effect on the
+		// next start or Restart.
+		m_model.addItem("Regular  (4 DSPs)", 1);
+		m_model.addItem("Expanded  (8 DSPs, twice the voices)", 2);
+		m_model.setSelectedId(o.expanded ? 2 : 1, juce::dontSendNotification);
+		m_model.setTooltip("The G1 with or without the expansion board; on the next start or Restart");
+		m_model.onChange = [this] { apply(); };
+		addAndMakeVisible(m_model);
 
 		// The native Linux backend is a JACK node or a plain ALSA device. Everywhere else JUCE
 		// exposes the system's real CoreAudio/WASAPI/DirectSound devices.
@@ -382,6 +393,7 @@ namespace g1gui
 			? "alsa" : m_device.getText().trim().toStdString(); break;
 		}
 #endif
+		o.expanded = m_model.getSelectedId() == 2;
 		o.gainDb = static_cast<float>(m_gain.getValue());
 		o.jackConnect = m_jackConnect.getToggleState();
 		o.rawMidiCard = m_rawEnabled.getToggleState() ? m_rawCard.getText().trim().toStdString() : std::string();
@@ -409,6 +421,7 @@ namespace g1gui
 	{
 		const auto s = m_host.stats();
 		juce::String text;
+		text << "  model:     " << g1app::HostOptions::modelName(s.dspCount) << " (" << static_cast<int>(s.dspCount) << " DSPs)\n";
 		text << "  audio:     " << juce::String(s.audio) << "\n";
 		text << "  MIDI:      " << juce::String(s.midi) << "\n";
 #ifndef G1_BACKEND_JUCE
@@ -435,7 +448,7 @@ namespace g1gui
 		_g.setColour(juce::Colours::white);
 		_g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
 		auto heading = [&](const char* _text, const int _x, const int _y) { _g.drawText(_text, _x, _y, g_colW, g_headingH - 2, juce::Justification::centredLeft); };
-		heading("ROM", 0, 0);
+		heading("ROM and model", 0, 0);
 		heading("Audio", 0, g_audioY);
 #ifdef G1_BACKEND_JUCE
 		heading("MIDI ports", g_rightX, 0);
@@ -459,6 +472,8 @@ namespace g1gui
 		row(m_romLabel, m_romPath, 0, y);
 		m_romChoose.setBounds(g_labelW + g_gap, y - 2, 100, 26);
 		m_romFolder.setBounds(g_labelW + g_gap + 110, y - 2, 170, 26);
+		y += g_rowH + g_gap;
+		row(m_modelLabel, m_model, 0, y);
 
 		y = g_audioY + g_headingH;
 		row(m_audioLabel, m_audio, 0, y);
@@ -479,7 +494,7 @@ namespace g1gui
 		row(m_midiInLabel, m_midiInDeviceBox, g_rightX, y);
 #endif
 
-		m_running.setBounds(0, g_belowY + 8 + g_headingH, g_colW, 52);
+		m_running.setBounds(0, g_belowY + 8 + g_headingH, g_colW, 66);
 		m_note.setBounds(g_rightX, g_belowY + 8 + g_headingH, g_colW, 52);
 
 		// The notice's text takes everything above its row.

@@ -168,7 +168,7 @@ namespace g1app
 		// From here on: the peaks and the misses are the ones of this window only. Synced first:
 		// the DSP threads write the link peaks.
 		_mc.syncDsps();
-		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		for(uint32_t d = 0; d < _mc.dspCount(); ++d)
 		{
 			_mc.getDsp(d).resetLinkPeak();
 			m_misses[d] = _mc.getDsp(d).linkMisses();
@@ -185,14 +185,14 @@ namespace g1app
 		_mc.syncDsps();
 		// Each DSP's sound goes to the next through its link; DSP 3's is the output itself.
 		std::string s = "health, 1.5 s after MIDI in: output 1/2 " + dbfs(m_peak.load(std::memory_order_relaxed)) + " (before the gain)";
-		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		for(uint32_t d = 0; d < _mc.dspCount(); ++d)
 		{
 			auto& dsp = _mc.getDsp(d);
 			s += "\n  DSP " + std::to_string(d) + ": ";
 			s += dsp.jitFailed() ? "JIT failed" : dsp.booted() ? "running" : "not booted";
 			if(dsp.jitRecoveries())
 				s += ", " + std::to_string(dsp.jitRecoveries()) + " JIT recoveries";
-			if(d + 1 < g1::g_dspCount)
+			if(d + 1 < _mc.dspCount())
 			{
 				const auto& p = dsp.linkPeak();
 				s += ", link to DSP " + std::to_string(d + 1) + " " + dbfs(*std::max_element(p.begin(), p.end()));

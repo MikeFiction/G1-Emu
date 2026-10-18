@@ -24,7 +24,7 @@ namespace g1app
 	class Engine
 	{
 	public:
-		// The outputs carry DSP 3's X:$5F offset ($155, almost nothing); on the hardware the
+		// The outputs carry the last DSP's X:$5F offset ($155, almost nothing); on the hardware the
 		// output capacitor removes it. Whoever sends the audio out subtracts it.
 		static constexpr int32_t OutputDc = 0x155;
 
@@ -35,7 +35,8 @@ namespace g1app
 		// starts with the factory OS installed and nothing else, as after an update.
 		// _os, if given, is the OS image to install instead of the ROM's factory OS (HostOptions::os:
 		// Clavia's 3.03b update, which the hardware runs). An image that cannot be one is ignored.
-		explicit Engine(const std::vector<uint8_t>& _rom, const std::vector<uint8_t>& _os = {});
+		// _dspCount: 4 for a Regular, 8 for an Expanded (g1::g_regularDsps, g1::g_expandedDsps).
+		explicit Engine(const std::vector<uint8_t>& _rom, const std::vector<uint8_t>& _os = {}, uint32_t _dspCount = g1::g_regularDsps);
 
 		// Whether the OS in use is the one given, not the ROM's.
 		bool customOs() const { return m_customOs; }

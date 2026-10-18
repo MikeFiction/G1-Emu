@@ -135,7 +135,7 @@ namespace g1app
 		Stats m_stats;
 		std::atomic<uint64_t> m_pcIn{0}, m_pcOut{0}, m_midiIn{0}, m_midiOut{0};
 		HealthProbe m_health;		// the emulator's thread, and DSP 3's for output()
-		std::vector<uint64_t> m_lastFrames = std::vector<uint64_t>(g1::g_dspCount, 0);
+		std::vector<uint64_t> m_lastFrames = std::vector<uint64_t>(g1::g_maxDsps, 0);
 		double m_lastReportTime = 0;
 		uint64_t m_lastReportCycles = 0;
 

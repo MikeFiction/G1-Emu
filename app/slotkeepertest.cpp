@@ -199,7 +199,7 @@ int main()
 	}
 	Bench bench{engine};
 	double peak = 0;
-	engine.mc().getDsp(3).setBlockCallback([&](const int32_t _a, const int32_t _b, int32_t, int32_t)
+	engine.mc().outputDsp().setBlockCallback([&](const int32_t _a, const int32_t _b, int32_t, int32_t)
 	{
 		peak = std::max({peak, std::abs(static_cast<double>(_a - g1app::Engine::OutputDc)), std::abs(static_cast<double>(_b - g1app::Engine::OutputDc))});
 	});

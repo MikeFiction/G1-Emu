@@ -58,7 +58,10 @@ Audio goes through JACK (pipewire-jack): client **G1-Emu** with `out_1..out_4` a
 like the back panel; `out_1`/`out_2` connect themselves to the sound card (`G1_JACK_CONNECT=0`
 disables that). Without JACK, or with `G1_AUDIO=alsa`/`G1_AUDIO=device`, outputs 1/2 go through
 ALSA; `G1_AUDIO=no` disables audio. Also: `G1_GAIN_DB` (default +36 dB, which undoes the −36 dB cap
-the OS puts on the master volume); `G1_THREADS=0` runs the DSPs serially; `G1_RECORD=seconds`
+the OS puts on the master volume); `G1_THREADS=0` runs the DSPs serially; `G1_MODEL=expanded` (or `model = expanded` in the settings
+file, the plugin's Settings and project) builds the Expanded, eight DSPs in one chain with the
+outputs from DSP 7 (`Microcontroller::outputDsp()`; the tools and tests take `G1_MODEL` too); the
+DSPs run on four threads whatever the model (`G1_DSP_THREADS`), two each on an Expanded; `G1_RECORD=seconds`
 records a 4-channel WAV. The memory map, the loader and the findings are in `NOTES.md`. The
 template is Gearmulator's Nord Lead 2X emulation (`source/nord/n2x`).
 

@@ -66,10 +66,11 @@ namespace g1gui
 		g1app::EmuHost& m_host;
 		Look m_look;	// before the controls, so it outlives them
 
-		juce::Label m_romLabel, m_audioLabel, m_deviceLabel, m_gainLabel, m_rawLabel;
+		juce::Label m_romLabel, m_audioLabel, m_deviceLabel, m_gainLabel, m_rawLabel, m_modelLabel;
 		juce::Label m_romPath;
 		juce::TextButton m_romChoose{"Choose..."}, m_romFolder{"Open the ROM folder"};
 		std::unique_ptr<juce::FileChooser> m_chooser;
+		juce::ComboBox m_model;		// Regular or Expanded
 		juce::ComboBox m_audio;
 		juce::ComboBox m_device;
 		juce::StringArray m_audioDevices;

@@ -168,6 +168,11 @@ namespace g1plugin
 		float panelScale() const { return m_panelScale; }
 		void setPanelScale(float _scale) { if(std::abs(std::exchange(m_panelScale, _scale) - _scale) > 0.002f) stateChanged(); }
 		void savePreferences() const;
+		// Regular (4 DSPs) or Expanded (8, the expansion board): the project's, and a new instance
+		// takes the last one chosen. A change restarts the G1, which keeps what restart() keeps.
+		// On the message thread, and not from inside the panel, which the restart replaces.
+		bool expanded() const { return m_expanded; }
+		void setExpanded(bool _on);
 
 	private:
 		void stateChanged() { updateHostDisplay(juce::AudioProcessorListener::ChangeDetails().withNonParameterStateChanged(true)); }
@@ -291,6 +296,7 @@ namespace g1plugin
 		juce::AudioBuffer<float> m_inputs;		// the inputs, copied before the outputs overwrite them
 
 		bool m_extrasOpen = false, m_knobDisplays = false, m_knobFollowsPatch = false;
+		bool m_expanded = false;
 		bool m_selectedControllers = false;		// MIDI CC Mode on Selected Slots: given to each runner
 		uint32_t m_randomExclude = 0;			// the knobs Random leaves alone: bit k for knob k + 1
 		float m_panelScale = 1.25f;				// the editor's size: 1 is the panel's 1200 pixels wide; 1.25 is half the skin's

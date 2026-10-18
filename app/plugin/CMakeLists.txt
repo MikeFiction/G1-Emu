@@ -78,7 +78,9 @@ add_executable(g1runnertest runnertest.cpp runner.cpp runner.h)
 target_include_directories(g1runnertest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(g1runnertest PRIVATE g1Core)
 add_test(NAME g1runnertest COMMAND g1runnertest)
-set_tests_properties(g1runnertest PROPERTIES TIMEOUT 300 LABELS g1 SKIP_RETURN_CODE 77)
+add_test(NAME g1runnertest-expanded COMMAND g1runnertest)
+set_tests_properties(g1runnertest-expanded PROPERTIES ENVIRONMENT G1_MODEL=expanded)
+set_tests_properties(g1runnertest g1runnertest-expanded PROPERTIES TIMEOUT 300 LABELS g1 SKIP_RETURN_CODE 77)
 
 # The runner when the DSP JIT cannot generate a block (#17): one failure it recovers from, and a
 # JIT that keeps failing, which must give silence and not hang or crash. Needs a ROM.

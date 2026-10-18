@@ -56,7 +56,12 @@ namespace g1
 
 	// 8 HI08 ports at $200000 + 8*n: DSPs 0-3 on the main board, 4-7 on the expansion.
 	static constexpr uint32_t g_hostPorts = 8;
-	static constexpr uint32_t g_dspCount = 4;			// G1 without the expansion board
+	// The G1 without the expansion board has DSPs 0-3; with it (the Expanded), all 8. The OS counts
+	// them at boot by the ports that answer, so the same OS runs either. It chains them in one line,
+	// 0 -> 1 -> ... -> last -> codec: the last DSP is the codec's, the input still enters at DSP 0.
+	static constexpr uint32_t g_regularDsps = 4;
+	static constexpr uint32_t g_expandedDsps = 8;
+	static constexpr uint32_t g_maxDsps = g_expandedDsps;
 	// The DSPs run at 12.288 MHz x 27/4 = 82.944 MHz (PCTL=$3C001A, the same on all four):
 	// 864 cycles per sample at 96 kHz, which is exactly what the links between DSPs need
 	// (9 words of 96 cycles per block). Against the CPU's 20.97 MHz: 2025/512.
@@ -79,7 +84,7 @@ namespace g1
 	{
 	public:
 		static constexpr uint32_t g_pcTrail = 256;
-		explicit Microcontroller(const std::vector<uint8_t>& _rom);
+		explicit Microcontroller(const std::vector<uint8_t>& _rom, uint32_t _dspCount = g_regularDsps);
 		~Microcontroller() override;
 
 		uint32_t exec() override;
@@ -104,7 +109,11 @@ namespace g1
 		// for the OS's part of the flash.
 		bool installOsInFlash(const std::vector<uint8_t>& _os);
 		Flash& getFlash() { return m_flash; }
+		// 4 or 8, as built; the ports above have no DSP behind them.
+		uint32_t dspCount() const { return m_dspCount; }
 		Dsp& getDsp(uint32_t _i) { return *m_dsps[_i]; }
+		// The one at the codec, the end of the chain: where the outputs come out.
+		Dsp& outputDsp() { return *m_dsps[m_dspCount - 1]; }
 		mc68k::Hdi08& getHostPort(uint32_t _i) { return m_hostPorts[_i]; }
 
 		// The CPU's UART (the QSM's SCI, 31250 baud): the regular MIDI IN/OUT.
@@ -128,7 +137,7 @@ namespace g1
 		struct BenchStats
 		{
 			uint64_t cpuBusyNs = 0, cpuWaitingNs = 0;
-			std::array<uint64_t, g_dspCount> threadBusyNs{}, threadWaitingNs{}, blocks{};
+			std::array<uint64_t, g_maxDsps> threadBusyNs{}, threadWaitingNs{}, blocks{};
 			uint64_t periodicBarriers = 0, hostPortBarriers = 0;
 		};
 		void setBenchEnabled(bool _enabled) { m_benchEnabled = _enabled; }
@@ -172,7 +181,8 @@ namespace g1
 		std::map<uint32_t, UnknownAccess> m_unknown;
 		std::vector<HostAccess> m_hostTrace;
 		std::array<mc68k::Hdi08, g_hostPorts> m_hostPorts;
-		std::array<std::unique_ptr<Dsp>, g_dspCount> m_dsps;
+		const uint32_t m_dspCount;
+		std::array<std::unique_ptr<Dsp>, g_maxDsps> m_dsps;
 		uint64_t m_ucCycles = 0;
 		hwLib::SciMidi m_sci;
 		uint64_t m_nextSciSample = 0;
@@ -202,13 +212,14 @@ namespace g1
 		Lcd m_lcd;
 		uint64_t m_pitAccum = 0;
 
-		// One thread per DSP. At each periodic sync the CPU publishes the target cycle and runs on
-		// while the DSPs catch up to it in parallel; the next sync first waits for them (joinDsps).
-		// An access to a host port waits only for that DSP and brings it to the exact instant on the
-		// CPU thread; the other three keep running. G1_THREADS=0 runs everything serially, with the
-		// same catch-up points, so its output is the reference.
-		void workerLoop(uint32_t _dsp);
+		// Four DSP threads, each running its DSPs (two on an Expanded). At each periodic sync the CPU
+		// publishes the target cycle and runs on while the DSPs catch up to it in parallel; the next
+		// sync first waits for them (joinDsps). An access to a host port waits only for that DSP and
+		// brings it to the exact instant on the CPU thread; the others keep running. G1_THREADS=0 runs
+		// everything serially, with the same catch-up points, so its output is the reference.
+		void workerLoop(uint32_t _worker);
 		bool m_threaded = true;
+		uint32_t m_workerCount = 0;		// thread w runs DSPs w, w + m_workerCount...
 		std::vector<std::thread> m_workers;
 		// One job per DSP, on its own cache line: the CPU sets the target and bumps the generation,
 		// the worker runs up to it and clears busy.
@@ -218,16 +229,16 @@ namespace g1
 			std::atomic<bool> busy{false};
 			uint64_t target = 0;
 		};
-		std::array<DspJob, g_dspCount> m_jobs;
+		std::array<DspJob, g_maxDsps> m_jobs;
 		std::atomic<uint32_t> m_sleepers{0};
 		std::atomic<bool> m_idle{false};
 		std::atomic<bool> m_quitWorkers{false};
 		std::atomic<bool> m_benchEnabled{false};
 		std::chrono::steady_clock::time_point m_benchStart = std::chrono::steady_clock::now();
 		std::atomic<uint64_t> m_cpuWaitingNs{0};
-		std::array<std::atomic<uint64_t>, g_dspCount> m_threadBusyNs{};
-		std::array<std::atomic<uint64_t>, g_dspCount> m_threadWaitingNs{};
-		std::array<uint64_t, g_dspCount> m_benchBlockBase{};
+		std::array<std::atomic<uint64_t>, g_maxDsps> m_threadBusyNs{};
+		std::array<std::atomic<uint64_t>, g_maxDsps> m_threadWaitingNs{};
+		std::array<uint64_t, g_maxDsps> m_benchBlockBase{};
 		std::atomic<uint64_t> m_periodicBarriers{0}, m_hostPortBarriers{0};
 		std::mutex m_wakeMutex;
 		std::condition_variable m_wake;

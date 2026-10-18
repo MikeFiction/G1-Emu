@@ -152,9 +152,20 @@ namespace g1plugin
 		class InstanceView : public juce::Component
 		{
 		public:
-			InstanceView(juce::RangedAudioParameter& _gain, const juce::String& _instance)
+			InstanceView(juce::RangedAudioParameter& _gain, const juce::String& _instance, const bool _expanded, std::function<void(bool)> _setExpanded)
 				: m_gainAttachment(_gain, m_gain)
 			{
+				// Regular or Expanded (8 DSPs, about twice the voices): a new G1, so the change
+				// restarts it, keeping the project's patches as a restart does.
+				label(m_modelLabel, "Model");
+				m_model.addItem("Regular  (4 DSPs)", 1);
+				m_model.addItem("Expanded  (8 DSPs, twice the voices)", 2);
+				m_model.setSelectedId(_expanded ? 2 : 1, juce::dontSendNotification);
+				m_model.setTooltip("The G1 with or without the expansion board. Changing it restarts the G1; "
+					"the project's patches and settings stay, what is in the slots and not stored is kept with the project");
+				m_model.onChange = [this, set = std::move(_setExpanded)] { set(m_model.getSelectedId() == 2); };
+				addAndMakeVisible(m_model);
+
 				label(m_gainLabel, "Output level");
 				m_gain.setSliderStyle(juce::Slider::LinearHorizontal);
 				m_gain.setTextBoxStyle(juce::Slider::TextBoxRight, false, 70, 22);
@@ -188,9 +199,12 @@ namespace g1plugin
 			}
 			void resized() override
 			{
-				m_gainLabel.setBounds(0, 0, 130, GainRowH);
-				m_gain.setBounds(136, 0, getWidth() - 136, GainRowH);
-				m_text.setBounds(-6, GainRowH + 6, getWidth() + 12, getHeight() - GainRowH - 6 - g1gui::CardView::CloseH - 10);
+				m_modelLabel.setBounds(0, 0, 130, GainRowH);
+				m_model.setBounds(136, 0, 320, GainRowH);
+				constexpr int gainY = GainRowH + 8, textY = gainY + GainRowH + 6;
+				m_gainLabel.setBounds(0, gainY, 130, GainRowH);
+				m_gain.setBounds(136, gainY, getWidth() - 136, GainRowH);
+				m_text.setBounds(-6, textY, getWidth() + 12, getHeight() - textY - g1gui::CardView::CloseH - 10);
 			}
 
 		private:
@@ -200,8 +214,9 @@ namespace g1plugin
 				_l.setColour(juce::Label::textColourId, juce::Colours::white);
 				_l.setJustificationType(juce::Justification::centredRight);
 			}
-			static constexpr int Width = 760, Height = 380, GainRowH = 24;
-			juce::Label m_gainLabel;
+			static constexpr int Width = 760, Height = 412, GainRowH = 24;
+			juce::Label m_modelLabel, m_gainLabel;
+			juce::ComboBox m_model;
 			juce::Slider m_gain;
 			juce::SliderParameterAttachment m_gainAttachment;
 			juce::TextEditor m_text;
@@ -210,6 +225,11 @@ namespace g1plugin
 
 	std::unique_ptr<juce::Component> Editor::createSettings()
 	{
-		return std::make_unique<InstanceView>(m_processor.gainParameter(), juce::String(m_processor.describe()));
+		// The restart replaces this panel, so it comes later, on the message thread (as restart()).
+		return std::make_unique<InstanceView>(m_processor.gainParameter(), juce::String(m_processor.describe()), m_processor.expanded(),
+			[e = juce::Component::SafePointer<Editor>(this)](const bool _on)
+			{
+				juce::MessageManager::callAsync([e, _on] { if(e) e->m_processor.setExpanded(_on); });
+			});
 	}
 }

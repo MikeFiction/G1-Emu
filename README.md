@@ -203,7 +203,11 @@ want to hear about it.
   found, the window says what is needed, opens that folder for you, or lets you pick the file;
   `Settings` shows which one is running and changes it. A file that is not the right ROM is told
   apart from a missing one, and the reason is given.
-- **Settings** (in the window): the ROM, audio driver and device, output level, whether outputs 1/2
+- **Regular or Expanded:** Settings picks the model. The **Expanded** is the G1 with the expansion
+  board: eight DSPs instead of four, and the same OS gives each patch about twice the voices
+  (BellsMorph 8 → 16, 4VoiceChoir 16 → 32). It costs more CPU, and the change takes effect on the
+  next start or Restart (`model =` in the settings file, `G1_MODEL=expanded`).
+- **Settings** (in the window): the ROM, the model, audio driver and device, output level, whether outputs 1/2
   connect themselves, the raw MIDI card, and the notice above. The console reads the same settings;
   the `G1_*` environment variables win over them.
 - The flash (installed OS and stored patches) is saved beside it. On Windows both live in
@@ -265,6 +269,8 @@ with its submodules in `~/src/clap-juce-extensions` (or `-DG1_CLAP_DIR=...`); wi
 VST3 is built.
 
 - **Outputs 1/2 and 3/4** as two stereo buses, and **In L/R** as an optional input.
+- **Regular or Expanded** in the plugin's Settings, saved with the project: changing it restarts
+  that instance's G1, which keeps its patches. A new instance takes the last model chosen.
 - **G1-Emu FX** is the same G1 as an effect, to put on an audio track: its **In L/R** is on from the
   start and feeds the G1's two inputs, so a patch with the Audio In module processes the track. It
   still takes notes and the editor like the instrument. Most DAWs never offer an instrument's

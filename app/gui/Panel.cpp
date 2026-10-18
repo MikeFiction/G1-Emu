@@ -2638,7 +2638,7 @@ namespace g1gui
 
 		m_peakHold = std::max(static_cast<double>(s.peak), m_peakHold * 0.9);
 		juce::String dsp;
-		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		for(uint32_t d = 0; d < s.dspCount; ++d)
 			dsp << (s.dspFailed[d] ? "x" : s.dspOn[d] ? "o" : "-");
 		// String::formatted uses wide printf on Windows: never pass UTF-8 pointers to %s.
 		juce::String status = juce::String::formatted("speed %5.1f%%   load %3.0f%%", s.speed, s.load);

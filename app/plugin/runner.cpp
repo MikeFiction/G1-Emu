@@ -42,7 +42,8 @@ namespace g1app
 		m_bridge.setRate(static_cast<uint32_t>(std::lround(m_rate)));
 
 		auto& mc = m_engine.mc();
-		mc.getDsp(3).setBlockCallback([this](const int32_t _o1, const int32_t _o2, const int32_t _o3, const int32_t _o4)
+		// The outputs come out of the last DSP: 3 on a Regular, 7 on an Expanded.
+		mc.outputDsp().setBlockCallback([this](const int32_t _o1, const int32_t _o2, const int32_t _o3, const int32_t _o4)
 		{
 			constexpr auto dc = Engine::OutputDc;
 			m_bridge.push(_o1 - dc, _o2 - dc, _o3 - dc, _o4 - dc);
@@ -67,7 +68,7 @@ namespace g1app
 		// The DSPs may still be finishing their last catch-up, which ends in these callbacks.
 		auto& mc = m_engine.mc();
 		mc.syncDsps();
-		mc.getDsp(3).setBlockCallback({});
+		mc.outputDsp().setBlockCallback({});
 		mc.getDsp(0).setInputProvider({});
 		mc.setIdle(false);
 	}
@@ -282,7 +283,8 @@ namespace g1app
 				m_stats.seconds += wall;
 				m_stats.speed = 100.0 * static_cast<double>(cycles - lastCycles) / g1::g_ucClock / wall;
 				m_stats.load = 100.0 * busy / wall;
-				for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+				m_stats.dspCount = mc.dspCount();
+				for(uint32_t d = 0; d < mc.dspCount(); ++d)
 				{
 					m_stats.dspOn[d] = mc.getDsp(d).booted();
 					m_stats.dspFailed[d] = mc.getDsp(d).jitFailed();

@@ -216,6 +216,13 @@ first note-off. `g1patchtest` shows it with `G1_SEQ=+60,+64,-64,-60 G1_CHORD=1`.
   DSPs first: a light patch never reaches DSPs 4-7. And the voices placed there sound: BellsMorph
   with 8 notes and with 16 gives −38.3 and −38.5 dB RMS on four DSPs (16 notes steal), −37.7 and
   −33.3 dB on eight. SimpleOSC sounds as on four (262 Hz at −61.8 dBFS) down the eight links.
+- **Its cost.** Every DSP runs its program whether it has voices or not, so eight cost twice four:
+  serially 1.25x real time against 0.67x; threaded, 4.7x against 2.7x (Ryzen 7 5700X, 8 cores).
+  One thread per DSP made nine spinning threads with the CPU's, and in real time (`g1runnertest
+  --realtime`) that took 5.8 cores and dropped out 1-4 times in 8 s; four threads with two DSPs
+  each run as fast offline (2.5x), take 2.75 cores and drop nothing, so four it is for either
+  model. The longer chain also delays the sound (eight links), so an Expanded's WAV is not a
+  Regular's; threaded and serial are still identical, bit for bit.
 - Emulation details (`g1dsp.cpp`): HF0/HF1 from the CPU's ICR go to the DSP's HSR and HF2/HF3 back
   to the ISR; the jump to `$FF0000` re-arms the boot ROM; host commands are fast interrupts (one
   `movep` in the vector, no `RTI`), so Gearmulator's host-command arbitration is disabled; the ESSI

@@ -7,6 +7,21 @@ Older entries cite their commit by hand.
 
 ## 2026-10-18
 
+- [New] **Regular or Expanded, picked in Settings (#39).** The Expanded is the G1 with the
+  expansion board: eight DSPs, one chain to the codec on DSP 7, and about twice the voices per
+  patch. `Microcontroller` takes the number of DSPs (4 or 8) when it is made and reads the outputs
+  from the last one (`outputDsp()`) where DSP 3 was fixed; the standalone takes it from
+  `model = regular|expanded` in the settings file (Settings, "ROM and model"; on the next start or
+  Restart), the plugin from its Settings card, saved with the project (a change restarts the G1;
+  a project from before runs a Regular; a new instance takes the last one chosen), and everything,
+  the tools and tests included, from `G1_MODEL=expanded`. The status bar shows the eight DSPs. The
+  DSPs now run on four threads whatever the model, two each on an Expanded (`G1_DSP_THREADS`):
+  eight threads dropped out in real time. Checked: the voice counts and the 8/16-note RMS of the
+  experiment, now at run time (BellsMorph 8 → 16, −33.3 dB with 16 notes); `g1runnertest
+  --realtime` 0 dropouts on both (Regular 1.6 cores, Expanded 2.75); `golden.sh` byte-identical
+  for the Regular, threaded = serial for the Expanded; the standalone console with 8 DSPs on at
+  100 % speed; `ctest` 14/14 with the new `g1runnertest-expanded`. The plugin's selector is not
+  tried in a DAW yet. (Claude)
 - [Notes] **The expansion board boots (#39).** Built with eight DSPs on the eight HI08 ports, the
   OS finds them (8 at `$1AB91C`), boots all eight in one chain with the codec on DSP 7, and doubles
   the voices it gives (BellsMorph 8 → 16, 4VoiceChoir 16 → 32...), which sound: 16 notes are

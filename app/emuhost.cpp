@@ -228,7 +228,8 @@ namespace g1app
 		const auto os = m_options.loadOs(osNote);
 		if(!osNote.empty())
 			_log += osNote + "\n";
-		m_engine = std::make_unique<Engine>(m_rom, os);
+		m_engine = std::make_unique<Engine>(m_rom, os, m_options.dspCount());
+		_log += std::string("model: ") + HostOptions::modelName(m_engine->mc().dspCount()) + " (" + std::to_string(m_engine->mc().dspCount()) + " DSPs)\n";
 
 		std::vector<uint8_t> flash;
 		if(loadFile(m_flashPath, flash) && m_engine->loadFlash(flash))
@@ -293,7 +294,8 @@ namespace g1app
 		m_thread = std::thread([this] { run(); });
 	}
 
-	// What connects a new G1 to the sound card: the input to DSP 0, the four outputs from DSP 3.
+	// What connects a new G1 to the sound card: the input to DSP 0, the four outputs from the last DSP
+	// (3 on a Regular, 7 on an Expanded).
 	void EmuHost::wireEngine()
 	{
 		auto& mc = m_engine->mc();
@@ -305,8 +307,8 @@ namespace g1app
 			mc.getDsp(0).setInputProvider([this](int32_t& _l, int32_t& _r) { m_jack->pullInput(_l, _r); });
 #endif
 
-		// One sample per DSP 3 block (96 kHz): the four outputs.
-		mc.getDsp(3).setBlockCallback([this](const int32_t _o1, const int32_t _o2, const int32_t _o3, const int32_t _o4)
+		// One sample per block of the last DSP (96 kHz): the four outputs.
+		mc.outputDsp().setBlockCallback([this](const int32_t _o1, const int32_t _o2, const int32_t _o3, const int32_t _o4)
 		{
 			m_health.output(_o1 - g_dc, _o2 - g_dc);
 #ifdef G1_BACKEND_JUCE
@@ -645,7 +647,8 @@ namespace g1app
 				m_stats.speed = 100.0 * emu / wall;
 				m_stats.load = 100.0 * busy / wall;
 				m_stats.cpuCores = (cpu - lastCpu) / wall;
-				for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+				m_stats.dspCount = mc.dspCount();
+				for(uint32_t d = 0; d < mc.dspCount(); ++d)
 				{
 					m_stats.dspOn[d] = mc.getDsp(d).booted();
 					m_stats.dspFailed[d] = mc.getDsp(d).jitFailed();
@@ -687,10 +690,10 @@ namespace g1app
 		std::string r;
 		std::snprintf(buf, sizeof(buf), "[%6.0fs] speed %5.1f%%  load %3.0f%%  CPU %.1f cores  DSP:", s.seconds, s.speed, s.load, s.cpuCores);
 		r += buf;
-		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		for(uint32_t d = 0; d < mc.dspCount(); ++d)
 			r += s.dspFailed[d] ? " XX" : s.dspOn[d] ? " on" : " --";
 		r += "  HI08 words/HC/replies:";
-		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		for(uint32_t d = 0; d < mc.dspCount(); ++d)
 		{
 			std::snprintf(buf, sizeof(buf), " %llu/%llu/%llu", static_cast<unsigned long long>(mc.getDsp(d).hostWords()),
 				static_cast<unsigned long long>(mc.getDsp(d).hostCommands()), static_cast<unsigned long long>(mc.getDsp(d).wordsToHost()));
@@ -701,7 +704,7 @@ namespace g1app
 			static_cast<unsigned long long>(s.midiIn), static_cast<unsigned long long>(s.midiOut));
 		r += buf;
 		const double wall = s.seconds - m_lastReportTime;
-		for(uint32_t d = 0; d < g1::g_dspCount; ++d)
+		for(uint32_t d = 0; d < mc.dspCount(); ++d)
 		{
 			auto& dsp = mc.getDsp(d);
 			const auto frames = dsp.audioFrames();
