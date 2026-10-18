@@ -205,6 +205,17 @@ first note-off. `g1patchtest` shows it with `G1_SEQ=+60,+64,-64,-60 G1_CHORD=1`.
   TXDE and **silently drops the word** after 10 tries.
 - **DSP 3 boots twice** (loader + OS): whatever is left in the port when it jumps back to
   `$FF0000` is handed to the boot ROM.
+- **The expansion board, tried on 2026-10-18 (#39)** by building with eight DSPs on the eight
+  ports and nothing else changed. The OS boots them all: `$1AB91C` holds 8 instead of 4 and the
+  eight reach their main loop. **One chain, 0 → 7 → codec:** DSPs 1-6 get the middle program
+  (`CRA=$181801` on both ESSIs, receivers on) and the codec moves to **DSP 7** (`CRA=$181802`);
+  DSP 3 is then a middle one. The inputs still enter at DSP 0. So the outputs are read from the
+  last DSP, whichever it is. **The voices double**: asked for 32, the bench patches get
+  WavetableSynth/Pad 11 → 23, 4VoiceChoir 16 → 32, FM303 and BellsMorph 8 → 16, Grainalizzer,
+  DungeonDub and WindowLicker 4 → 8 (SimpleOSC 32 either way, progger 1). The OS fills the lower
+  DSPs first: a light patch never reaches DSPs 4-7. And the voices placed there sound: BellsMorph
+  with 8 notes and with 16 gives −38.3 and −38.5 dB RMS on four DSPs (16 notes steal), −37.7 and
+  −33.3 dB on eight. SimpleOSC sounds as on four (262 Hz at −61.8 dBFS) down the eight links.
 - Emulation details (`g1dsp.cpp`): HF0/HF1 from the CPU's ICR go to the DSP's HSR and HF2/HF3 back
   to the ISR; the jump to `$FF0000` re-arms the boot ROM; host commands are fast interrupts (one
   `movep` in the vector, no `RTI`), so Gearmulator's host-command arbitration is disabled; the ESSI

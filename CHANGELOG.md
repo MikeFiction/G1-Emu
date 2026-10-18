@@ -7,6 +7,11 @@ Older entries cite their commit by hand.
 
 ## 2026-10-18
 
+- [Notes] **The expansion board boots (#39).** Built with eight DSPs on the eight HI08 ports, the
+  OS finds them (8 at `$1AB91C`), boots all eight in one chain with the codec on DSP 7, and doubles
+  the voices it gives (BellsMorph 8 → 16, 4VoiceChoir 16 → 32...), which sound: 16 notes are
+  +4.4 dB RMS over 8 on eight DSPs, the same as 8 on four. Written in `NOTES.md`, "Booting the
+  DSPs"; the code is unchanged (the test build was not kept). (Claude)
 - [Fix] **A project brings back which slots are on and which one is active (#75).** In the plugin,
   a project saved with only one slot on came back with every slot that holds a patch on, which
   splits the voices: restoring a slot's patch turns that slot on, and the project never kept the
