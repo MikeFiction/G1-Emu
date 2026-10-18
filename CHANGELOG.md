@@ -7,6 +7,10 @@ Older entries cite their commit by hand.
 
 ## 2026-10-18
 
+- [Docs] **Release notes for v0.1.0-alpha.22 (Claude, asked by Javier).** `docs/release-notes.md`:
+  Regular or Expanded (#39), G1-Emu FX (#76), and the two #75 fixes (the slots on and active come
+  back with a project; a heavy slot A no longer broken by NME connecting while it opens).
+
 - [Fix] **A project's slots no longer come back broken when NME connects as it opens (#75).** On a
   restore the plugin uploads each slot's patch to the G1 as an editor does; NME, connecting on the
   direct link or the PC Port at the same moment, greeted and asked for patches in between two of
