@@ -179,7 +179,10 @@ namespace g1app
 			// event is ever behind the emulator, and each one reaches the G1 at the first sync at
 			// or after its frame, wherever the host's blocks begin and end.
 			std::unique_lock<std::mutex> lock(m_engineMutex);
-			// The editor's bytes, whenever they come: the PC Port has no timing to keep.
+			// The editor's bytes, whenever they come: the PC Port has no timing to keep. But not while
+			// the keeper uploads a slot (a project's slots going back in, as NME connects): a message
+			// between two of its packets makes the OS drop the upload half done, and the slot shows
+			// Error (#75). They wait, in order, until the upload ends.
 			if(m_pcPort)
 			{
 				m_pcPort->poll(pcIn);
@@ -187,13 +190,7 @@ namespace g1app
 				{
 					auto& bytes = pcIn[static_cast<size_t>(m_pcIndex)];
 					m_pcIn += bytes.size();
-					mc.getPcPort().receive(bytes);
-					if(m_keeper)
-						m_keeper->editorSent(bytes, nowMs());
-					if(m_settings)
-						m_settings->editorSent(bytes, nowMs());
-					if(m_presets)
-						m_presets->editorSent(bytes, nowMs());
+					m_editorHeld.insert(m_editorHeld.end(), bytes.begin(), bytes.end());
 					bytes.clear();
 				}
 			}
@@ -203,17 +200,19 @@ namespace g1app
 			{
 				linkIn.clear();
 				m_link->poll(linkIn);
-				if(!linkIn.empty())
-				{
-					m_pcIn += linkIn.size();
-					mc.getPcPort().receive(linkIn);
-					if(m_keeper)
-						m_keeper->editorSent(linkIn, nowMs());
-					if(m_settings)
-						m_settings->editorSent(linkIn, nowMs());
-					if(m_presets)
-						m_presets->editorSent(linkIn, nowMs());
-				}
+				m_pcIn += linkIn.size();
+				m_editorHeld.insert(m_editorHeld.end(), linkIn.begin(), linkIn.end());
+			}
+			if(!m_editorHeld.empty() && !(m_keeper && m_keeper->uploading()))
+			{
+				mc.getPcPort().receive(m_editorHeld);
+				if(m_keeper)
+					m_keeper->editorSent(m_editorHeld, nowMs());
+				if(m_settings)
+					m_settings->editorSent(m_editorHeld, nowMs());
+				if(m_presets)
+					m_presets->editorSent(m_editorHeld, nowMs());
+				m_editorHeld.clear();
 			}
 			speak(m_keeper, m_settings, m_presets);
 			speak(m_settings, m_keeper, m_presets);

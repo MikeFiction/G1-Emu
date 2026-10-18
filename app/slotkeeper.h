@@ -53,6 +53,10 @@ namespace g1app
 		void reread(size_t _slot);
 		// True while nothing is waiting to be fetched or uploaded: slots() is what the G1 has.
 		bool settled() const;
+		// Worker thread. True while the keeper uploads a slot: from its first packet to its last
+		// nothing else may reach the OS, which drops an upload another message comes into half
+		// done (#75). The runner holds the editor's bytes meanwhile.
+		bool uploading() const { return m_state == State::Uploading; }
 
 		// The slots as bytes for a project, and back (false if they are not this format).
 		static std::vector<uint8_t> pack(const Slots& _slots);

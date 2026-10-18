@@ -513,7 +513,8 @@ namespace g1app
 					}
 				}
 			}
-			for(size_t s = 0; s < SlotCount; ++s)
+			// Not into the middle of an editor's upload: the OS would drop both (#75).
+			for(size_t s = 0; s < SlotCount && !m_editorUploading; ++s)
 				if(m_uploadPending[s])
 				{
 					{

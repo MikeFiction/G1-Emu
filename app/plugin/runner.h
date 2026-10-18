@@ -125,6 +125,7 @@ namespace g1app
 		MidiRouting m_midiRouting;		// the worker's: the track's notes, by each slot's octave shift
 		std::atomic<bool> m_selectedControllers{false};	// MIDI CC Mode on Selected Slots (setSelectedControllers)
 		std::vector<uint8_t> m_routed;
+		std::vector<uint8_t> m_editorHeld;	// worker thread: the editor's bytes, held while the keeper uploads a slot
 
 		std::atomic<uint64_t> m_consumed{0};	// frames the host has taken (audio thread writes)
 		uint64_t m_debt = 0;					// frames owed: put out as silence, not yet arrived

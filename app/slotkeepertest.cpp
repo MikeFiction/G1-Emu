@@ -2,7 +2,10 @@
 //
 //   1. A G1 boots with the factory flash; a keeper restores a small patch into slot A (the
 //      sections NME uploads for SimpleOSC: OscA into the 2-Output) and leaves B-D empty.
-//      Before the restore the G1 is silent, after it OscA drones (it needs no note).
+//      Before the restore the G1 is silent, after it OscA drones (it needs no note). An editor
+//      greets and asks for a patch in the middle of the upload, as NME does when it connects
+//      while a project opens: its bytes wait while the keeper uploads, as the runner holds them,
+//      or the OS would drop the upload half done (#75).
 //   2. A second keeper, as a project reopened later would have, starts on the same running G1
 //      and asks for all four slots. Slot A must come back as the same patch (padding bits, the
 //      header's last 3 bits and the cables' order aside) and the other three empty.
@@ -58,6 +61,10 @@ namespace
 		g1app::Engine& engine;
 		g1app::SlotKeeper* keeper = nullptr;
 		double peak = 0;
+		// An editor's bytes for the G1, held while the keeper uploads (as the runner does).
+		std::vector<uint8_t> editorHeld;
+		bool editorOnUpload = false;	// the editor talks once the keeper's upload has begun
+		uint64_t uploadBegan = 0;
 
 		uint64_t nowMs() { return engine.mc().ucCycles() / g_ms; }
 
@@ -71,6 +78,19 @@ namespace
 				const auto end = mc.ucCycles() + g_ms;
 				while(mc.ucCycles() < end)
 					mc.exec();
+				if(editorOnUpload && keeper && keeper->uploading())
+				{
+					editorOnUpload = false;
+					uploadBegan = nowMs();
+					// NME connecting: IAm, then RequestPatch for slot B.
+					editorHeld = {0xf0, 0x33, 0x00, 0x06, 0x00, 0x03, 0x03, 0xf7, 0xf0, 0x33, 0x5d, 0x06, 0x41, 0x35, 0x7c, 0xf7};
+				}
+				if(!editorHeld.empty() && keeper && !keeper->uploading())
+				{
+					mc.getPcPort().receive(editorHeld);
+					keeper->editorSent(editorHeld, nowMs());
+					editorHeld.clear();
+				}
 				fromG1.clear();
 				mc.getPcPort().takeTx(fromG1);
 				if(keeper)
@@ -210,9 +230,14 @@ int main()
 	saved[0].sections = g_simpleOsc;
 	first.restore(saved);
 	bench.keeper = &first;
+	bench.editorOnUpload = true;
 	bench.run(2000);
 	const double silent = peak;
 	check(bench.runUntilSettled(20000), "the first keeper restores slot A and settles");
+	check(!bench.editorOnUpload && bench.editorHeld.empty(), "an editor talked during the upload, and got through after it");
+	// An upload the OS dropped is given up after 4 s without an ACK.
+	const auto took = bench.nowMs() - bench.uploadBegan;
+	check(took < 3500, "the upload was not dropped (settled " + std::to_string(took) + " ms after it began)");
 	std::string why;
 	check(first.slots()[0].sections == g_simpleOsc, "it keeps slot A as restored");
 	peak = 0;

@@ -7,6 +7,19 @@ Older entries cite their commit by hand.
 
 ## 2026-10-18
 
+- [Fix] **A project's slots no longer come back broken when NME connects as it opens (#75).** On a
+  restore the plugin uploads each slot's patch to the G1 as an editor does; NME, connecting on the
+  direct link or the PC Port at the same moment, greeted and asked for patches in between two of
+  those packets, and the OS dropped the upload half done: slot A, uploaded first and longest with a
+  heavy patch, kept half its patch and showed `Error` (Garrincha568's report). The runner now holds
+  the editor's bytes while the `SlotKeeper` uploads a slot (`SlotKeeper::uploading()`) and lets them
+  through, in order, as soon as it ends; and the keeper no longer starts a restore in the middle of
+  an editor's own upload. Checked: with Amb FM Piano (12 voices) in A and three pianos in B-D, an
+  editor's greeting and RequestPatch at 43 moments across A's upload broke A at 18 of them before
+  (8 sections read back different, the upload given up after 4 s) and at none after;
+  `g1slotkeepertest` now has an editor talk in the middle of its restore, and fails without the hold
+  (slot A lost, silent) and passes with it; `ctest` 14/14. `g1vst3check --slots` could not run here
+  (its PC Port was not created, on `main` as well). (Claude)
 - [New] **Regular or Expanded, picked in Settings (#39).** The Expanded is the G1 with the
   expansion board: eight DSPs, one chain to the codec on DSP 7, and about twice the voices per
   patch. `Microcontroller` takes the number of DSPs (4 or 8) when it is made and reads the outputs
