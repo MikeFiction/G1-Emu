@@ -5,6 +5,32 @@ its line here, in the same commit** (see `CLAUDE.md`). Each entry says who made 
 and how it was checked; the commit is the one that brings the entry (`git log -- CHANGELOG.md`).
 Older entries cite their commit by hand.
 
+## 2026-10-18
+
+- [Fix] **A project brings back which slots are on and which one is active (#75).** In the plugin,
+  a project saved with only one slot on came back with every slot that holds a patch on, which
+  splits the voices: restoring a slot's patch turns that slot on, and the project never kept the
+  slots' state. The OS adds both after the slots' channels in the synth settings it sends
+  (SlotsSelected and SlotActivated, as NME reads them), so `SynthSettings` now keeps them and the
+  project saves them; on a restore, after the slots' patches and the settings, the link sends them
+  back with the PatchManager commands NME's slot buttons send, each on its own (sent right behind
+  another message the OS drops it), and reads them back. A project saved before this has none and
+  leaves the slots as they are. Checked: `g1synthsettingstest` reproduces the report (patches back
+  into A and B leave A and B on) and passes with the project's "only B on, B active" read back from
+  the OS; `g1vst3check --settings` reopens a project with only B on and gets B on and active;
+  `ctest` 13/13, `--buffer-change` passes. (Claude)
+- [New] **G1-Emu FX, the same G1 as an effect (#76).** A second plugin, `g1pluginfx`, built from the
+  same sources (`G1_PLUGIN_FX=1`): VST3 category Fx and CLAP audio-effect, and its In L/R input is
+  on from the start, so it sits on an audio track and feeds the G1's two inputs. The instrument's
+  input was there but off, and most hosts never offer it. Notes and the editor work as in the
+  instrument, and both share the instance numbers (an FX next to an instrument is "G1-Emu 2").
+  CI packages both and the Windows installer installs both. `g1vst3check "G1-Emu FX.vst3" --fx dir`
+  (dir: `g1patchtest ... tools/patches/AudioInTest.pch --dump-packets dir`) checks it, sending the
+  patch over the direct link rather than the virtual PC Port. Checked on Linux: the host sees an
+  effect with a stereo input on; a 440 Hz sine at −12 dB into it comes out of outputs 1/2 at
+  −13.8 dB through AudioIn, and −200 dB once it stops; the instrument still reports its input off.
+  Not yet tried in a DAW. (Claude)
+
 ## 2026-10-17
 
 - [Tools] **`g1patchtest` can cut an upload short and close it**: `G1_ABORT_AFTER=N` stops the

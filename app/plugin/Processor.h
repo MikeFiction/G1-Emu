@@ -108,7 +108,7 @@ namespace g1plugin
 		juce::AudioProcessorEditor* createEditor() override;
 		bool hasEditor() const override { return true; }
 
-		const juce::String getName() const override { return "G1-Emu"; }
+		const juce::String getName() const override { return JucePlugin_Name; }	// "G1-Emu" or "G1-Emu FX"
 		bool acceptsMidi() const override { return true; }
 		bool producesMidi() const override { return false; }
 		bool isMidiEffect() const override { return false; }

@@ -14,6 +14,8 @@
 //   7. With setReread, the link keeps up with settings it did not write: an editor's, read back
 //      once it is quiet, and ones changed without a word (the panel's System menu), read again
 //      within the period.
+//   In 3, the keeper puts patches back into slots A and B, and the project's slots (only B on, B
+//   active) are written with the settings: they read back as the project had them (issue #75).
 //
 // Exit code 77 (skipped) without a ROM, 1 on any failure.
 
@@ -58,7 +60,16 @@ namespace
 			_s.name.c_str(), _s.midiChannel[0] + 1, _s.midiChannel[1] + 1, _s.midiChannel[2] + 1, _s.midiChannel[3] + 1,
 			_s.clockInternal ? "internal" : "external", _s.clockBpm, _s.globalSync, _s.masterTune, _s.velScaleMin, _s.velScaleMax,
 			_s.localOn, _s.ledsActive, _s.keyboardMode, _s.pedalPolarity, _s.programChangeReceive, _s.programChangeSend, _s.knobMode);
-		return buf;
+		std::string r = buf;
+		if(_s.hasSlots)
+		{
+			r += ", slots on ";
+			for(size_t i = 0; i < 4; ++i)
+				if(_s.slotSelected[i])
+					r += static_cast<char>('A' + i);
+			r += std::string(", active ") + static_cast<char>('A' + _s.activeSlot);
+		}
+		return r;
 	}
 
 	bool same(const g1app::SynthSettings& _a, const g1app::SynthSettings& _b)
@@ -159,6 +170,7 @@ int main()
 	g1app::SynthSettings factory;
 	const auto rev1 = waitFor(0, 8000, factory);
 	check(rev1 > 0, "read the settings: " + describe(factory));
+	check(factory.hasSlots, "they say which slots are on and which is active");
 
 	// 2. Other channels and globals, and back
 	auto changed = factory;
@@ -192,6 +204,7 @@ int main()
 		std::vector<uint8_t> fromG1, toEditor, toG1;
 		g1app::SlotKeeper::Slots slots;
 		slots[0].sections = g_simpleOsc;
+		slots[1].sections = g_simpleOsc;
 		keeper2.restore(slots);
 		auto run2 = [&](const uint64_t _ms)
 		{
@@ -244,10 +257,21 @@ int main()
 			run2(50);
 			restored = keeper2.settled();
 		}
-		check(restored, "the keeper puts slot A back");
-		link2.write(kept);	// the first write after the slot's upload, as the plugin's
-		const bool again = waitFor2(r1, restarted) > r1 && same(restarted, changed);
+		check(restored, "the keeper puts slots A and B back");
+		g1app::SynthSettings afterUpload;
+		uint64_t r2 = 0;
+		link2.read();
+		r2 = waitFor2(r1, afterUpload);
+		std::printf("     after the uploads: %s\n", describe(afterUpload).c_str());
+		// The project's slots: only B on, and B active (#75).
+		auto project = kept;
+		project.hasSlots = true;
+		project.slotSelected = {false, true, false, false};
+		project.activeSlot = 1;
+		link2.write(project, true);	// the first write after the slots' upload, as the plugin's
+		const bool again = waitFor2(r2, restarted) > r2 && same(restarted, changed);
 		check(again, "written back, they are there again: " + describe(restarted));
+		check(restarted.hasSlots && restarted == project, "and the slots as the project had them, only B on and active");
 		// The link's read and write are not a patch change: the keeper has no slot to read again.
 		check(keeper2.settled(), "the keeper takes the settings' read and write for no change of slot A");
 	}
@@ -255,6 +279,16 @@ int main()
 	// 4. encode/decode
 	g1app::SynthSettings round;
 	check(g1app::SynthSettings::decode(changed.encode(), round) && same(round, changed), "encode/decode");
+	{
+		auto slotsOn = changed;
+		slotsOn.hasSlots = true;
+		slotsOn.slotSelected = {true, false, true, true};
+		slotsOn.activeSlot = 2;
+		g1app::SynthSettings back4, bare;
+		check(g1app::SynthSettings::decode(slotsOn.encode(), back4) && back4.hasSlots && back4.slotSelected == slotsOn.slotSelected
+			&& back4.activeSlot == 2, "encode/decode with the slots");
+		check(g1app::SynthSettings::decode(slotsOn.encode(false), bare) && !bare.hasSlots, "as the OS takes them, without the slots");
+	}
 
 	// 5. Not in the flash
 	const auto stateAfterWrite = g1.engine.userState();

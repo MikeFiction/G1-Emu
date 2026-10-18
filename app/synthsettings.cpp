@@ -22,6 +22,11 @@ namespace g1app
 		constexpr uint8_t CcIAm = 0x00, CcAck = 0x16, CcPatch = 0x17, CcSettings = 0x1f;
 		constexpr uint8_t SectionType = 3;
 		constexpr uint8_t ChannelMarker = 27;	// after each slot's channel, as the OS writes it
+		// After the channels the OS adds what it calls by the PatchManager commands' numbers:
+		// SlotsSelected 0:4 A:1 B:1 C:1 D:1, SlotActivated 0:6 slot:2, then each slot's voices
+		// (5 and four bytes, which nothing here needs).
+		constexpr uint8_t SlotsSelected = 0x07, SlotActivated = 0x09;
+		constexpr uint8_t PatchManager = 0x41;
 
 		// G1_SETTINGS_TRACE=1: every message the link sends and every one the G1 sends, on stderr.
 		void traceMsg(const char* _dir, const uint64_t _nowMs, const std::vector<uint8_t>& _m)
@@ -39,9 +44,10 @@ namespace g1app
 	// ____________________________________________________________________________________________
 	// The section: type 3, then clock source:1 vel min:7, LEDs:1 vel max:7, bpm:8, local:1
 	// keyboard mode:1 pedal:1 global sync:5, master tune:8, PC receive:1 PC send:1 knob mode:1 0:5,
-	// the name (up to 16 characters, ended by a zero when shorter), and per slot 0:3 channel:5 27:8.
+	// the name (up to 16 characters, ended by a zero when shorter), and per slot 0:3 channel:5 27:8;
+	// then, from the OS, the slots on and the active one (SlotsSelected, SlotActivated).
 
-	std::vector<uint8_t> SynthSettings::encode() const
+	std::vector<uint8_t> SynthSettings::encode(const bool _withSlots) const
 	{
 		const auto bit = [](const bool _b) { return static_cast<uint8_t>(_b ? 1 : 0); };
 		std::vector<uint8_t> s = {SectionType};
@@ -60,6 +66,14 @@ namespace g1app
 		{
 			s.push_back(static_cast<uint8_t>(c & 0x1f));
 			s.push_back(ChannelMarker);
+		}
+		if(_withSlots && hasSlots)
+		{
+			uint8_t mask = 0;
+			for(size_t i = 0; i < 4; ++i)
+				if(slotSelected[i])
+					mask |= static_cast<uint8_t>(1 << (3 - i));
+			s.insert(s.end(), {SlotsSelected, mask, SlotActivated, static_cast<uint8_t>(activeSlot & 3)});
 		}
 		return s;
 	}
@@ -95,6 +109,13 @@ namespace g1app
 			c = _s[p] & 0x1f;
 			p += 2;
 		}
+		if(p + 4 <= _s.size() && _s[p] == SlotsSelected && _s[p + 2] == SlotActivated)
+		{
+			for(size_t i = 0; i < 4; ++i)
+				r.slotSelected[i] = (_s[p + 1] >> (3 - i)) & 1;
+			r.activeSlot = _s[p + 3] & 3;
+			r.hasSlots = true;
+		}
 		_out = r;
 		return true;
 	}
@@ -108,10 +129,11 @@ namespace g1app
 		m_readWanted = true;
 	}
 
-	void SynthSettingsLink::write(const SynthSettings& _settings)
+	void SynthSettingsLink::write(const SynthSettings& _settings, const bool _withSlots)
 	{
 		std::lock_guard<std::mutex> lock(m_mutex);
 		m_toWrite = _settings;
+		m_writeSlots = _withSlots && _settings.hasSlots;
 		m_writeWanted = true;
 		m_pidFresh = false;		// read first: slot A may hold another patch since the last read
 	}
@@ -266,9 +288,27 @@ namespace g1app
 		{
 			m_writeWanted = false;
 			m_readWanted = true;
-			auto payload = pack7(m_toWrite.encode());
+			auto payload = pack7(m_toWrite.encode(false));
 			payload.insert(payload.begin(), m_pid);
+			// The slots after the settings, as NME's slot buttons send them: the ones on, then the
+			// active one, each on its own: sent right behind another message, the OS drops it.
+			m_slotMessages.clear();
+			if(m_writeSlots)
+			{
+				uint8_t mask = 0;
+				for(size_t i = 0; i < 4; ++i)
+					if(m_toWrite.slotSelected[i])
+						mask |= static_cast<uint8_t>(1 << (3 - i));
+				m_slotMessages.push_back(frame(CcPatch, 0, {PatchManager, SlotsSelected, mask}));
+				m_slotMessages.push_back(frame(CcPatch, 0, {PatchManager, SlotActivated, static_cast<uint8_t>(m_toWrite.activeSlot & 3)}));
+			}
 			request(frame(0x1f, 0, payload), State::Writing, WriteMs, _nowMs, _toG1);
+		}
+		else if(!m_slotMessages.empty())
+		{
+			const auto msg = m_slotMessages.front();
+			m_slotMessages.erase(m_slotMessages.begin());
+			request(msg, State::Writing, WriteMs, _nowMs, _toG1);
 		}
 		else if(m_readWanted)
 		{

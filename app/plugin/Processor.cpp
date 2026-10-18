@@ -151,7 +151,9 @@ namespace g1plugin
 
 	Processor::Processor()
 		: juce::AudioProcessor(BusesProperties()
-			.withInput("In L/R", juce::AudioChannelSet::stereo(), false)
+			// The G1's two inputs. Off in the instrument until the host turns them on; on in the
+			// effect, which is what it is for (#76).
+			.withInput("In L/R", juce::AudioChannelSet::stereo(), G1_PLUGIN_FX != 0)
 			.withOutput("Out 1/2", juce::AudioChannelSet::stereo(), true)
 			.withOutput("Out 3/4", juce::AudioChannelSet::stereo(), true)
 			// The same four outputs one by one, for hosts that route mono channels (issue #27).
@@ -1004,7 +1006,7 @@ namespace g1plugin
 				return;
 			g1app::SynthSettings os;
 			m_synthSettings.settings(os, m_settingsRevision);
-			m_synthSettings.write(*m_pendingSettings);
+			m_synthSettings.write(*m_pendingSettings, true);	// and the slots on and active (#75)
 			m_settingsWrittenAt = std::max<juce::uint32>(now, 1);
 			++m_settingsTries;
 			return;

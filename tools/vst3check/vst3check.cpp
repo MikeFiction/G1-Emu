@@ -1,6 +1,7 @@
 // g1vst3check: loads the built G1-Emu.vst3 through JUCE's VST3 host, as a DAW would, and plays it.
 //
 //   g1vst3check path/to/G1-Emu.vst3 [--slots | --settings | --window | --buffer-change | --clock packets-dir]
+//   g1vst3check "path/to/G1-Emu FX.vst3" --fx packets-dir
 //
 // Two instances at once in one process, each with its own Program Change and a note, rendered
 // offline block by block and interleaved; then the first one's state goes into a third instance,
@@ -19,6 +20,12 @@
 // --settings, alone (issue #46): the synth settings in use are in the project, and a project's
 // own (slot A put on channel 5) are the ones a new instance opened from it runs with.
 //
+// --fx dir, alone (issue #76), on G1-Emu FX: the host must see an effect with its input on from
+// the start, and a sine into that input must come out once AudioInTest.pch (AudioIn to outputs 1
+// and 2; the packets as g1patchtest --dump-packets writes them, in dir) is in slot A, and stop
+// with it. The patch goes over the direct link (TCP, as NME reaches the plugin), not the virtual
+// PC Port, so it also runs where those ports are not made.
+//
 // --buffer-change, alone (issue #66): the buffer size changed as Cubase and Nuendo change it, the
 // plugin deactivated and reactivated from inside its own prepareToPlay when its latency changes.
 
@@ -27,6 +34,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <pluginterfaces/vst/ivstcomponent.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -294,6 +302,113 @@ namespace
 		if(!open || sent != upload.size() || playing < 1e-3f || reopened < 1e-3f || std::abs(db(playing) - db(reopened)) > 1.0f)
 		{
 			std::printf("FAIL: the patch in slot A does not come back with the project\n");
+			failed = 1;
+		}
+		return failed;
+	}
+
+	// Issue #76 (--fx dir), in a process of its own: G1-Emu FX on an audio track. The host must
+	// see an effect whose input is on as it comes; AudioInTest.pch goes to slot A over the direct
+	// link at 6 s, a sine plays into the input from 9 to 12 s and stops, and outputs 1/2 must carry it
+	// then and fall silent after.
+	int checkFx(juce::AudioPluginFormatManager& _formats, const juce::String& _path, const juce::File& _packets)
+	{
+		int failed = 0;
+		std::vector<std::vector<uint8_t>> upload;
+		for(const auto& f : _packets.findChildFiles(juce::File::findFiles, false, "packet-*.syx"))
+		{
+			juce::MemoryBlock data;
+			f.loadFileAsData(data);
+			upload.emplace_back(static_cast<const uint8_t*>(data.getData()), static_cast<const uint8_t*>(data.getData()) + data.getSize());
+		}
+		Voice v;
+		v.plugin = load(_formats, _path);
+		if(!v.plugin)
+			return 1;
+		auto& p = *v.plugin;
+		const bool instrument = p.getPluginDescription().isInstrument;
+		const auto* in = p.getBus(true, 0);
+		const bool inputOn = in && in->isEnabled() && in->getNumberOfChannels() == 2;
+		std::printf("issue #76: \"%s\", %s, input %s\n", p.getName().toRawUTF8(), instrument ? "an INSTRUMENT" : "an effect",
+			inputOn ? "on, stereo" : "NOT ON");
+		if(instrument || !inputOn)
+			failed = 1;
+
+		// The first instance listens on the direct link's first port and greets with a line.
+		juce::StreamingSocket link;
+		std::string greeting;
+		const bool open = !upload.empty() && link.connect("127.0.0.1", 47310, 2000);
+		std::vector<uint8_t> rx;
+		int acks = 0;
+		const auto receive = [&]
+		{
+			uint8_t buf[512];
+			while(open && link.waitUntilReady(true, 0) == 1)
+			{
+				const int n = link.read(buf, sizeof(buf), false);
+				if(n <= 0)
+					break;
+				rx.insert(rx.end(), buf, buf + n);
+			}
+			if(greeting.empty())
+				if(const auto nl = std::find(rx.begin(), rx.end(), '\n'); nl != rx.end())
+				{
+					greeting.assign(rx.begin(), nl);
+					rx.erase(rx.begin(), nl + 1);
+				}
+			// An upload packet's ACK (cc $16, $36 or $7F), as the Editor above counts them.
+			for(size_t i = 0; i + 5 < rx.size(); ++i)
+				if(rx[i] == 0xf0 && rx[i + 1] == 0x33 && (rx[i + 2] >> 2) == 0x16 && (rx[i + 5] == 0x36 || rx[i + 5] == 0x7f))
+					++acks;
+			if(!greeting.empty())
+				rx.clear();
+		};
+
+		p.setNonRealtime(true);
+		p.prepareToPlay(g_rate, g_block);
+		const int total = static_cast<int>(14.0 * g_rate);
+		float during = 0, after = 0;
+		size_t sent = 0;
+		for(int pos = 0; pos < total; pos += g_block)
+		{
+			receive();
+			if(open && pos >= static_cast<int>(6.0 * g_rate) && sent < upload.size() && acks >= static_cast<int>(sent))
+			{
+				link.write(upload[sent].data(), static_cast<int>(upload[sent].size()));
+				++sent;
+				for(int i = 0; i < 50 && acks < static_cast<int>(sent); ++i)
+				{
+					juce::Thread::sleep(2);
+					receive();
+				}
+			}
+			juce::AudioBuffer<float> buffer(std::max(p.getTotalNumInputChannels(), p.getTotalNumOutputChannels()), g_block);
+			buffer.clear();
+			for(int i = 0; i < g_block; ++i)
+			{
+				const double t = (pos + i) / g_rate;
+				const auto x = t >= 9.0 && t < 12.0 ? static_cast<float>(0.25 * std::sin(2.0 * juce::MathConstants<double>::pi * 440.0 * t)) : 0.0f;
+				for(int c = 0; c < p.getTotalNumInputChannels(); ++c)
+					buffer.setSample(c, i, x);
+			}
+			juce::MidiBuffer midi;
+			p.processBlock(buffer, midi);
+			const double t = pos / g_rate;
+			float peak = 0;
+			for(int c = 0; c < 2; ++c)
+				peak = std::max(peak, buffer.getMagnitude(c, 0, g_block));
+			if(t >= 10.0 && t < 12.0)
+				during = std::max(during, peak);
+			else if(t >= 13.0)
+				after = std::max(after, peak);
+		}
+		p.releaseResources();
+		std::printf("issue #76: direct link %s (\"%s\")\n", open ? "open" : "NOT THERE", greeting.c_str());
+		std::printf("issue #76: %zu of %zu packets sent, %d ACKs; outputs 1/2 with the sine in %.1f dB, after it %.1f dB\n",
+			sent, upload.size(), acks, db(during), db(after));
+		if(!open || sent != upload.size() || during < 1e-3f || after > during * 0.01f)
+		{
+			std::printf("FAIL: the input does not reach the G1 through AudioIn\n");
 			failed = 1;
 		}
 		return failed;
@@ -596,7 +711,19 @@ namespace
 	// Issue #46 (--settings): the synth settings in use go into the project and come back from it,
 	// stored with Shift+Store or not and under either OS. A project's slot A put on channel 5 by
 	// hand must be on channel 5 in a new instance opened from it, as its own state then says
-	// once the instance has read them back from the OS (so the OS took them).
+	// once the instance has read them back from the OS (so the OS took them). Issue #75: the same
+	// with the slots that are on and the active one, only B in the project.
+	juce::String slotsText(const std::vector<uint8_t>& _s, const size_t _at)
+	{
+		if(_at + 4 > _s.size() || _s[_at] != 0x07 || _s[_at + 2] != 0x09)
+			return "none";
+		juce::String t;
+		for(int i = 0; i < 4; ++i)
+			if(_s[_at + 1] & (1 << (3 - i)))
+				t << juce::String::charToString(static_cast<juce::juce_wchar>('A' + i));
+		return t + ", active " + juce::String::charToString(static_cast<juce::juce_wchar>('A' + (_s[_at + 3] & 3)));
+	}
+
 	int checkSettings(juce::AudioPluginFormatManager& _formats, const juce::String& _path)
 	{
 		Voice f;
@@ -614,9 +741,18 @@ namespace
 			std::printf("FAIL: no synth settings in the project\n");
 			return 1;
 		}
+		const size_t slotsAt = at[3] + 2;	// after slot D's channel and its marker
+		std::printf("issue #75: and the slots on %s\n", slotsText(saved, slotsAt).toRawUTF8());
+		if(slotsText(saved, slotsAt) == "none")
+		{
+			std::printf("FAIL: no slots in the project's synth settings\n");
+			return 1;
+		}
 
 		auto changed = saved;
 		changed[at[0]] = 4;		// slot A on channel 5
+		changed[slotsAt + 1] = 0x04;	// only B on
+		changed[slotsAt + 3] = 1;		// and active
 		setSettingsSection(*xml, changed);
 		Voice g;
 		g.plugin = load(_formats, _path);
@@ -628,6 +764,7 @@ namespace
 		const auto reopened = pluginXml(again);
 		const auto back = reopened ? settingsSection(*reopened) : std::vector<uint8_t>{};
 		std::printf("issue #46: the project with slot A on channel 5, reopened, saves the channels %s\n", channelsText(back).toRawUTF8());
+		std::printf("issue #75: the project with only B on, reopened, saves the slots on %s\n", slotsText(back, slotsAt).toRawUTF8());
 		if(back != changed)
 		{
 			std::printf("FAIL: the project's synth settings do not come back\n");
@@ -863,6 +1000,12 @@ int main(int _argc, char** _argv)
 	if(_argc > 3 && juce::String(_argv[2]) == "--clock")
 	{
 		failed = checkClock(formats, path, juce::File(juce::String(_argv[3])));
+		std::printf("%s\n", failed ? "FAILED" : "all good");
+		return failed;
+	}
+	if(_argc > 3 && juce::String(_argv[2]) == "--fx")
+	{
+		failed = checkFx(formats, path, juce::File(juce::String(_argv[3])));
 		std::printf("%s\n", failed ? "FAILED" : "all good");
 		return failed;
 	}

@@ -253,9 +253,11 @@ Used on Linux, macOS and Windows, in Bitwig, Ableton Live, Reaper, Cubase and Nu
 **To install it from a release, see [Getting started](#getting-started)**; to build it:
 
 ```bash
-cmake --build build --target g1plugin_VST3 g1plugin_CLAP -j$(nproc)
+cmake --build build --target g1plugin_VST3 g1plugin_CLAP g1pluginfx_VST3 g1pluginfx_CLAP -j$(nproc)
 cp -r build/app/plugin/g1plugin_artefacts/Release/VST3/G1-Emu.vst3 ~/.vst3/
 cp build/app/plugin/g1plugin_artefacts/Release/CLAP/G1-Emu.clap ~/.clap/
+cp -r "build/app/plugin/g1pluginfx_artefacts/Release/VST3/G1-Emu FX.vst3" ~/.vst3/
+cp "build/app/plugin/g1pluginfx_artefacts/Release/CLAP/G1-Emu FX.clap" ~/.clap/
 ```
 
 The CLAP build needs a clone of [clap-juce-extensions](https://github.com/free-audio/clap-juce-extensions)
@@ -263,6 +265,10 @@ with its submodules in `~/src/clap-juce-extensions` (or `-DG1_CLAP_DIR=...`); wi
 VST3 is built.
 
 - **Outputs 1/2 and 3/4** as two stereo buses, and **In L/R** as an optional input.
+- **G1-Emu FX** is the same G1 as an effect, to put on an audio track: its **In L/R** is on from the
+  start and feeds the G1's two inputs, so a patch with the Audio In module processes the track. It
+  still takes notes and the editor like the instrument. Most DAWs never offer an instrument's
+  input, which is why there are two.
 - **The ROM** is found exactly like the standalone finds it; with none, the plugin's window says
   what it needs and lets you pick the file (remembered in the same settings file).
 - **Each instance has its own G1.** A new one starts from a *copy* of the standalone's flash, so

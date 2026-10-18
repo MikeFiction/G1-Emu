@@ -77,6 +77,9 @@ what they move: the host's changes reach the ADC in `processBlock`, the panel's 
 a timer, a new engine sets them (`knobsFromEngine`). 128 programs are Program Changes on channel 1,
 since VST3 has no Program Change as MIDI. Outputs: Out 1/2 and Out 3/4 stereo, and the same four as
 mono buses Out 1..4, off until the host turns them on (#27); a channel on both gets a copy.
+`g1pluginfx` builds the same sources as **G1-Emu FX** (`G1_PLUGIN_FX=1`, VST3 category Fx, CLAP
+audio-effect): the only difference is that its In L/R is on from the start, for hosts that never
+offer an instrument's input (#76). Both share the instance numbers and the PC Port names.
 The host's transport reaches the G1 as MIDI clock (`app/plugin/hostclock.h`, #20): Start or Song
 Position + Continue, $F8 at 24 per beat and Stop, merged in frame order with the track's MIDI,
 whose own clock bytes are dropped while the host gives a transport. It moves the G1 only with its
@@ -100,7 +103,7 @@ clap-juce-extensions; `clap-validator` passes it. The design is
   and settings, with the OS in use, #25), gzip + base64 in XML, plus the 256 ADC values, the
   panel's two preferences, the last Bank Select/Program Change per channel (replayed at boot),
   **what each slot holds** (`<Slots>`, issue #25), and **the synth settings in use**
-  (`<SynthSettings>`, issue #46), stored with Shift+Store or not: the processor asks the
+  (`<SynthSettings>`, issue #46, with the slots on and the active one, #75), stored with Shift+Store or not: the processor asks the
   `SynthSettingsLink` for them every 2 s, and on a restore writes them back once the `SlotKeeper`
   has put the slots back (a write during a slot's upload breaks it), checks they read back and
   retries up to 5 times, while the track's notes are held back (at most 15 s). The factory OS never
@@ -182,7 +185,7 @@ the four outputs and the links between DSPs; it also has probes for the panel (s
 | `tools/g1boot.cpp` | Headless boot and disassembler. |
 | `tools/patchtest/` | `g1patchtest`: the test bench. |
 | `tools/battery/` | `battery.py`: one patch per module type, played and measured (`docs/module-battery.md`). |
-| `tools/vst3check/` | `g1vst3check`: loads the built `.vst3` through JUCE's VST3 host, two instances at once, and checks sound, state, editor, that each PC Port answers NME's greeting on its own port, the knobs as parameters and the host's program. |
+| `tools/vst3check/` | `g1vst3check`: loads the built `.vst3` through JUCE's VST3 host, two instances at once, and checks sound, state, editor, that each PC Port answers NME's greeting on its own port, the knobs as parameters and the host's program.; `--fx dir` checks G1-Emu FX's input through AudioIn. |
 | `tools/dspdis.cpp` | DSP56300 disassembler (hex words on stdin). |
 | `tools/jitdiff.cpp` | Runs DSP instructions on the JIT and on the interpreter (or as one block against one per block) from random states and prints what differs. |
 

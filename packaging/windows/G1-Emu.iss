@@ -2,7 +2,8 @@
 ;
 ;   iscc /DAppVersion=v0.1.0-alpha.20 /DPackageDir=..\..\package packaging\windows\G1-Emu.iss
 ;
-; PackageDir is what the zip holds: G1-Emu.exe, g1run.exe, G1-Emu.vst3, G1-Emu.clap and the docs.
+; PackageDir is what the zip holds: G1-Emu.exe, g1run.exe, the plugins (G1-Emu and G1-Emu FX, as
+; .vst3 and .clap) and the docs.
 ; The plugins go where every DAW looks, and a new version replaces the old one in place.
 ; Copies left by hand in the per-user plugin folders are removed, since a DAW that finds two loads
 ; whichever it likes, often the old one (#53, #59, #65). What the user made is never touched:
@@ -51,8 +52,8 @@ Name: "custom"; Description: "Choose"; Flags: iscustom
 
 [Components]
 Name: "standalone"; Description: "G1-Emu, the synth in its own window"; Types: full custom
-Name: "vst3"; Description: "VST3 plugin (Common Files\VST3)"; Types: full custom
-Name: "clap"; Description: "CLAP plugin (Common Files\CLAP)"; Types: full custom
+Name: "vst3"; Description: "VST3 plugins, instrument and FX (Common Files\VST3)"; Types: full custom
+Name: "clap"; Description: "CLAP plugins, instrument and FX (Common Files\CLAP)"; Types: full custom
 
 [Tasks]
 Name: "desktopicon"; Description: "A desktop shortcut"; Components: standalone; Flags: unchecked
@@ -61,9 +62,13 @@ Name: "desktopicon"; Description: "A desktop shortcut"; Components: standalone; 
 ; The previous version, so nothing of it is left mixed with the new one.
 Type: filesandordirs; Name: "{commoncf64}\VST3\G1-Emu.vst3"; Components: vst3
 Type: files; Name: "{commoncf64}\CLAP\G1-Emu.clap"; Components: clap
+Type: filesandordirs; Name: "{commoncf64}\VST3\G1-Emu FX.vst3"; Components: vst3
+Type: files; Name: "{commoncf64}\CLAP\G1-Emu FX.clap"; Components: clap
 ; Copies made by hand where some DAWs also look: they would shadow the installed one.
 Type: filesandordirs; Name: "{localappdata}\Programs\Common\VST3\G1-Emu.vst3"; Components: vst3
 Type: files; Name: "{localappdata}\Programs\Common\CLAP\G1-Emu.clap"; Components: clap
+Type: filesandordirs; Name: "{localappdata}\Programs\Common\VST3\G1-Emu FX.vst3"; Components: vst3
+Type: files; Name: "{localappdata}\Programs\Common\CLAP\G1-Emu FX.clap"; Components: clap
 
 [Files]
 Source: "{#PackageDir}\G1-Emu.exe"; DestDir: "{app}"; Components: standalone; Flags: ignoreversion
@@ -73,6 +78,8 @@ Source: "{#PackageDir}\WINDOWS.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PackageDir}\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#PackageDir}\G1-Emu.vst3\*"; DestDir: "{commoncf64}\VST3\G1-Emu.vst3"; Components: vst3; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#PackageDir}\G1-Emu.clap"; DestDir: "{commoncf64}\CLAP"; Components: clap; Flags: ignoreversion
+Source: "{#PackageDir}\G1-Emu FX.vst3\*"; DestDir: "{commoncf64}\VST3\G1-Emu FX.vst3"; Components: vst3; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#PackageDir}\G1-Emu FX.clap"; DestDir: "{commoncf64}\CLAP"; Components: clap; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\G1-Emu"; Filename: "{app}\G1-Emu.exe"; Components: standalone

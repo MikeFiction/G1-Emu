@@ -37,9 +37,17 @@ namespace g1app
 		int knobMode = 0;			// 0 immediate, 1 hook
 		std::string name;
 		std::array<int, 4> midiChannel{0, 1, 2, 3};	// 0-15 per slot, 16 = off
+		// The slots the panel's buttons left on and the active one, which the OS adds after the
+		// channels (issue #75). It does not take them back in the section: the link sets them with
+		// SlotsSelected and SlotActivated instead, when asked to. False if the section had none (a
+		// project saved before they were kept): they are then left as the OS has them.
+		bool hasSlots = false;
+		std::array<bool, 4> slotSelected{true, false, false, false};
+		int activeSlot = 0;			// 0-3
 
-		// The section as the OS sends and takes it (type 3 and its fields), 8-bit.
-		std::vector<uint8_t> encode() const;
+		// The section as the OS sends it (type 3 and its fields, then the slots if known), 8-bit.
+		// Without _withSlots, as the OS takes it.
+		std::vector<uint8_t> encode(bool _withSlots = true) const;
 		static bool decode(const std::vector<uint8_t>& _section, SynthSettings& _out);
 
 	private:
@@ -51,16 +59,22 @@ namespace g1app
 		}
 
 	public:
-		bool operator==(const SynthSettings& _o) const { return tied() == _o.tied(); }
+		// The slots count only when both sides know them.
+		bool operator==(const SynthSettings& _o) const
+		{
+			return tied() == _o.tied() && (!hasSlots || !_o.hasSlots || (slotSelected == _o.slotSelected && activeSlot == _o.activeSlot));
+		}
 		bool operator!=(const SynthSettings& _o) const { return !(*this == _o); }
 	};
 
 	class SynthSettingsLink
 	{
 	public:
-		// Any thread. read() asks the OS again; write() sends these and then reads them back.
+		// Any thread. read() asks the OS again; write() sends these and then reads them back. With
+		// _withSlots it also turns the slots on and off and picks the active one as _settings say,
+		// if they say (a project's, #75); without, the slots stay as the panel left them.
 		void read();
-		void write(const SynthSettings& _settings);
+		void write(const SynthSettings& _settings, bool _withSlots = false);
 		// Keeps settings() current by itself (the plugin asks every 2 s on its own instead): asks
 		// again every _ms of quiet, since the panel's System menu changes them without a word, and
 		// soon after an editor sends its own. 0 (the default): only when asked.
@@ -93,6 +107,8 @@ namespace g1app
 		bool m_writeWanted = false;
 		bool m_known = false;			// m_settings came from this G1 (since reset())
 		SynthSettings m_toWrite;
+		bool m_writeSlots = false;
+		std::vector<std::vector<uint8_t>> m_slotMessages;	// after a write, before it is read back
 
 		std::atomic<State> m_state{State::Idle};
 		bool m_greeted = false;			// an unanswered request gets one IAm, as an editor's would
