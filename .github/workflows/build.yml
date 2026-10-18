@@ -111,8 +111,10 @@ jobs:
           -DG1_BACKEND=${{ matrix.backend }}
           ${{ matrix.extra_cmake }}
 
+      # Four jobs, the runners' cores. A bare --parallel is make -j with no limit, and with LTO
+      # and two plugins the Linux runners ran out of memory and were shut down.
       - name: Build
-        run: cmake --build build --config Release --parallel
+        run: cmake --build build --config Release --parallel 4
 
       # Our own tests (label g1): the DSP core checks, which need no ROM, no sound card and no
       # MIDI. Gearmulator registers its own from its tree, but their binaries are EXCLUDE_FROM_ALL
