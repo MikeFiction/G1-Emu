@@ -21,10 +21,12 @@ Older entries cite their commit by hand.
   link (the tests) does not race. `G1_FAST_BOOT=0` boots in real time, to rule it out. Everything
   that waits in G1 time goes faster with it: `BootMs`, the patch bytes at 31,250 baud, the ACK
   waits. No latency is reported from it (`m_lifecycle` untouched). Checked on Windows (Core Ultra 7
-  265F): the standalone's OS answers at 0.40 s instead of 2.5 s; `ctest` passes but `g1presetstest`
-  (fails on `main` too with this `flash.bin`); `g1runnertest` bit-identical, 0 dropouts with
-  `--realtime`; `g1vst3check --settings` and `--buffer-change` all good; plain `g1vst3check` fails
-  only "the octave shift as a parameter", as on `main`.
+  265F): the standalone's and the plugin's OS answers at 0.40 s instead of 2.5 s; in Bitwig, three
+  saved projects came back with every note let in at 1.1, 1.1 and 2.2 s, restores of 6.4, 6.4 and
+  13.8 s of G1 time (6.4 and 11.6 s before); `ctest` passes but `g1presetstest` (fails on `main` too
+  with this `flash.bin`); `g1runnertest` bit-identical, 0 dropouts with `--realtime`; `g1vst3check
+  --settings` and `--buffer-change` all good; plain `g1vst3check` fails only "the octave shift as a
+  parameter", as on `main`.
 - [Docs] **Release notes for v0.1.0-alpha.22 (Claude, asked by Javier).** `docs/release-notes.md`:
   Regular or Expanded (#39), G1-Emu FX (#76), and the two #75 fixes (the slots on and active come
   back with a project; a heavy slot A no longer broken by NME connecting while it opens).
